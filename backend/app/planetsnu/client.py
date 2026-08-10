@@ -9,6 +9,10 @@ class PlanetsNuError(RuntimeError):
     pass
 
 
+class PlanetsNuAuthError(PlanetsNuError):
+    pass
+
+
 class PlanetsNuClient:
     def __init__(self) -> None:
         settings = get_settings()
@@ -44,6 +48,73 @@ class PlanetsNuClient:
             raise PlanetsNuError(
                 "Planets.nu returned invalid JSON"
             ) from exc
+
+    async def post_form(
+        self,
+        path: str,
+        data: dict[str, Any],
+    ) -> Any:
+        url = f"{self.base_url}/{path.lstrip('/')}"
+
+        async with httpx.AsyncClient(
+            timeout=30.0,
+            follow_redirects=True,
+        ) as client:
+            response = await client.post(
+                url,
+                data=data,
+            )
+
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            raise PlanetsNuError(
+                f"Planets.nu returned HTTP {response.status_code}"
+            ) from exc
+
+        try:
+            return response.json()
+        except ValueError as exc:
+            raise PlanetsNuError(
+                "Planets.nu returned invalid JSON"
+            ) from exc
+
+    async def login(
+        self,
+        username: str,
+        password: str,
+    ) -> str:
+        payload = await self.post_form(
+            "account/login",
+            data={
+                "username": username.strip(),
+                "password": password,
+            },
+        )
+
+        if not isinstance(payload, dict):
+            raise PlanetsNuError(
+                "Planets.nu login response is not an object"
+            )
+
+        if payload.get("success") is False:
+            raise PlanetsNuAuthError(
+                str(
+                    payload.get(
+                        "error",
+                        "Planets.nu authentication failed",
+                    )
+                )
+            )
+
+        api_key = payload.get("apikey")
+
+        if not isinstance(api_key, str) or not api_key:
+            raise PlanetsNuError(
+                "Planets.nu login returned no API key"
+            )
+
+        return api_key
 
     async def load_info(
         self,
@@ -93,7 +164,10 @@ class PlanetsNuClient:
                 "Planets.nu loadscores response has no scores list"
             )
 
-        if not all(isinstance(score, dict) for score in scores):
+        if not all(
+            isinstance(score, dict)
+            for score in scores
+        ):
             raise PlanetsNuError(
                 "Planets.nu scores list contains invalid records"
             )

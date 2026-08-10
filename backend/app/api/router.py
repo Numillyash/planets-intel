@@ -3,6 +3,9 @@ from fastapi import APIRouter
 from app.api.routes.auth import router as auth_router
 from app.api.routes.games import router as games_router
 from app.api.routes.health import router as health_router
+from app.api.routes.planets_accounts import (
+    router as planets_accounts_router,
+)
 from app.api.routes.scores import router as scores_router
 
 
@@ -16,6 +19,11 @@ api_router.include_router(
 api_router.include_router(
     auth_router,
     tags=["auth"],
+)
+
+api_router.include_router(
+    planets_accounts_router,
+    tags=["planets-accounts"],
 )
 
 api_router.include_router(
