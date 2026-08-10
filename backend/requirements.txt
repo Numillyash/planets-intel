@@ -5,3 +5,5 @@ pydantic-settings
 sqlalchemy
 psycopg[binary]
 alembic
+argon2-cffi
+cryptography

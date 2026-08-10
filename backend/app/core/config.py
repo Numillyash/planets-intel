@@ -13,6 +13,11 @@ class Settings(BaseSettings):
 
     planetsnu_api_base_url: str = "http://api.planets.nu"
 
+    credential_encryption_key: str | None = None
+
+    session_cookie_name: str = "planets_intel_session"
+    session_ttl_days: int = 30
+
     model_config = SettingsConfigDict(
         env_file=".env",
         extra="ignore",

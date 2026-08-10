@@ -1,5 +1,4 @@
 services:
-
   postgres:
     image: postgres:16
     restart: unless-stopped
@@ -25,7 +24,6 @@ services:
       timeout: 5s
       retries: 5
 
-
   backend:
     build:
       context: .
@@ -38,6 +36,7 @@ services:
         postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
 
       PLANETSNU_API_BASE_URL: ${PLANETSNU_API_BASE_URL}
+      CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY}
 
     depends_on:
       postgres:
