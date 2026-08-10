@@ -35,12 +35,20 @@ if ASSETS_DIR.is_dir():
     )
 
 
-@app.get("/", include_in_schema=False)
+@app.api_route(
+    "/",
+    methods=["GET", "HEAD"],
+    include_in_schema=False,
+)
 async def frontend_index() -> FileResponse:
     return FileResponse(INDEX_FILE)
 
 
-@app.get("/{path:path}", include_in_schema=False)
+@app.api_route(
+    "/{path:path}",
+    methods=["GET", "HEAD"],
+    include_in_schema=False,
+)
 async def frontend_spa(path: str) -> FileResponse:
     """
     SPA fallback.
