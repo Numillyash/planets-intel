@@ -116,6 +116,32 @@ class PlanetsNuClient:
 
         return api_key
 
+    async def games_for_username(
+        self,
+        username: str,
+    ) -> list[dict[str, Any]]:
+        payload = await self.get(
+            "games/list",
+            params={
+                "username": username.strip(),
+            },
+        )
+
+        if not isinstance(payload, list):
+            raise PlanetsNuError(
+                "Planets.nu games/list response is not a list"
+            )
+
+        if not all(
+            isinstance(game, dict)
+            for game in payload
+        ):
+            raise PlanetsNuError(
+                "Planets.nu games/list contains invalid records"
+            )
+
+        return payload
+
     async def load_info(
         self,
         game_id: int,
