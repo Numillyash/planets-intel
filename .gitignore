@@ -1,0 +1,44 @@
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# Node
+node_modules/
+frontend/dist/
+frontend/.vite/
+
+# IDE
+.vscode/
+.idea/
+
+# Runtime
+logs/*
+!logs/.gitkeep
+
+# Local data
+data/*
+!data/.gitkeep
+
+# PostgreSQL / Docker runtime
+postgres-data/
+*.pid
+
+# Temporary
+*.tmp
+*.swp
+.DS_Store
+
+# Backups
+*.bak
+*.backup
+*.dump
