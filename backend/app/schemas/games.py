@@ -8,6 +8,7 @@ class GameInfo(BaseModel):
     short_description: str
     status_id: int
     status_name: str
+    turn: int
     slots: int
     next_host: str
     turns_per_week: int
@@ -17,6 +18,7 @@ class GameInfo(BaseModel):
 
 
 class GameSettingsInfo(BaseModel):
+    turn: int
 
     map_width: int
     map_height: int

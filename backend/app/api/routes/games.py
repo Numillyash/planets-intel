@@ -25,6 +25,7 @@ def build_game_info(raw: dict[str, Any]) -> GameInfo:
         short_description=raw["shortdescription"],
         status_id=raw["status"],
         status_name=raw["statusname"],
+        turn=raw["turn"],
         slots=raw["slots"],
         next_host=raw["nexthost"],
         turns_per_week=raw["turnsperweek"],
@@ -38,6 +39,7 @@ def build_settings_info(
     raw: dict[str, Any],
 ) -> GameSettingsInfo:
     return GameSettingsInfo(
+        turn=raw["turn"],
         map_width=raw["mapwidth"],
         map_height=raw["mapheight"],
         map_shape=raw["mapshape"],
