@@ -44,3 +44,28 @@ class PlanetsNuClient:
             raise PlanetsNuError(
                 "Planets.nu returned invalid JSON"
             ) from exc
+
+    async def load_info(
+        self,
+        game_id: int,
+    ) -> dict[str, Any]:
+        payload = await self.get(
+            "game/loadinfo",
+            params={
+                "gameid": game_id,
+            },
+        )
+
+        if not isinstance(payload, dict):
+            raise PlanetsNuError(
+                "Planets.nu loadinfo response is not an object"
+            )
+
+        game = payload.get("game")
+
+        if not isinstance(game, dict):
+            raise PlanetsNuError(
+                "Planets.nu loadinfo response has no game object"
+            )
+
+        return payload

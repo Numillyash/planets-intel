@@ -42,3 +42,4 @@ postgres-data/
 *.bak
 *.backup
 *.dump
+tests/fixtures/*.raw.json
