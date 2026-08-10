@@ -69,3 +69,33 @@ class PlanetsNuClient:
             )
 
         return payload
+
+    async def load_scores(
+        self,
+        game_id: int,
+    ) -> list[dict[str, Any]]:
+        payload = await self.get(
+            "game/loadscores",
+            params={
+                "gameid": game_id,
+            },
+        )
+
+        if not isinstance(payload, dict):
+            raise PlanetsNuError(
+                "Planets.nu loadscores response is not an object"
+            )
+
+        scores = payload.get("scores")
+
+        if not isinstance(scores, list):
+            raise PlanetsNuError(
+                "Planets.nu loadscores response has no scores list"
+            )
+
+        if not all(isinstance(score, dict) for score in scores):
+            raise PlanetsNuError(
+                "Planets.nu scores list contains invalid records"
+            )
+
+        return scores
