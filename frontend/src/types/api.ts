@@ -140,3 +140,17 @@ export interface ScoreHistoryResponse {
     count: number;
     items: ScoreHistoryItem[];
 }
+
+export interface CurrentUserResponse {
+    id: number;
+    username: string;
+    display_name: string;
+}
+
+export interface LoginResponse {
+    user: CurrentUserResponse;
+}
+
+export interface LogoutResponse {
+    success: boolean;
+}
