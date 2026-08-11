@@ -96,7 +96,8 @@ def list_planets_accounts(
             select(PlanetsAccount)
             .where(
                 PlanetsAccount.user_id
-                == user_id
+                == user_id,
+                PlanetsAccount.is_active.is_(True),
             )
             .order_by(
                 PlanetsAccount.id
@@ -120,13 +121,27 @@ def unlink_planets_account(
                 == account_id,
                 PlanetsAccount.user_id
                 == user_id,
+                PlanetsAccount.is_active.is_(True),
             )
         ).scalar_one_or_none()
 
         if account is None:
             return False
 
-        session.delete(account)
+        now = datetime.now(
+            timezone.utc
+        )
+
+        account.api_key_encrypted = (
+            encrypt_credential(
+                "UNLINKED"
+            )
+        )
+
+        account.is_active = False
+        account.last_error = None
+        account.updated_at = now
+
         session.commit()
 
         return True
