@@ -193,13 +193,15 @@ function Dashboard({ user, onLogout }: DashboardProps) {
             };
         }
 
+        const accountId = selectedAccountId;
+
         async function loadGames() {
             setGamesLoading(true);
             setGamesError(null);
             setGames([]);
 
             try {
-                const response = await getAccountGames(selectedAccountId);
+                const response = await getAccountGames(accountId);
                 if (cancelled) return;
 
                 setGames(response.games);
@@ -238,6 +240,8 @@ function Dashboard({ user, onLogout }: DashboardProps) {
             };
         }
 
+        const gameId = selectedGameId;
+
         async function loadGameData() {
             setDataLoading(true);
             setDataError(null);
@@ -246,8 +250,8 @@ function Dashboard({ user, onLogout }: DashboardProps) {
 
             try {
                 const [gameResponse, historyResponse] = await Promise.all([
-                    getGame(selectedGameId),
-                    getScoreHistory(selectedGameId),
+                    getGame(gameId),
+                    getScoreHistory(gameId),
                 ]);
                 if (cancelled) return;
 
