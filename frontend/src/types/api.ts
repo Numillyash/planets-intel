@@ -154,3 +154,36 @@ export interface LoginResponse {
 export interface LogoutResponse {
     success: boolean;
 }
+
+export interface PlanetsAccountResponse {
+    id: number;
+    planets_username: string;
+    planets_account_id: number | null;
+    is_active: boolean;
+    last_verified_at: string | null;
+    last_error: string | null;
+}
+
+export interface PlanetsAccountsResponse {
+    accounts: PlanetsAccountResponse[];
+}
+
+export interface AccountGameSummary {
+    id: number;
+    name: string;
+    short_description: string;
+    status_id: number;
+    status_name: string;
+    turn: number;
+    slots: number;
+    next_host: string;
+    time_to_host: string;
+    is_private: boolean;
+    is_custom: boolean;
+}
+
+export interface AccountGamesResponse {
+    linked_account_id: number;
+    planets_username: string;
+    games: AccountGameSummary[];
+}

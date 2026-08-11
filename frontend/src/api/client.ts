@@ -1,8 +1,10 @@
 import type {
+    AccountGamesResponse,
     CurrentUserResponse,
     GameDetailsResponse,
     LoginResponse,
     LogoutResponse,
+    PlanetsAccountsResponse,
     ScoreHistoryResponse,
 } from "../types/api";
 
@@ -115,6 +117,22 @@ export async function logout(): Promise<void> {
     if (!payload.success) {
         throw new Error("Logout failed");
     }
+}
+
+
+export function getPlanetsAccounts(): Promise<PlanetsAccountsResponse> {
+    return apiGet<PlanetsAccountsResponse>(
+        "/api/planets/accounts",
+    );
+}
+
+
+export function getAccountGames(
+    accountId: number,
+): Promise<AccountGamesResponse> {
+    return apiGet<AccountGamesResponse>(
+        `/api/planets/accounts/${accountId}/games`,
+    );
 }
 
 

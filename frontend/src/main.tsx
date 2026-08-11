@@ -4,65 +4,45 @@ import React, {
     useMemo,
     useState,
 } from "react";
-
 import ReactDOM from "react-dom/client";
 
 import {
+    getAccountGames,
     getCurrentUser,
     getGame,
+    getPlanetsAccounts,
     getScoreHistory,
     login,
     logout,
 } from "./api/client";
-
 import { PlayersTable } from "./features/players/PlayersTable";
 import { MilitaryScoreChart } from "./features/statistics/MilitaryScoreChart";
-
 import type {
+    AccountGameSummary,
     CurrentUserResponse,
     GameDetailsResponse,
+    PlanetsAccountResponse,
     ScoreHistoryResponse,
 } from "./types/api";
-
 import "./styles.css";
 
-
-const GAME_ID = 680933;
-
-
 interface LoginScreenProps {
-    onLogin: (
-        username: string,
-        password: string,
-    ) => Promise<void>;
+    onLogin: (username: string, password: string) => Promise<void>;
 }
 
+function LoginScreen({ onLogin }: LoginScreenProps) {
+    const [username, setUsername] = useState("");
+    const [password, setPassword] = useState("");
+    const [error, setError] = useState<string | null>(null);
+    const [submitting, setSubmitting] = useState(false);
 
-function LoginScreen({
-    onLogin,
-}: LoginScreenProps) {
-    const [username, setUsername] =
-        useState("");
-    const [password, setPassword] =
-        useState("");
-    const [error, setError] =
-        useState<string | null>(null);
-    const [submitting, setSubmitting] =
-        useState(false);
-
-    async function handleSubmit(
-        event: FormEvent<HTMLFormElement>,
-    ) {
+    async function handleSubmit(event: FormEvent<HTMLFormElement>) {
         event.preventDefault();
-
         setSubmitting(true);
         setError(null);
 
         try {
-            await onLogin(
-                username.trim(),
-                password,
-            );
+            await onLogin(username.trim(), password);
         } catch (reason) {
             setError(
                 reason instanceof Error
@@ -77,20 +57,12 @@ function LoginScreen({
     return (
         <main className="auth-page">
             <section className="auth-card">
-                <div className="eyebrow">
-                    Planets.nu Intel
-                </div>
-
+                <div className="eyebrow">Planets.nu Intel</div>
                 <h1>Sign in</h1>
-
                 <p className="auth-subtitle">
                     Use your local Intel Client account.
                 </p>
-
-                <form
-                    className="auth-form"
-                    onSubmit={handleSubmit}
-                >
+                <form className="auth-form" onSubmit={handleSubmit}>
                     <label>
                         <span>Username</span>
                         <input
@@ -98,55 +70,35 @@ function LoginScreen({
                             autoFocus
                             disabled={submitting}
                             name="username"
-                            onChange={(event) => {
-                                setUsername(
-                                    event.target.value,
-                                );
-                            }}
+                            onChange={(event) => setUsername(event.target.value)}
                             required
                             type="text"
                             value={username}
                         />
                     </label>
-
                     <label>
                         <span>Password</span>
                         <input
                             autoComplete="current-password"
                             disabled={submitting}
                             name="password"
-                            onChange={(event) => {
-                                setPassword(
-                                    event.target.value,
-                                );
-                            }}
+                            onChange={(event) => setPassword(event.target.value)}
                             required
                             type="password"
                             value={password}
                         />
                     </label>
-
                     {error && (
-                        <div
-                            className="auth-error"
-                            role="alert"
-                        >
+                        <div className="auth-error" role="alert">
                             {error}
                         </div>
                     )}
-
                     <button
                         className="primary-button"
-                        disabled={
-                            submitting ||
-                            !username.trim() ||
-                            !password
-                        }
+                        disabled={submitting || !username.trim() || !password}
                         type="submit"
                     >
-                        {submitting
-                            ? "Signing in…"
-                            : "Sign in"}
+                        {submitting ? "Signing in…" : "Sign in"}
                     </button>
                 </form>
             </section>
@@ -154,108 +106,192 @@ function LoginScreen({
     );
 }
 
+function chooseGameId(
+    games: AccountGameSummary[],
+    previousGameId: number | null,
+): number | null {
+    if (
+        previousGameId !== null &&
+        games.some((game) => game.id === previousGameId)
+    ) {
+        return previousGameId;
+    }
+
+    const runningGame = games.find(
+        (game) =>
+            game.status_name.toLowerCase() === "running" ||
+            game.status_id === 2,
+    );
+
+    return runningGame?.id ?? games[0]?.id ?? null;
+}
 
 interface DashboardProps {
     user: CurrentUserResponse;
     onLogout: () => Promise<void>;
 }
 
+function Dashboard({ user, onLogout }: DashboardProps) {
+    const [accounts, setAccounts] = useState<PlanetsAccountResponse[]>([]);
+    const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null);
+    const [accountsLoading, setAccountsLoading] = useState(true);
+    const [accountsError, setAccountsError] = useState<string | null>(null);
 
-function Dashboard({
-    user,
-    onLogout,
-}: DashboardProps) {
-    const [game, setGame] =
-        useState<GameDetailsResponse | null>(
-            null,
-        );
+    const [games, setGames] = useState<AccountGameSummary[]>([]);
+    const [selectedGameId, setSelectedGameId] = useState<number | null>(null);
+    const [gamesLoading, setGamesLoading] = useState(false);
+    const [gamesError, setGamesError] = useState<string | null>(null);
 
-    const [history, setHistory] =
-        useState<ScoreHistoryResponse | null>(
-            null,
-        );
-
-    const [error, setError] =
-        useState<string | null>(null);
-
-    const [loading, setLoading] =
-        useState(true);
-
-    const [loggingOut, setLoggingOut] =
-        useState(false);
+    const [game, setGame] = useState<GameDetailsResponse | null>(null);
+    const [history, setHistory] = useState<ScoreHistoryResponse | null>(null);
+    const [dataLoading, setDataLoading] = useState(false);
+    const [dataError, setDataError] = useState<string | null>(null);
+    const [loggingOut, setLoggingOut] = useState(false);
 
     useEffect(() => {
         let cancelled = false;
 
-        async function load() {
+        async function loadAccounts() {
             try {
-                const [
-                    gameResponse,
-                    historyResponse,
-                ] = await Promise.all([
-                    getGame(GAME_ID),
-                    getScoreHistory(GAME_ID),
-                ]);
+                const response = await getPlanetsAccounts();
+                if (cancelled) return;
 
-                if (cancelled) {
-                    return;
-                }
-
-                setGame(gameResponse);
-                setHistory(historyResponse);
-            } catch (reason) {
-                if (cancelled) {
-                    return;
-                }
-
-                setError(
-                    reason instanceof Error
-                        ? reason.message
-                        : "Unknown error",
+                const activeAccounts = response.accounts.filter(
+                    (account) => account.is_active,
                 );
-            } finally {
+                setAccounts(activeAccounts);
+                setSelectedAccountId(activeAccounts[0]?.id ?? null);
+            } catch (reason) {
                 if (!cancelled) {
-                    setLoading(false);
+                    setAccountsError(
+                        reason instanceof Error
+                            ? reason.message
+                            : "Failed to load linked accounts",
+                    );
                 }
+            } finally {
+                if (!cancelled) setAccountsLoading(false);
             }
         }
 
-        void load();
-
+        void loadAccounts();
         return () => {
             cancelled = true;
         };
     }, []);
 
-    const latestScores = useMemo(() => {
-        const result = new Map<number, ScoreHistoryResponse["items"][number]>();
+    useEffect(() => {
+        let cancelled = false;
 
-        if (!history) {
-            return result;
+        if (selectedAccountId === null) {
+            setGames([]);
+            setSelectedGameId(null);
+            setGamesError(null);
+            setGamesLoading(false);
+            return () => {
+                cancelled = true;
+            };
         }
 
-        for (const item of history.items) {
-            const current = result.get(
-                item.slot_id,
-            );
+        async function loadGames() {
+            setGamesLoading(true);
+            setGamesError(null);
+            setGames([]);
 
-            if (
-                !current ||
-                item.turn > current.turn
-            ) {
-                result.set(
-                    item.slot_id,
-                    item,
+            try {
+                const response = await getAccountGames(selectedAccountId);
+                if (cancelled) return;
+
+                setGames(response.games);
+                setSelectedGameId((previous) =>
+                    chooseGameId(response.games, previous),
                 );
+            } catch (reason) {
+                if (!cancelled) {
+                    setGamesError(
+                        reason instanceof Error
+                            ? reason.message
+                            : "Failed to load games",
+                    );
+                }
+            } finally {
+                if (!cancelled) setGamesLoading(false);
             }
         }
 
+        void loadGames();
+        return () => {
+            cancelled = true;
+        };
+    }, [selectedAccountId]);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        if (selectedGameId === null) {
+            setGame(null);
+            setHistory(null);
+            setDataError(null);
+            setDataLoading(false);
+            return () => {
+                cancelled = true;
+            };
+        }
+
+        async function loadGameData() {
+            setDataLoading(true);
+            setDataError(null);
+            setGame(null);
+            setHistory(null);
+
+            try {
+                const [gameResponse, historyResponse] = await Promise.all([
+                    getGame(selectedGameId),
+                    getScoreHistory(selectedGameId),
+                ]);
+                if (cancelled) return;
+
+                setGame(gameResponse);
+                setHistory(historyResponse);
+            } catch (reason) {
+                if (!cancelled) {
+                    setDataError(
+                        reason instanceof Error
+                            ? reason.message
+                            : "Failed to load game data",
+                    );
+                }
+            } finally {
+                if (!cancelled) setDataLoading(false);
+            }
+        }
+
+        void loadGameData();
+        return () => {
+            cancelled = true;
+        };
+    }, [selectedGameId]);
+
+    const latestScores = useMemo(() => {
+        const result = new Map<number, ScoreHistoryResponse["items"][number]>();
+        if (!history) return result;
+
+        for (const item of history.items) {
+            const current = result.get(item.slot_id);
+            if (!current || item.turn > current.turn) {
+                result.set(item.slot_id, item);
+            }
+        }
         return result;
     }, [history]);
 
+    const selectedAccount =
+        accounts.find((account) => account.id === selectedAccountId) ?? null;
+    const selectedGame =
+        games.find((item) => item.id === selectedGameId) ?? null;
+
     async function handleLogout() {
         setLoggingOut(true);
-
         try {
             await onLogout();
         } finally {
@@ -263,24 +299,22 @@ function Dashboard({
         }
     }
 
-    if (loading) {
+    if (accountsLoading) {
         return (
             <main className="app-shell centered-state">
-                <div className="loading-card">
-                    Loading Planets.nu intelligence…
-                </div>
+                <div className="loading-card">Loading linked Planets.nu accounts…</div>
             </main>
         );
     }
 
-    if (error || !game || !history) {
+    if (accountsError || accounts.length === 0) {
         return (
             <main className="app-shell centered-state">
                 <div className="error-card">
-                    <h1>Failed to load game</h1>
+                    <h1>{accountsError ? "Failed to load observers" : "No active observers"}</h1>
                     <p>
-                        {error ??
-                            "Game data is unavailable."}
+                        {accountsError ??
+                            "No active linked Planets.nu accounts are available."}
                     </p>
                 </div>
             </main>
@@ -291,131 +325,140 @@ function Dashboard({
         <main className="app-shell">
             <header className="topbar">
                 <div>
-                    <div className="eyebrow">
-                        Planets.nu Intel
-                    </div>
-
-                    <h1>
-                        {game.game.name}
-                    </h1>
-
+                    <div className="eyebrow">Planets.nu Intel</div>
+                    <h1>{game?.game.name ?? selectedGame?.name ?? "Dashboard"}</h1>
                     <p className="subtitle">
-                        {
-                            game.game
-                                .short_description
-                        }
+                        {game?.game.short_description ??
+                            selectedGame?.short_description ??
+                            "Select an observer and game."}
                     </p>
                 </div>
-
                 <div className="topbar-actions">
-                    <div className="game-status">
-                        <span className="status-badge">
-                            {
-                                game.game
-                                    .status_name
-                            }
-                        </span>
-
-                        <strong>
-                            Turn{" "}
-                            {game.game.turn}
-                        </strong>
-
-                        <span>
-                            {game.game.slots}{" "}
-                            slots
-                        </span>
-                    </div>
-
+                    {game && (
+                        <div className="game-status">
+                            <span className="status-badge">{game.game.status_name}</span>
+                            <strong>Turn {game.game.turn}</strong>
+                            <span>{game.game.slots} slots</span>
+                        </div>
+                    )}
                     <div className="user-menu">
                         <div>
-                            <span className="user-label">
-                                Signed in as
-                            </span>
-                            <strong>
-                                {user.display_name}
-                            </strong>
+                            <span className="user-label">Signed in as</span>
+                            <strong>{user.display_name}</strong>
                         </div>
-
                         <button
                             className="secondary-button"
                             disabled={loggingOut}
-                            onClick={() => {
-                                void handleLogout();
-                            }}
+                            onClick={() => void handleLogout()}
                             type="button"
                         >
-                            {loggingOut
-                                ? "Signing out…"
-                                : "Sign out"}
+                            {loggingOut ? "Signing out…" : "Sign out"}
                         </button>
                     </div>
                 </div>
             </header>
 
             <section className="summary-grid">
-                <div className="summary-card">
-                    <span>Planets</span>
-                    <strong>
-                        {
-                            game.settings
-                                .num_planets
+                <label className="summary-card">
+                    <span>Observer</span>
+                    <select
+                        className="secondary-button"
+                        onChange={(event) =>
+                            setSelectedAccountId(Number(event.target.value))
                         }
-                    </strong>
-                </div>
+                        value={selectedAccountId ?? ""}
+                    >
+                        {accounts.map((account) => (
+                            <option key={account.id} value={account.id}>
+                                {account.planets_username}
+                            </option>
+                        ))}
+                    </select>
+                </label>
 
-                <div className="summary-card">
-                    <span>Ship limit</span>
-                    <strong>
-                        {
-                            game.settings
-                                .ship_limit
+                <label className="summary-card">
+                    <span>Game</span>
+                    <select
+                        className="secondary-button"
+                        disabled={gamesLoading || games.length === 0}
+                        onChange={(event) =>
+                            setSelectedGameId(Number(event.target.value))
                         }
-                    </strong>
-                </div>
-
-                <div className="summary-card">
-                    <span>Schedule</span>
-                    <strong>
-                        {game.schedule}
-                    </strong>
-                </div>
-
-                <div className="summary-card">
-                    <span>Next host</span>
-                    <strong>
-                        {game.time_to_host}
-                    </strong>
-                </div>
+                        value={selectedGameId ?? ""}
+                    >
+                        {gamesLoading ? (
+                            <option value="">Loading games…</option>
+                        ) : games.length === 0 ? (
+                            <option value="">No games available</option>
+                        ) : (
+                            games.map((item) => (
+                                <option key={item.id} value={item.id}>
+                                    {item.name} · Turn {item.turn} · {item.status_name}
+                                </option>
+                            ))
+                        )}
+                    </select>
+                </label>
             </section>
 
-            <PlayersTable
-                players={game.players}
-                latestScores={
-                    latestScores
-                }
-            />
+            {selectedAccount && (
+                <div className="eyebrow">
+                    Observer provenance: {selectedAccount.planets_username}
+                </div>
+            )}
 
-            <MilitaryScoreChart
-                players={game.players}
-                history={history.items}
-            />
+            {gamesLoading ? (
+                <div className="loading-card">Loading games for observer…</div>
+            ) : gamesError ? (
+                <div className="error-card">
+                    <h1>Failed to load games</h1>
+                    <p>{gamesError}</p>
+                </div>
+            ) : games.length === 0 ? (
+                <div className="error-card">
+                    <h1>No games available</h1>
+                    <p>This observer has no available Planets.nu games.</p>
+                </div>
+            ) : dataLoading ? (
+                <div className="loading-card">Loading game intelligence…</div>
+            ) : dataError || !game || !history ? (
+                <div className="error-card">
+                    <h1>Failed to load game</h1>
+                    <p>{dataError ?? "Game data is unavailable."}</p>
+                </div>
+            ) : (
+                <>
+                    <section className="summary-grid">
+                        <div className="summary-card">
+                            <span>Planets</span>
+                            <strong>{game.settings.num_planets}</strong>
+                        </div>
+                        <div className="summary-card">
+                            <span>Ship limit</span>
+                            <strong>{game.settings.ship_limit}</strong>
+                        </div>
+                        <div className="summary-card">
+                            <span>Schedule</span>
+                            <strong>{game.schedule}</strong>
+                        </div>
+                        <div className="summary-card">
+                            <span>Next host</span>
+                            <strong>{game.time_to_host}</strong>
+                        </div>
+                    </section>
+                    <PlayersTable players={game.players} latestScores={latestScores} />
+                    <MilitaryScoreChart players={game.players} history={history.items} />
+                </>
+            )}
         </main>
     );
 }
 
-
 function App() {
-    const [user, setUser] =
-        useState<CurrentUserResponse | null>(
-            null,
-        );
-    const [checkingSession, setCheckingSession] =
-        useState(true);
-    const [sessionError, setSessionError] =
-        useState<string | null>(null);
-    const [sessionAttempt, setSessionAttempt] =
-        useState(0);
+    const [user, setUser] = useState<CurrentUserResponse | null>(null);
+    const [checkingSession, setCheckingSession] = useState(true);
+    const [sessionError, setSessionError] = useState<string | null>(null);
+    const [sessionAttempt, setSessionAttempt] = useState(0);
 
     useEffect(() => {
         let cancelled = false;
@@ -423,14 +466,9 @@ function App() {
         async function checkSession() {
             setCheckingSession(true);
             setSessionError(null);
-
             try {
-                const currentUser =
-                    await getCurrentUser();
-
-                if (!cancelled) {
-                    setUser(currentUser);
-                }
+                const currentUser = await getCurrentUser();
+                if (!cancelled) setUser(currentUser);
             } catch (reason) {
                 if (!cancelled) {
                     setSessionError(
@@ -440,29 +478,18 @@ function App() {
                     );
                 }
             } finally {
-                if (!cancelled) {
-                    setCheckingSession(false);
-                }
+                if (!cancelled) setCheckingSession(false);
             }
         }
 
         void checkSession();
-
         return () => {
             cancelled = true;
         };
     }, [sessionAttempt]);
 
-    async function handleLogin(
-        username: string,
-        password: string,
-    ) {
-        const authenticatedUser =
-            await login(
-                username,
-                password,
-            );
-
+    async function handleLogin(username: string, password: string) {
+        const authenticatedUser = await login(username, password);
         setUser(authenticatedUser);
         setSessionError(null);
     }
@@ -475,9 +502,7 @@ function App() {
     if (checkingSession) {
         return (
             <main className="app-shell centered-state">
-                <div className="loading-card">
-                    Checking session…
-                </div>
+                <div className="loading-card">Checking session…</div>
             </main>
         );
     }
@@ -490,11 +515,7 @@ function App() {
                     <p>{sessionError}</p>
                     <button
                         className="secondary-button"
-                        onClick={() => {
-                            setSessionAttempt(
-                                (value) => value + 1,
-                            );
-                        }}
+                        onClick={() => setSessionAttempt((value) => value + 1)}
                         type="button"
                     >
                         Retry
@@ -504,31 +525,13 @@ function App() {
         );
     }
 
-    if (!user) {
-        return (
-            <LoginScreen
-                onLogin={handleLogin}
-            />
-        );
-    }
+    if (!user) return <LoginScreen onLogin={handleLogin} />;
 
-    return (
-        <Dashboard
-            onLogout={handleLogout}
-            user={user}
-        />
-    );
+    return <Dashboard onLogout={handleLogout} user={user} />;
 }
 
-
-ReactDOM
-    .createRoot(
-        document.getElementById(
-            "root",
-        )!,
-    )
-    .render(
-        <React.StrictMode>
-            <App />
-        </React.StrictMode>,
-    );
+ReactDOM.createRoot(document.getElementById("root")!).render(
+    <React.StrictMode>
+        <App />
+    </React.StrictMode>,
+);
