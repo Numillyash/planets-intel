@@ -1,11 +1,14 @@
 import type {
     AccountGamesResponse,
+    ChangePasswordResponse,
     CurrentUserResponse,
     GameDetailsResponse,
     LoginResponse,
     LogoutResponse,
+    PlanetsAccountResponse,
     PlanetsAccountsResponse,
     ScoreHistoryResponse,
+    UnlinkPlanetsAccountResponse,
 } from "../types/api";
 
 
@@ -144,10 +147,96 @@ export async function logout(): Promise<void> {
 }
 
 
+export async function changePassword(
+    currentPassword: string,
+    newPassword: string,
+): Promise<void> {
+    const response = await fetch("/api/auth/password", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+            current_password: currentPassword,
+            new_password: newPassword,
+        }),
+    });
+
+    if (!response.ok) {
+        throw new Error(
+            await parseErrorMessage(response),
+        );
+    }
+
+    const payload = await response.json() as ChangePasswordResponse;
+
+    if (!payload.success) {
+        throw new Error("Password change failed");
+    }
+}
+
+
 export function getPlanetsAccounts(): Promise<PlanetsAccountsResponse> {
     return apiGet<PlanetsAccountsResponse>(
         "/api/planets/accounts",
     );
+}
+
+
+export async function linkPlanetsAccount(
+    username: string,
+    password: string,
+): Promise<PlanetsAccountResponse> {
+    const response = await fetch("/api/planets/accounts", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+            username,
+            password,
+        }),
+    });
+
+    if (!response.ok) {
+        throw new Error(
+            await parseErrorMessage(response),
+        );
+    }
+
+    return response.json() as Promise<PlanetsAccountResponse>;
+}
+
+
+export async function unlinkPlanetsAccount(
+    accountId: number,
+): Promise<void> {
+    const response = await fetch(
+        `/api/planets/accounts/${accountId}`,
+        {
+            method: "DELETE",
+            credentials: "same-origin",
+            headers: {
+                Accept: "application/json",
+            },
+        },
+    );
+
+    if (!response.ok) {
+        throw new Error(
+            await parseErrorMessage(response),
+        );
+    }
+
+    const payload = await response.json() as UnlinkPlanetsAccountResponse;
+
+    if (!payload.success) {
+        throw new Error("Failed to unlink Planets.nu account");
+    }
 }
 
 

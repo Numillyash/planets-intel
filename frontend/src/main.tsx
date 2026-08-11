@@ -15,6 +15,7 @@ import {
     login,
     logout,
 } from "./api/client";
+import { AccountSettings } from "./features/account/AccountSettings";
 import { PlayersTable } from "./features/players/PlayersTable";
 import { MilitaryScoreChart } from "./features/statistics/MilitaryScoreChart";
 import type {
@@ -136,6 +137,7 @@ function Dashboard({ user, onLogout }: DashboardProps) {
     const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null);
     const [accountsLoading, setAccountsLoading] = useState(true);
     const [accountsError, setAccountsError] = useState<string | null>(null);
+    const [accountsRevision, setAccountsRevision] = useState(0);
 
     const [games, setGames] = useState<AccountGameSummary[]>([]);
     const [selectedGameId, setSelectedGameId] = useState<number | null>(null);
@@ -178,7 +180,7 @@ function Dashboard({ user, onLogout }: DashboardProps) {
         return () => {
             cancelled = true;
         };
-    }, []);
+    }, [accountsRevision]);
 
     useEffect(() => {
         let cancelled = false;
@@ -311,15 +313,56 @@ function Dashboard({ user, onLogout }: DashboardProps) {
         );
     }
 
-    if (accountsError || accounts.length === 0) {
+    if (accountsError) {
         return (
             <main className="app-shell centered-state">
                 <div className="error-card">
-                    <h1>{accountsError ? "Failed to load observers" : "No active observers"}</h1>
-                    <p>
-                        {accountsError ??
-                            "No active linked Planets.nu accounts are available."}
-                    </p>
+                    <h1>Failed to load observers</h1>
+                    <p>{accountsError}</p>
+                </div>
+            </main>
+        );
+    }
+
+    if (accounts.length === 0) {
+        return (
+            <main className="app-shell">
+                <header className="topbar">
+                    <div>
+                        <div className="eyebrow">Planets.nu Intel</div>
+                        <h1>Dashboard</h1>
+                        <p className="subtitle">
+                            Link a Planets.nu account to begin.
+                        </p>
+                    </div>
+                    <div className="topbar-actions">
+                        <div className="user-menu">
+                            <div>
+                                <span className="user-label">Signed in as</span>
+                                <strong>{user.display_name}</strong>
+                            </div>
+                            <button
+                                className="secondary-button"
+                                disabled={loggingOut}
+                                onClick={() => void handleLogout()}
+                                type="button"
+                            >
+                                {loggingOut ? "Signing out…" : "Sign out"}
+                            </button>
+                        </div>
+                    </div>
+                </header>
+
+                <AccountSettings
+                    accounts={accounts}
+                    onAccountsChanged={() =>
+                        setAccountsRevision((value) => value + 1)
+                    }
+                />
+
+                <div className="error-card" style={{ marginTop: 18 }}>
+                    <h1>No active observers</h1>
+                    <p>Add a Planets.nu account in Account settings.</p>
                 </div>
             </main>
         );
@@ -361,6 +404,13 @@ function Dashboard({ user, onLogout }: DashboardProps) {
                     </div>
                 </div>
             </header>
+
+            <AccountSettings
+                accounts={accounts}
+                onAccountsChanged={() =>
+                    setAccountsRevision((value) => value + 1)
+                }
+            />
 
             <section className="summary-grid">
                 <label className="summary-card">

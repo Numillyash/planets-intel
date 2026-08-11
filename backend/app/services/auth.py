@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 import secrets
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from app.core.config import get_settings
 from app.core.passwords import (
@@ -183,6 +183,53 @@ def revoke_session(
             return False
 
         app_session.revoked_at = now
+
+        session.commit()
+
+        return True
+
+
+def change_password(
+    user_id: int,
+    current_password: str,
+    new_password: str,
+) -> bool:
+    now = datetime.now(
+        timezone.utc
+    )
+
+    with SessionLocal() as session:
+        user = session.execute(
+            select(AppUser).where(
+                AppUser.id == user_id,
+                AppUser.is_active.is_(True),
+            )
+        ).scalar_one_or_none()
+
+        if user is None:
+            return False
+
+        if not verify_password(
+            user.password_hash,
+            current_password,
+        ):
+            return False
+
+        user.password_hash = hash_password(
+            new_password
+        )
+        user.updated_at = now
+
+        session.execute(
+            update(AppSession)
+            .where(
+                AppSession.user_id == user_id,
+                AppSession.revoked_at.is_(None),
+            )
+            .values(
+                revoked_at=now
+            )
+        )
 
         session.commit()
 

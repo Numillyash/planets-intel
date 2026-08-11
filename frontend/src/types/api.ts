@@ -155,6 +155,10 @@ export interface LogoutResponse {
     success: boolean;
 }
 
+export interface ChangePasswordResponse {
+    success: boolean;
+}
+
 export interface PlanetsAccountResponse {
     id: number;
     planets_username: string;
@@ -166,6 +170,10 @@ export interface PlanetsAccountResponse {
 
 export interface PlanetsAccountsResponse {
     accounts: PlanetsAccountResponse[];
+}
+
+export interface UnlinkPlanetsAccountResponse {
+    success: boolean;
 }
 
 export interface AccountGameSummary {
