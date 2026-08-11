@@ -425,7 +425,7 @@ function Dashboard({ user, onLogout }: DashboardProps) {
                 </div>
             ) : dataLoading ? (
                 <div className="loading-card">Loading game intelligence…</div>
-            ) : dataError || !game || !history ? (
+            ) : dataError || !game ? (
                 <div className="error-card">
                     <h1>Failed to load game</h1>
                     <p>{dataError ?? "Game data is unavailable."}</p>
@@ -451,7 +451,23 @@ function Dashboard({ user, onLogout }: DashboardProps) {
                         </div>
                     </section>
                     <PlayersTable players={game.players} latestScores={latestScores} />
-                    <MilitaryScoreChart players={game.players} history={history.items} />
+                    {history ? (
+                        <MilitaryScoreChart
+                            players={game.players}
+                            history={history.items}
+                        />
+                    ) : (
+                        <section className="panel">
+                            <div className="panel-header">
+                                <div>
+                                    <h2>Military score history</h2>
+                                    <p>
+                                        No local public score history has been synced for this game yet.
+                                    </p>
+                                </div>
+                            </div>
+                        </section>
+                    )}
                 </>
             )}
         </main>
