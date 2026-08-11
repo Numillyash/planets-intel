@@ -195,3 +195,65 @@ export interface AccountGamesResponse {
     planets_username: string;
     games: AccountGameSummary[];
 }
+
+export interface PrivateIntelObserver {
+    linked_account_id: number;
+    planets_account_id: number | null;
+    planets_username: string;
+    player_slot_id: number;
+    is_active: boolean;
+}
+
+export interface PrivateIntelObservationMetadata {
+    batch_id: number;
+    source: string;
+    snapshot_hash: string;
+    observed_at: string;
+}
+
+export interface PrivateIntelCounts {
+    planets: number;
+    ships: number;
+    starbases: number;
+}
+
+export interface PlanetObservationResponse {
+    planet_id: number;
+    owner_id: number | null;
+    info_turn: number | null;
+    name: string | null;
+    x: number | null;
+    y: number | null;
+    payload: Record<string, unknown>;
+}
+
+export interface ShipObservationResponse {
+    ship_id: number;
+    owner_id: number | null;
+    info_turn: number | null;
+    hull_id: number | null;
+    name: string | null;
+    x: number | null;
+    y: number | null;
+    warp: number | null;
+    payload: Record<string, unknown>;
+}
+
+export interface StarbaseObservationResponse {
+    starbase_id: number;
+    planet_id: number | null;
+    race_id: number | null;
+    info_turn: number | null;
+    payload: Record<string, unknown>;
+}
+
+export interface LatestPrivateIntelResponse {
+    game_id: number;
+    turn: number;
+    observer: PrivateIntelObserver;
+    observation: PrivateIntelObservationMetadata;
+    counts: PrivateIntelCounts;
+    planets: PlanetObservationResponse[];
+    ships: ShipObservationResponse[];
+    starbases: StarbaseObservationResponse[];
+}

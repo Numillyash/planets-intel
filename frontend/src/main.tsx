@@ -10,18 +10,21 @@ import {
     getAccountGames,
     getCurrentUser,
     getGame,
+    getLatestPrivateIntel,
     getPlanetsAccounts,
     getScoreHistory,
     login,
     logout,
 } from "./api/client";
 import { AccountSettings } from "./features/account/AccountSettings";
+import { PrivateIntelMap } from "./features/map/PrivateIntelMap";
 import { PlayersTable } from "./features/players/PlayersTable";
 import { MilitaryScoreChart } from "./features/statistics/MilitaryScoreChart";
 import type {
     AccountGameSummary,
     CurrentUserResponse,
     GameDetailsResponse,
+    LatestPrivateIntelResponse,
     PlanetsAccountResponse,
     ScoreHistoryResponse,
 } from "./types/api";
@@ -148,6 +151,12 @@ function Dashboard({ user, onLogout }: DashboardProps) {
     const [history, setHistory] = useState<ScoreHistoryResponse | null>(null);
     const [dataLoading, setDataLoading] = useState(false);
     const [dataError, setDataError] = useState<string | null>(null);
+
+    const [privateIntel, setPrivateIntel] =
+        useState<LatestPrivateIntelResponse | null>(null);
+    const [privateIntelLoading, setPrivateIntelLoading] = useState(false);
+    const [privateIntelError, setPrivateIntelError] = useState<string | null>(null);
+
     const [loggingOut, setLoggingOut] = useState(false);
 
     useEffect(() => {
@@ -277,6 +286,59 @@ function Dashboard({ user, onLogout }: DashboardProps) {
             cancelled = true;
         };
     }, [selectedGameId]);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        if (
+            selectedAccountId === null ||
+            selectedGameId === null
+        ) {
+            setPrivateIntel(null);
+            setPrivateIntelError(null);
+            setPrivateIntelLoading(false);
+            return () => {
+                cancelled = true;
+            };
+        }
+
+        const accountId = selectedAccountId;
+        const gameId = selectedGameId;
+
+        async function loadPrivateIntel() {
+            setPrivateIntelLoading(true);
+            setPrivateIntelError(null);
+            setPrivateIntel(null);
+
+            try {
+                const response = await getLatestPrivateIntel(
+                    gameId,
+                    accountId,
+                );
+
+                if (!cancelled) {
+                    setPrivateIntel(response);
+                }
+            } catch (reason) {
+                if (!cancelled) {
+                    setPrivateIntelError(
+                        reason instanceof Error
+                            ? reason.message
+                            : "Failed to load private intelligence",
+                    );
+                }
+            } finally {
+                if (!cancelled) {
+                    setPrivateIntelLoading(false);
+                }
+            }
+        }
+
+        void loadPrivateIntel();
+        return () => {
+            cancelled = true;
+        };
+    }, [selectedAccountId, selectedGameId]);
 
     const latestScores = useMemo(() => {
         const result = new Map<number, ScoreHistoryResponse["items"][number]>();
@@ -500,7 +562,23 @@ function Dashboard({ user, onLogout }: DashboardProps) {
                             <strong>{game.time_to_host}</strong>
                         </div>
                     </section>
-                    <PlayersTable players={game.players} latestScores={latestScores} />
+
+                    <PrivateIntelMap
+                        error={privateIntelError}
+                        intel={privateIntel}
+                        loading={privateIntelLoading}
+                        observerName={
+                            selectedAccount?.planets_username
+                            ?? "Unknown observer"
+                        }
+                        players={game.players}
+                    />
+
+                    <PlayersTable
+                        latestScores={latestScores}
+                        players={game.players}
+                    />
+
                     {history ? (
                         <MilitaryScoreChart
                             players={game.players}

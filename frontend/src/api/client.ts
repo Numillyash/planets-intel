@@ -3,6 +3,7 @@ import type {
     ChangePasswordResponse,
     CurrentUserResponse,
     GameDetailsResponse,
+    LatestPrivateIntelResponse,
     LoginResponse,
     LogoutResponse,
     PlanetsAccountResponse,
@@ -263,5 +264,15 @@ export function getScoreHistory(
 ): Promise<ScoreHistoryResponse | null> {
     return apiGetOptional<ScoreHistoryResponse>(
         `/api/games/${gameId}/scores/history`,
+    );
+}
+
+
+export function getLatestPrivateIntel(
+    gameId: number,
+    linkedAccountId: number,
+): Promise<LatestPrivateIntelResponse | null> {
+    return apiGetOptional<LatestPrivateIntelResponse>(
+        `/api/games/${gameId}/private-intel/latest?linked_account_id=${linkedAccountId}`,
     );
 }
