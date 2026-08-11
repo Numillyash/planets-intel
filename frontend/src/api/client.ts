@@ -46,6 +46,30 @@ async function apiGet<T>(url: string): Promise<T> {
 }
 
 
+async function apiGetOptional<T>(
+    url: string,
+): Promise<T | null> {
+    const response = await fetch(url, {
+        credentials: "same-origin",
+        headers: {
+            Accept: "application/json",
+        },
+    });
+
+    if (response.status === 404) {
+        return null;
+    }
+
+    if (!response.ok) {
+        throw new Error(
+            `API request failed: ${await parseErrorMessage(response)}`,
+        );
+    }
+
+    return response.json() as Promise<T>;
+}
+
+
 export async function getCurrentUser(): Promise<CurrentUserResponse | null> {
     const response = await fetch("/api/auth/me", {
         credentials: "same-origin",
@@ -147,8 +171,8 @@ export function getGame(
 
 export function getScoreHistory(
     gameId: number,
-): Promise<ScoreHistoryResponse> {
-    return apiGet<ScoreHistoryResponse>(
+): Promise<ScoreHistoryResponse | null> {
+    return apiGetOptional<ScoreHistoryResponse>(
         `/api/games/${gameId}/scores/history`,
     );
 }
