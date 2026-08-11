@@ -11,7 +11,8 @@ class Settings(BaseSettings):
         "postgresql+psycopg://planets:planets@postgres:5432/planets_intel"
     )
 
-    planetsnu_api_base_url: str = "http://api.planets.nu"
+    planetsnu_api_base_url: str = "https://api.planets.nu"
+    planetsnu_proxy_url: str | None = None
 
     credential_encryption_key: str | None = None
 

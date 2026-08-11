@@ -18,6 +18,7 @@ class PlanetsNuClient:
         settings = get_settings()
 
         self.base_url = settings.planetsnu_api_base_url.rstrip("/")
+        self.proxy_url = settings.planetsnu_proxy_url or None
 
     async def get(
         self,
@@ -29,6 +30,7 @@ class PlanetsNuClient:
         async with httpx.AsyncClient(
             timeout=30.0,
             follow_redirects=True,
+            trust_env=False,
         ) as client:
             response = await client.get(
                 url,
@@ -53,16 +55,21 @@ class PlanetsNuClient:
         self,
         path: str,
         data: dict[str, Any],
+        headers: dict[str, str] | None = None,
+        use_proxy: bool = False,
     ) -> Any:
         url = f"{self.base_url}/{path.lstrip('/')}"
 
         async with httpx.AsyncClient(
             timeout=30.0,
             follow_redirects=True,
+            proxy=self.proxy_url if use_proxy else None,
+            trust_env=False,
         ) as client:
             response = await client.post(
                 url,
                 data=data,
+                headers=headers,
             )
 
         try:
@@ -138,6 +145,52 @@ class PlanetsNuClient:
         ):
             raise PlanetsNuError(
                 "Planets.nu games/list contains invalid records"
+            )
+
+        return payload
+
+
+    async def load_turn(
+        self,
+        game_id: int,
+        api_key: str,
+    ) -> dict[str, Any]:
+        payload = await self.post_form(
+            "game/loadturn",
+            data={
+                "gameid": game_id,
+                "apikey": api_key,
+                "forsave": "true",
+                "activity": "true",
+            },
+            headers={
+                "Origin": "https://planets.nu",
+                "Referer": "https://planets.nu/",
+                "User-Agent": "Mozilla/5.0",
+            },
+            use_proxy=True,
+        )
+
+        if not isinstance(payload, dict):
+            raise PlanetsNuError(
+                "Planets.nu loadturn response is not an object"
+            )
+
+        if payload.get("success") is False:
+            raise PlanetsNuError(
+                str(
+                    payload.get(
+                        "error",
+                        "Planets.nu loadturn failed",
+                    )
+                )
+            )
+
+        rst = payload.get("rst")
+
+        if not isinstance(rst, dict):
+            raise PlanetsNuError(
+                "Planets.nu loadturn response has no rst object"
             )
 
         return payload
