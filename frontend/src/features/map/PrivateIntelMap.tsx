@@ -19,6 +19,17 @@ import type {
     ShipObservationResponse,
     StarbaseObservationResponse,
 } from "../../types/api";
+import {
+    PLANET_LINK_RANGE,
+    SHIP_ROLE_LABEL,
+    observedBounds,
+    planetLabel,
+    planetLinks,
+    renderY,
+    shipRole,
+    type PlanetLabelMode,
+    type ShipRole,
+} from "./mapModel";
 import "./map.css";
 
 
@@ -46,14 +57,6 @@ interface PrivateIntelMapProps {
 }
 
 
-interface Bounds {
-    minX: number;
-    maxX: number;
-    minY: number;
-    maxY: number;
-}
-
-
 const OWNER_COLORS = [
     0x60a5fa,
     0xf87171,
@@ -75,52 +78,6 @@ function ownerColor(ownerId: number | null): number {
     }
 
     return OWNER_COLORS[(ownerId - 1) % OWNER_COLORS.length];
-}
-
-
-function observedBounds(
-    intel: LatestPrivateIntelResponse,
-): Bounds {
-    const coordinates: Array<{ x: number; y: number }> = [];
-
-    for (const planet of intel.planets) {
-        if (planet.x !== null && planet.y !== null) {
-            coordinates.push({ x: planet.x, y: planet.y });
-        }
-    }
-
-    for (const ship of intel.ships) {
-        if (ship.x !== null && ship.y !== null) {
-            coordinates.push({ x: ship.x, y: ship.y });
-        }
-    }
-
-    if (coordinates.length === 0) {
-        return {
-            minX: 0,
-            maxX: 100,
-            minY: 0,
-            maxY: 100,
-        };
-    }
-
-    const xs = coordinates.map((point) => point.x);
-    const ys = coordinates.map((point) => point.y);
-    const rawMinX = Math.min(...xs);
-    const rawMaxX = Math.max(...xs);
-    const rawMinY = Math.min(...ys);
-    const rawMaxY = Math.max(...ys);
-    const width = Math.max(rawMaxX - rawMinX, 1);
-    const height = Math.max(rawMaxY - rawMinY, 1);
-    const padX = Math.max(width * 0.08, 35);
-    const padY = Math.max(height * 0.08, 35);
-
-    return {
-        minX: rawMinX - padX,
-        maxX: rawMaxX + padX,
-        minY: rawMinY - padY,
-        maxY: rawMaxY + padY,
-    };
 }
 
 
@@ -150,6 +107,47 @@ function formatObservedAt(value: string): string {
     }
 
     return parsed.toLocaleString();
+}
+
+
+function shipMarker(role: ShipRole, color: number): Graphics {
+    const marker = new Graphics();
+
+    if (role === "freighter") {
+        marker.rect(-7, -7, 14, 14);
+    } else if (role === "carrier") {
+        marker.poly([
+            0, -9,
+            8, -4,
+            8, 4,
+            0, 9,
+            -8, 4,
+            -8, -4,
+        ]);
+    } else if (role === "torpedo") {
+        marker.poly([
+            0, -9,
+            8, 8,
+            -8, 8,
+        ]);
+    } else {
+        marker.poly([
+            0, -9,
+            8, 0,
+            0, 9,
+            -8, 0,
+        ]);
+    }
+
+    marker
+        .fill({ color, alpha: 0.95 })
+        .stroke({
+            color: 0xffffff,
+            width: 1,
+            alpha: 0.72,
+        });
+
+    return marker;
 }
 
 
@@ -191,12 +189,14 @@ function EntityDetails({
 
     if (selected.kind === "ship") {
         const ship = selected.value;
+        const role = shipRole(ship);
         return (
             <div className="intel-entity-details">
                 <span className="intel-entity-kind">Ship</span>
                 <h3>{ship.name ?? `Ship ${ship.ship_id}`}</h3>
                 <dl>
                     <div><dt>ID</dt><dd>{ship.ship_id}</dd></div>
+                    <div><dt>Role</dt><dd>{SHIP_ROLE_LABEL[role]}</dd></div>
                     <div><dt>Owner</dt><dd>{playerName(ship.owner_id, players)}</dd></div>
                     <div><dt>Hull ID</dt><dd>{ship.hull_id ?? "—"}</dd></div>
                     <div><dt>Warp</dt><dd>{ship.warp ?? "—"}</dd></div>
@@ -226,10 +226,12 @@ function EntityDetails({
 
 function PixiMapCanvas({
     intel,
+    labelMode,
     onSelect,
     fitViewRef,
 }: {
     intel: LatestPrivateIntelResponse;
+    labelMode: PlanetLabelMode;
     onSelect: (entity: SelectedEntity) => void;
     fitViewRef: MutableRefObject<(() => void) | null>;
 }) {
@@ -238,6 +240,11 @@ function PixiMapCanvas({
     const bounds = useMemo(
         () => observedBounds(intel),
         [intel],
+    );
+
+    const links = useMemo(
+        () => planetLinks(intel.planets),
+        [intel.planets],
     );
 
     useEffect(() => {
@@ -275,6 +282,32 @@ function PixiMapCanvas({
             const world = new Container();
             nextApp.stage.addChild(world);
 
+            const linkLayer = new Graphics();
+            for (const link of links) {
+                if (
+                    link.from.x === null || link.from.y === null ||
+                    link.to.x === null || link.to.y === null
+                ) {
+                    continue;
+                }
+
+                linkLayer
+                    .moveTo(
+                        link.from.x,
+                        renderY(link.from.y, bounds),
+                    )
+                    .lineTo(
+                        link.to.x,
+                        renderY(link.to.y, bounds),
+                    );
+            }
+            linkLayer.stroke({
+                color: 0x34465e,
+                width: 1,
+                alpha: 0.46,
+            });
+            world.addChild(linkLayer);
+
             const planetById = new Map(
                 intel.planets.map((planet) => [planet.planet_id, planet]),
             );
@@ -284,6 +317,7 @@ function PixiMapCanvas({
                     continue;
                 }
 
+                const y = renderY(planet.y, bounds);
                 const marker = new Graphics()
                     .circle(0, 0, 7)
                     .fill(ownerColor(planet.owner_id))
@@ -293,7 +327,7 @@ function PixiMapCanvas({
                         alpha: 0.55,
                     });
 
-                marker.position.set(planet.x, planet.y);
+                marker.position.set(planet.x, y);
                 marker.eventMode = "static";
                 marker.cursor = "pointer";
                 marker.on("pointertap", (event) => {
@@ -305,24 +339,27 @@ function PixiMapCanvas({
                 });
                 world.addChild(marker);
 
-                const label = new Text({
-                    text: planet.name ?? `#${planet.planet_id}`,
-                    style: {
-                        fill: 0xb9c6d8,
-                        fontFamily: "Inter, Arial, sans-serif",
-                        fontSize: 11,
-                        stroke: {
-                            color: 0x060a10,
-                            width: 3,
+                const labelText = planetLabel(planet, labelMode);
+                if (labelText !== null) {
+                    const label = new Text({
+                        text: labelText,
+                        style: {
+                            fill: 0xb9c6d8,
+                            fontFamily: "Inter, Arial, sans-serif",
+                            fontSize: 11,
+                            stroke: {
+                                color: 0x060a10,
+                                width: 3,
+                            },
                         },
-                    },
-                    resolution: 2,
-                });
-                label.position.set(
-                    planet.x + 10,
-                    planet.y - 8,
-                );
-                world.addChild(label);
+                        resolution: 2,
+                    });
+                    label.position.set(
+                        planet.x + 10,
+                        y - 8,
+                    );
+                    world.addChild(label);
+                }
             }
 
             for (const starbase of intel.starbases) {
@@ -356,7 +393,10 @@ function PixiMapCanvas({
                         alpha: 0.95,
                     });
 
-                marker.position.set(planet.x, planet.y);
+                marker.position.set(
+                    planet.x,
+                    renderY(planet.y, bounds),
+                );
                 marker.eventMode = "static";
                 marker.cursor = "pointer";
                 marker.on("pointertap", (event) => {
@@ -374,20 +414,16 @@ function PixiMapCanvas({
                     continue;
                 }
 
-                const marker = new Graphics()
-                    .poly([
-                        0, -8,
-                        7, 7,
-                        -7, 7,
-                    ])
-                    .fill(ownerColor(ship.owner_id))
-                    .stroke({
-                        color: 0xffffff,
-                        width: 1,
-                        alpha: 0.7,
-                    });
+                const role = shipRole(ship);
+                const marker = shipMarker(
+                    role,
+                    ownerColor(ship.owner_id),
+                );
 
-                marker.position.set(ship.x, ship.y);
+                marker.position.set(
+                    ship.x,
+                    renderY(ship.y, bounds),
+                );
                 marker.eventMode = "static";
                 marker.cursor = "pointer";
                 marker.on("pointertap", (event) => {
@@ -539,7 +575,7 @@ function PixiMapCanvas({
                 app.destroy(true, true);
             }
         };
-    }, [bounds, fitViewRef, intel, onSelect]);
+    }, [bounds, fitViewRef, intel, labelMode, links, onSelect]);
 
     return <div className="intel-map-canvas-host" ref={hostRef} />;
 }
@@ -553,6 +589,7 @@ export function PrivateIntelMap({
     players,
 }: PrivateIntelMapProps) {
     const [selected, setSelected] = useState<SelectedEntity | null>(null);
+    const [labelMode, setLabelMode] = useState<PlanetLabelMode>("name");
     const fitViewRef = useRef<(() => void) | null>(null);
 
     useEffect(() => {
@@ -620,6 +657,20 @@ export function PrivateIntelMap({
                     <span>{intel.counts.planets} planets</span>
                     <span>{intel.counts.ships} ships</span>
                     <span>{intel.counts.starbases} bases</span>
+                    <label className="intel-label-control">
+                        <span>Planet labels</span>
+                        <select
+                            className="secondary-button"
+                            onChange={(event) =>
+                                setLabelMode(event.target.value as PlanetLabelMode)
+                            }
+                            value={labelMode}
+                        >
+                            <option value="none">None</option>
+                            <option value="id">Number</option>
+                            <option value="name">Name</option>
+                        </select>
+                    </label>
                     <button
                         className="secondary-button"
                         onClick={() => fitViewRef.current?.()}
@@ -635,14 +686,19 @@ export function PrivateIntelMap({
                     <PixiMapCanvas
                         fitViewRef={fitViewRef}
                         intel={intel}
+                        labelMode={labelMode}
                         onSelect={setSelected}
                     />
                     <div className="intel-map-help">
                         Drag to pan · wheel to zoom · click an entity
                     </div>
                     <div className="intel-map-legend">
+                        <span><i className="legend-link" />≤ {PLANET_LINK_RANGE} ly</span>
                         <span><i className="legend-planet" />Planet</span>
-                        <span><i className="legend-ship" />Ship</span>
+                        <span><i className="legend-freighter" />Freighter</span>
+                        <span><i className="legend-torpedo" />Torpedo</span>
+                        <span><i className="legend-carrier" />Carrier</span>
+                        <span><i className="legend-warship" />Combat</span>
                         <span><i className="legend-starbase" />Starbase</span>
                     </div>
                 </div>
