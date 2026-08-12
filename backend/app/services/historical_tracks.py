@@ -22,7 +22,8 @@ def get_historical_ship_tracks(
     A point is keyed by the ship's own info_turn rather than by the batch turn.
     This prevents a stale sighting repeated in later turn files from looking like
     a new position. Only batches retrieved for turns <= through_turn are used,
-    so historical mode never leaks future observations backwards.
+    so historical mode never leaks future observations backwards. The returned
+    series is rendering data only; no path is inferred across observation gaps.
     """
 
     if through_turn <= 0:
