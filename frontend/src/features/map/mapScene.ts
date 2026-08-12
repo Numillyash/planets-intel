@@ -19,6 +19,12 @@ import {
     type ShipRole,
     type ShipVisualPosition,
 } from "./mapModel";
+import {
+    analyzeRouteRadiation,
+    shipHistoryRoute,
+    shipPlannedRoute,
+    type MapPoint,
+} from "./navigationAnalysis";
 
 
 const UNKNOWN_OWNER_COLOR = 0x7b8798;
@@ -358,6 +364,77 @@ function planetIsSelected(
 }
 
 
+function drawRouteLine(
+    world: Container,
+    route: MapPoint[],
+    bounds: MapBounds,
+    color: number,
+    alpha: number,
+    width: number,
+) {
+    if (route.length < 2) {
+        return;
+    }
+
+    const path = new Graphics();
+    path.moveTo(route[0].x, renderY(route[0].y, bounds));
+
+    for (let index = 1; index < route.length; index += 1) {
+        path.lineTo(route[index].x, renderY(route[index].y, bounds));
+    }
+
+    path.stroke({ color, alpha, width });
+    world.addChild(path);
+}
+
+
+function drawSelectedShipTrajectory(
+    world: Container,
+    intel: PrivateIntelMapResponse,
+    bounds: MapBounds,
+    selected: SelectedEntity | null,
+) {
+    if (selected?.kind !== "ship") {
+        return;
+    }
+
+    const history = shipHistoryRoute(selected.value);
+    const planned = shipPlannedRoute(selected.value);
+
+    drawRouteLine(world, history, bounds, 0x8795aa, 0.32, 1.2);
+    drawRouteLine(world, planned, bounds, 0x62d8ff, 0.92, 2);
+
+    if (planned.length >= 2) {
+        for (const waypoint of planned.slice(1)) {
+            const marker = new Graphics()
+                .circle(0, 0, 3.2)
+                .fill({ color: 0x62d8ff, alpha: 0.9 })
+                .stroke({ color: 0xe8f8ff, width: 0.8, alpha: 0.8 });
+            marker.position.set(waypoint.x, renderY(waypoint.y, bounds));
+            world.addChild(marker);
+        }
+    }
+
+    const radiation = analyzeRouteRadiation(intel, planned);
+    if (radiation.closestPoint !== null && (
+        radiation.coreCrossing || radiation.maxRadiation > 0
+    )) {
+        const danger = new Graphics()
+            .circle(0, 0, radiation.coreCrossing ? 6 : 4.5)
+            .stroke({
+                color: radiation.coreCrossing ? 0xff566b : 0xffb347,
+                width: 2,
+                alpha: 0.95,
+            });
+        danger.position.set(
+            radiation.closestPoint.x,
+            renderY(radiation.closestPoint.y, bounds),
+        );
+        world.addChild(danger);
+    }
+}
+
+
 export function drawMapScene({
     world,
     intel,
@@ -412,6 +489,8 @@ export function drawMapScene({
         alpha: 0.42,
     });
     world.addChild(linkLayer);
+
+    drawSelectedShipTrajectory(world, intel, bounds, selected);
 
     for (const planet of intel.planets) {
         if (planet.x === null || planet.y === null) {

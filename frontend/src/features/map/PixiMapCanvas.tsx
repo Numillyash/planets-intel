@@ -1,5 +1,5 @@
 import { type MutableRefObject, useEffect, useMemo, useRef } from "react";
-import { Application, Container } from "pixi.js";
+import { Application, Container, Graphics, Text } from "pixi.js";
 import type { PrivateIntelMapResponse } from "../../types/intel";
 import {
     observedBounds,
@@ -9,7 +9,12 @@ import {
     type PlanetLabelMode,
     type SelectedEntity,
 } from "./mapModel";
+import {
+    ionStormAtPoint,
+    radiationAtPoint,
+} from "./navigationAnalysis";
 import { drawMapScene } from "./mapScene";
+
 
 export function PixiMapCanvas({
     intel,
@@ -93,6 +98,24 @@ export function PixiMapCanvas({
                 onSelect,
             });
 
+            const hoverLayer = new Container();
+            hoverLayer.visible = false;
+            hoverLayer.eventMode = "none";
+            const hoverBackground = new Graphics();
+            const hoverText = new Text({
+                text: "",
+                style: {
+                    fill: 0xe5eefb,
+                    fontFamily: "Inter, Arial, sans-serif",
+                    fontSize: 12,
+                    lineHeight: 17,
+                },
+                resolution: 2,
+            });
+            hoverText.position.set(8, 6);
+            hoverLayer.addChild(hoverBackground, hoverText);
+            nextApp.stage.addChild(hoverLayer);
+
             const fitView = () => {
                 const viewportWidth = Math.max(nextApp.screen.width, 1);
                 const viewportHeight = Math.max(nextApp.screen.height, 1);
@@ -135,6 +158,64 @@ export function PixiMapCanvas({
                 };
             };
 
+            const hideHazardTooltip = () => {
+                hoverLayer.visible = false;
+            };
+
+            const updateHazardTooltip = (point: { x: number; y: number }) => {
+                const scale = Math.max(world.scale.x, 0.0001);
+                const worldX = (point.x - world.position.x) / scale;
+                const renderedY = (point.y - world.position.y) / scale;
+                const factualY = bounds.minY + bounds.maxY - renderedY;
+                const radiation = radiationAtPoint(intel, worldX, factualY);
+                const storm = ionStormAtPoint(intel, worldX, factualY);
+                const lines: string[] = [];
+
+                if (radiation !== null) {
+                    const clusterName = radiation.cluster.name
+                        ?? `Star cluster #${radiation.cluster.feature_id}`;
+                    if (radiation.insideCore) {
+                        lines.push(`${clusterName}: CORE — ship destroyed`);
+                    } else {
+                        lines.push(
+                            `Radiation ${radiation.radiation} · ${clusterName}`,
+                        );
+                        lines.push(
+                            `Distance ${radiation.distance.toFixed(1)} ly from center`,
+                        );
+                    }
+                }
+
+                if (storm !== null) {
+                    lines.push(
+                        `Ion ${Math.round(storm.localVoltage)} meV · Class ${storm.stormClass}`,
+                    );
+                    if (storm.randomTransportRisk) {
+                        lines.push("Random long-range transport risk");
+                    }
+                }
+
+                if (lines.length === 0) {
+                    hideHazardTooltip();
+                    return;
+                }
+
+                hoverText.text = lines.join("\n");
+                const width = hoverText.width + 16;
+                const height = hoverText.height + 12;
+                hoverBackground
+                    .clear()
+                    .rect(0, 0, width, height)
+                    .fill({ color: 0x0a111b, alpha: 0.94 })
+                    .stroke({ color: 0x3b506b, width: 1, alpha: 0.9 });
+
+                hoverLayer.position.set(
+                    Math.min(point.x + 14, Math.max(nextApp.screen.width - width - 6, 6)),
+                    Math.min(point.y + 14, Math.max(nextApp.screen.height - height - 6, 6)),
+                );
+                hoverLayer.visible = true;
+            };
+
             const handlePointerDown = (event: PointerEvent) => {
                 if (event.button !== 0) {
                     return;
@@ -145,20 +226,26 @@ export function PixiMapCanvas({
                 pointerId = event.pointerId;
                 lastX = point.x;
                 lastY = point.y;
+                hideHazardTooltip();
                 canvas.setPointerCapture(event.pointerId);
                 canvas.classList.add("is-dragging");
             };
 
             const handlePointerMove = (event: PointerEvent) => {
-                if (!dragging || pointerId !== event.pointerId) {
+                const point = screenPoint(event);
+
+                if (dragging && pointerId === event.pointerId) {
+                    world.position.x += point.x - lastX;
+                    world.position.y += point.y - lastY;
+                    lastX = point.x;
+                    lastY = point.y;
+                    hideHazardTooltip();
                     return;
                 }
 
-                const point = screenPoint(event);
-                world.position.x += point.x - lastX;
-                world.position.y += point.y - lastY;
-                lastX = point.x;
-                lastY = point.y;
+                if (!dragging) {
+                    updateHazardTooltip(point);
+                }
             };
 
             const stopDragging = (event: PointerEvent) => {
@@ -173,10 +260,13 @@ export function PixiMapCanvas({
                 if (canvas.hasPointerCapture(event.pointerId)) {
                     canvas.releasePointerCapture(event.pointerId);
                 }
+
+                updateHazardTooltip(screenPoint(event));
             };
 
             const handleWheel = (event: WheelEvent) => {
                 event.preventDefault();
+                hideHazardTooltip();
 
                 const point = screenPoint(event);
                 const oldScale = world.scale.x;
@@ -200,6 +290,7 @@ export function PixiMapCanvas({
             canvas.addEventListener("pointermove", handlePointerMove);
             canvas.addEventListener("pointerup", stopDragging);
             canvas.addEventListener("pointercancel", stopDragging);
+            canvas.addEventListener("pointerleave", hideHazardTooltip);
             canvas.addEventListener("wheel", handleWheel, {
                 passive: false,
             });
@@ -209,6 +300,7 @@ export function PixiMapCanvas({
                 canvas.removeEventListener("pointermove", handlePointerMove);
                 canvas.removeEventListener("pointerup", stopDragging);
                 canvas.removeEventListener("pointercancel", stopDragging);
+                canvas.removeEventListener("pointerleave", hideHazardTooltip);
                 canvas.removeEventListener("wheel", handleWheel);
             };
 

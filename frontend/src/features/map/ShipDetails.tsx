@@ -4,8 +4,22 @@ import type {
     PrivateIntelMapResponse,
 } from "../../types/intel";
 import { SHIP_ROLE_LABEL, shipRole, type SelectedEntity } from "./mapModel";
-import { formatInteger, formatPercent, shipFacts } from "./observationView";
+import {
+    analyzeRouteRadiation,
+    ionStormAtPoint,
+    routeDistance,
+    shipHistoryRoute,
+    shipOwnerRaceId,
+    shipPlannedRoute,
+} from "./navigationAnalysis";
+import {
+    factNumber,
+    formatInteger,
+    formatPercent,
+    shipFacts,
+} from "./observationView";
 import { DetailSection, FactRow, playerName } from "./DetailPrimitives";
+
 
 export function ShipDetails({
     ship,
@@ -36,6 +50,40 @@ export function ShipDetails({
     const showTorpedoes = showTubes && facts.torpedoes !== null;
     const showFighters = showBays && facts.fighters !== null;
 
+    const plannedRoute = shipPlannedRoute(ship);
+    const historyRoute = shipHistoryRoute(ship);
+    const radiation = analyzeRouteRadiation(intel, plannedRoute);
+    const ownerRaceId = shipOwnerRaceId(ship, players);
+    const robotImmune = ownerRaceId === 9;
+    const isCloaked = ship.payload.iscloaked === true;
+    const nominalRadiationLoss = robotImmune ? 0 : radiation.maxRadiation;
+    const crewAfterRadiation = (
+        !radiation.coreCrossing && facts.crew !== null
+            ? Math.max(facts.crew - nominalRadiationLoss, 0)
+            : null
+    );
+    const clansAfterRadiation = (
+        !radiation.coreCrossing && facts.clans !== null
+            ? Math.max(facts.clans - nominalRadiationLoss, 0)
+            : null
+    );
+    const radiationClusterName = radiation.cluster?.name
+        ?? (radiation.cluster !== null
+            ? `Star cluster #${radiation.cluster.feature_id}`
+            : null);
+
+    const ionHazard = (
+        ship.x !== null && ship.y !== null
+            ? ionStormAtPoint(intel, ship.x, ship.y)
+            : null
+    );
+    const shipMass = factNumber(ship.payload, "mass");
+    const normalIonDragApplies = (
+        ionHazard !== null &&
+        ionHazard.stormClass >= 4 &&
+        (shipMass === null || shipMass <= 4000)
+    );
+
     return (
         <div className="intel-entity-details">
             <span className="intel-entity-kind">Ship</span>
@@ -50,6 +98,11 @@ export function ShipDetails({
                     >
                         Orbiting {orbitPlanet.name ?? `#${orbitPlanet.planet_id}`}
                     </button>
+                )}
+                {ionHazard?.randomTransportRisk && (
+                    <span className="intel-detail-badge intel-detail-badge-gold">
+                        Ion transport risk
+                    </span>
                 )}
             </div>
 
@@ -89,7 +142,7 @@ export function ShipDetails({
                 </div>
             </DetailSection>
 
-            <DetailSection title="Movement">
+            <DetailSection title="Movement & trajectory">
                 <dl className="intel-fact-list">
                     <FactRow label="Position" value={
                         ship.x !== null && ship.y !== null
@@ -102,9 +155,120 @@ export function ShipDetails({
                             ? `${facts.waypointX}, ${facts.waypointY}`
                             : "—"
                     } />
+                    <FactRow label="Route" value={
+                        plannedRoute.length >= 2
+                            ? `${routeDistance(plannedRoute).toFixed(1)} ly · ${plannedRoute.length - 1} leg${plannedRoute.length === 2 ? "" : "s"}`
+                            : "No movement orders observed"
+                    } />
+                    <FactRow label="History" value={
+                        historyRoute.length >= 2
+                            ? `${historyRoute.length} observed points`
+                            : "—"
+                    } />
                     <FactRow label="Mission" value={facts.mission ?? "—"} />
                 </dl>
+                <p className="intel-no-facts" style={{ marginTop: 8 }}>
+                    Cyan line = observed movement orders. Faint line = movement history when present in the turn payload. Host effects such as tow, warp wells and ion storms can change the final position.
+                </p>
             </DetailSection>
+
+            <DetailSection title="Star-cluster radiation">
+                {radiation.coreCrossing ? (
+                    <p className="intel-no-facts" style={{ color: "#ff7c8d" }}>
+                        Planned trajectory intersects a star-cluster core. A ship crossing the core is destroyed.
+                    </p>
+                ) : (
+                    <dl className="intel-fact-list">
+                        <FactRow
+                            label="Max radiation"
+                            value={radiation.maxRadiation}
+                        />
+                        <FactRow
+                            label="Cluster"
+                            value={radiationClusterName ?? "None on route"}
+                        />
+                        <FactRow
+                            label="Crew loss"
+                            value={
+                                robotImmune
+                                    ? "0 (Robots immune)"
+                                    : nominalRadiationLoss
+                            }
+                        />
+                        <FactRow
+                            label="Crew after"
+                            value={
+                                crewAfterRadiation !== null
+                                    ? crewAfterRadiation
+                                    : "—"
+                            }
+                        />
+                        <FactRow
+                            label="Clans after"
+                            value={
+                                clansAfterRadiation !== null
+                                    ? clansAfterRadiation
+                                    : "—"
+                            }
+                        />
+                        {isCloaked && radiation.maxRadiation > 0 && !robotImmune && (
+                            <FactRow
+                                label="If cloak holds"
+                                value={`normal ≈ ${Math.ceil(radiation.maxRadiation / 2)}, advanced ≈ ${Math.ceil(radiation.maxRadiation / 3)}`}
+                            />
+                        )}
+                    </dl>
+                )}
+                <p className="intel-no-facts" style={{ marginTop: 8 }}>
+                    Loss uses the maximum star-cluster radiation crossed by the observed route. Hull-specific radiation shielding and protection while docked at an appropriate friendly starbase are not yet imported into this estimate.
+                </p>
+            </DetailSection>
+
+            {ionHazard !== null && (
+                <DetailSection title="Ion storm hazard">
+                    <dl className="intel-fact-list">
+                        <FactRow
+                            label="Local voltage"
+                            value={`${Math.round(ionHazard.localVoltage)} meV`}
+                        />
+                        <FactRow
+                            label="Class"
+                            value={ionHazard.stormClass}
+                        />
+                        <FactRow
+                            label="Storm warp"
+                            value={ionHazard.warp ?? "—"}
+                        />
+                        <FactRow
+                            label="Heading"
+                            value={ionHazard.heading ?? "—"}
+                        />
+                        <FactRow
+                            label="Drag"
+                            value={
+                                normalIonDragApplies && ionHazard.dragDistance !== null
+                                    ? `≈ ${ionHazard.dragDistance.toFixed(1)} ly before own vector`
+                                    : ionHazard.stormClass >= 4
+                                        ? "Class 4/5; mass/advanced-cloak effects may alter drag"
+                                        : "No Class-4 drag"
+                            }
+                        />
+                        <FactRow
+                            label="Transport"
+                            value={
+                                ionHazard.extremeTransportRisk
+                                    ? "EXTREME: disappearance/destruction reports above ~451 meV"
+                                    : ionHazard.randomTransportRisk
+                                        ? "Random long-range transport possible above ~400 meV"
+                                        : "No >400 meV transport warning"
+                            }
+                        />
+                    </dl>
+                    <p className="intel-no-facts" style={{ marginTop: 8 }}>
+                        Ion-storm crew damage is not included in the numeric star-cluster loss estimate: the official rules make it depend on ship mass, storm voltage and crew experience, without publishing a complete deterministic formula.
+                    </p>
+                </DetailSection>
+            )}
         </div>
     );
 }
