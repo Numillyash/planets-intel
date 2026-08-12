@@ -21,13 +21,7 @@ def get_accessible_combined_private_intel(
     game_id: int,
     linked_account_id: int,
 ) -> dict[str, Any] | None:
-    """Combine latest factual snapshots from every account the user may see.
-
-    This includes all active linked accounts owned by the local Intel Client
-    user plus active mutually-approved dashboard-share peers. The selected
-    linked account remains the primary observer only for UI identity; it does
-    not restrict the set of factual sources in combined mode.
-    """
+    """Combine latest factual snapshots from every account the user may see."""
 
     with SessionLocal() as session:
         primary = session.execute(
@@ -84,6 +78,7 @@ def get_accessible_combined_private_intel(
             "nebula": 0,
             "ion_storm": 0,
             "star_cluster": 0,
+            "minefield": 0,
         }
         for item in stellar_cartography:
             feature_type = item["feature_type"]
@@ -122,6 +117,7 @@ def get_accessible_combined_private_intel(
                 "nebulas": feature_counts["nebula"],
                 "ion_storms": feature_counts["ion_storm"],
                 "star_clusters": feature_counts["star_cluster"],
+                "minefields": feature_counts["minefield"],
             },
             "planets": planets,
             "ships": ships,
