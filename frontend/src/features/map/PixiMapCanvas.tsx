@@ -15,6 +15,7 @@ import {
 import {
     observedBounds,
     planetLinks,
+    renderY,
     shipVisualPositions,
     starbaseByPlanetId,
     type MapBounds,
@@ -182,7 +183,10 @@ export function PixiMapCanvas({
                     4,
                 );
                 const centerX = (currentBounds.minX + currentBounds.maxX) / 2;
-                const centerY = (currentBounds.minY + currentBounds.maxY) / 2;
+                const factualCenterY = (
+                    currentBounds.minY + currentBounds.maxY
+                ) / 2;
+                const centerY = renderY(factualCenterY, currentBounds);
 
                 currentWorld.scale.set(scale);
                 currentWorld.position.set(
@@ -218,21 +222,20 @@ export function PixiMapCanvas({
 
             const updateHazardTooltip = (point: { x: number; y: number }) => {
                 const currentWorld = worldRef.current;
-                const currentBounds = boundsRef.current;
                 const currentIntel = intelRef.current;
                 const layer = hoverLayerRef.current;
                 const background = hoverBackgroundRef.current;
                 const text = hoverTextRef.current;
 
                 if (
-                    currentWorld === null || currentBounds === null ||
+                    currentWorld === null ||
                     layer === null || background === null || text === null
                 ) return;
 
                 const scale = Math.max(currentWorld.scale.x, 0.0001);
                 const worldX = (point.x - currentWorld.position.x) / scale;
                 const renderedY = (point.y - currentWorld.position.y) / scale;
-                const factualY = currentBounds.minY + currentBounds.maxY - renderedY;
+                const factualY = -renderedY;
                 const radiation = radiationAtPoint(currentIntel, worldX, factualY);
                 const storm = ionStormAtPoint(currentIntel, worldX, factualY);
                 const lines: string[] = [];
