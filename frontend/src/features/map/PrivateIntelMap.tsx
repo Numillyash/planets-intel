@@ -162,14 +162,16 @@ export function PrivateIntelMap({
             };
         }
 
+        const combinedIdentity = identity;
+
         async function loadCombined() {
             setCombinedLoading(true);
             setCombinedError(null);
 
             try {
                 const response = await getCombinedPrivateIntel(
-                    identity.gameId,
-                    identity.linkedAccountId,
+                    combinedIdentity.gameId,
+                    combinedIdentity.linkedAccountId,
                 );
 
                 if (!cancelled) {

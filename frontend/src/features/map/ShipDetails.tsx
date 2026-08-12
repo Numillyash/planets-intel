@@ -68,9 +68,9 @@ export function ShipDetails({
             {hasArmament && (
                 <DetailSection title="Armament">
                     <dl className="intel-fact-list">
-                        {showBeams && <FactRow label="Beams" value={facts.beams} />}
-                        {showTubes && <FactRow label="Tubes" value={facts.tubes} />}
-                        {showBays && <FactRow label="Fighter bays" value={facts.bays} />}
+                        {showBeams && <FactRow label="Beams" value={facts.beams ?? "—"} />}
+                        {showTubes && <FactRow label="Tubes" value={facts.tubes ?? "—"} />}
+                        {showBays && <FactRow label="Fighter bays" value={facts.bays ?? "—"} />}
                         {showTorpedoes && <FactRow label="Torpedoes" value={formatInteger(facts.torpedoes)} />}
                         {showFighters && <FactRow label="Fighters" value={formatInteger(facts.fighters)} />}
                     </dl>
