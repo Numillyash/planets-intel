@@ -24,6 +24,14 @@ export function ShipDetails({
             ship.y === planet.y,
     ) ?? null;
 
+    const showBeams = role !== "freighter" && facts.beams !== null && facts.beams > 0;
+    const showTubes = (role === "torpedo" || role === "warship") && facts.tubes !== null && facts.tubes > 0;
+    const showBays = (role === "carrier" || role === "warship") && facts.bays !== null && facts.bays > 0;
+    const hasArmament = showBeams || showTubes || showBays;
+
+    const showTorpedoes = showTubes && facts.torpedoes !== null;
+    const showFighters = showBays && facts.fighters !== null;
+
     return (
         <div className="intel-entity-details">
             <span className="intel-entity-kind">Ship</span>
@@ -47,14 +55,23 @@ export function ShipDetails({
                     <FactRow label="Owner" value={playerName(ship.owner_id, players)} />
                     <FactRow label="Hull" value={facts.hullName ?? `Hull #${ship.hull_id ?? "—"}`} />
                     <FactRow label="Engine" value={facts.engineName ?? (facts.engineId !== null ? `Engine #${facts.engineId}` : "—")} />
-                    <FactRow label="Beams" value={facts.beams ?? "—"} />
-                    <FactRow label="Tubes" value={facts.tubes ?? "—"} />
-                    <FactRow label="Fighter bays" value={facts.bays ?? "—"} />
                     <FactRow label="Damage" value={formatPercent(facts.damage)} />
                     <FactRow label="Crew" value={formatInteger(facts.crew)} />
                     <FactRow label="Info turn" value={ship.info_turn ?? "—"} />
                 </dl>
             </DetailSection>
+
+            {hasArmament && (
+                <DetailSection title="Armament">
+                    <dl className="intel-fact-list">
+                        {showBeams && <FactRow label="Beams" value={facts.beams} />}
+                        {showTubes && <FactRow label="Tubes" value={facts.tubes} />}
+                        {showBays && <FactRow label="Fighter bays" value={facts.bays} />}
+                        {showTorpedoes && <FactRow label="Torpedoes" value={formatInteger(facts.torpedoes)} />}
+                        {showFighters && <FactRow label="Fighters" value={formatInteger(facts.fighters)} />}
+                    </dl>
+                </DetailSection>
+            )}
 
             <DetailSection title="Cargo">
                 <div className="intel-cargo-grid">
@@ -65,8 +82,6 @@ export function ShipDetails({
                     <div><span>Duranium</span><strong>{formatInteger(facts.duranium)}</strong></div>
                     <div><span>Tritanium</span><strong>{formatInteger(facts.tritanium)}</strong></div>
                     <div><span>Molybdenum</span><strong>{formatInteger(facts.molybdenum)}</strong></div>
-                    <div><span>Torpedoes</span><strong>{formatInteger(facts.torpedoes)}</strong></div>
-                    <div><span>Fighters</span><strong>{formatInteger(facts.fighters)}</strong></div>
                 </div>
             </DetailSection>
 

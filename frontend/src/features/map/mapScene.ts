@@ -1,5 +1,5 @@
 import { Container, Graphics, Text } from "pixi.js";
-import type { LatestPrivateIntelResponse } from "../../types/api";
+import type { LatestPrivateIntelResponse, PlanetObservationResponse } from "../../types/api";
 import {
     PLANET_RADIUS,
     planetLabel,
@@ -28,7 +28,6 @@ const OWNER_COLORS = [
     0x2dd4bf,
 ];
 
-
 function ownerColor(ownerId: number | null): number {
     if (ownerId === null || ownerId <= 0) {
         return 0x7b8798;
@@ -37,38 +36,32 @@ function ownerColor(ownerId: number | null): number {
     return OWNER_COLORS[(ownerId - 1) % OWNER_COLORS.length];
 }
 
-
-
-function shipMarker(
-    role: ShipRole,
-    color: number,
-    compact = false,
-): Graphics {
+function shipMarker(role: ShipRole, color: number): Graphics {
     const marker = new Graphics();
-    const radius = compact ? 5.5 : 7.5;
+    const radius = 4.1;
 
     if (role === "freighter") {
         marker.rect(-radius, -radius, radius * 2, radius * 2);
     } else if (role === "carrier") {
         marker.poly([
-            0, -radius - 1,
+            0, -radius - 0.8,
             radius, -radius * 0.45,
             radius, radius * 0.45,
-            0, radius + 1,
+            0, radius + 0.8,
             -radius, radius * 0.45,
             -radius, -radius * 0.45,
         ]);
     } else if (role === "torpedo") {
         marker.poly([
-            0, -radius - 1,
+            0, -radius - 0.8,
             radius, radius,
             -radius, radius,
         ]);
     } else {
         marker.poly([
-            0, -radius - 1,
+            0, -radius - 0.8,
             radius, 0,
-            0, radius + 1,
+            0, radius + 0.8,
             -radius, 0,
         ]);
     }
@@ -77,14 +70,36 @@ function shipMarker(
         .fill({ color, alpha: 0.96 })
         .stroke({
             color: 0xffffff,
-            width: compact ? 0.8 : 1,
-            alpha: 0.72,
+            width: 0.8,
+            alpha: 0.68,
         });
 
     return marker;
 }
 
+function planetIsSelected(
+    selected: SelectedEntity | null,
+    planet: PlanetObservationResponse,
+): boolean {
+    if (selected === null) {
+        return false;
+    }
 
+    if (selected.kind === "planet") {
+        return selected.value.planet_id === planet.planet_id;
+    }
+
+    if (selected.kind === "starbase") {
+        return selected.value.planet_id === planet.planet_id;
+    }
+
+    return (
+        planet.x !== null &&
+        planet.y !== null &&
+        selected.value.x === planet.x &&
+        selected.value.y === planet.y
+    );
+}
 
 export function drawMapScene({
     world,
@@ -94,6 +109,7 @@ export function drawMapScene({
     shipPositions,
     basesByPlanet,
     labelMode,
+    selected,
     onSelect,
 }: {
     world: Container;
@@ -103,6 +119,7 @@ export function drawMapScene({
     shipPositions: ShipVisualPosition[];
     basesByPlanet: Map<number, LatestPrivateIntelResponse["starbases"][number]>;
     labelMode: PlanetLabelMode;
+    selected: SelectedEntity | null;
     onSelect: (entity: SelectedEntity) => void;
 }) {
     const linkLayer = new Graphics();
@@ -113,7 +130,7 @@ export function drawMapScene({
         ) {
             continue;
         }
-    
+
         linkLayer
             .moveTo(
                 link.from.x,
@@ -130,47 +147,41 @@ export function drawMapScene({
         alpha: 0.42,
     });
     world.addChild(linkLayer);
-    
-    const orbitSpokes = new Graphics();
-    for (const position of shipPositions) {
-        if (
-            position.x === position.anchorX &&
-            position.y === position.anchorY
-        ) {
-            continue;
-        }
-        orbitSpokes
-            .moveTo(position.anchorX, position.anchorY)
-            .lineTo(position.x, position.y);
-    }
-    orbitSpokes.stroke({
-        color: 0x63748c,
-        width: 0.7,
-        alpha: 0.36,
-    });
-    world.addChild(orbitSpokes);
-    
+
     for (const planet of intel.planets) {
         if (planet.x === null || planet.y === null) {
             continue;
         }
-    
+
         const y = renderY(planet.y, bounds);
         const orbitShips = shipsAtPlanet(intel.ships, planet);
         const starbase = basesByPlanet.get(planet.planet_id) ?? null;
-    
+        const isSelected = planetIsSelected(selected, planet);
+
+        if (isSelected) {
+            const selectionHalo = new Graphics()
+                .circle(0, 0, PLANET_RADIUS + 8)
+                .stroke({
+                    color: 0xe8f3ff,
+                    width: 2,
+                    alpha: 0.96,
+                });
+            selectionHalo.position.set(planet.x, y);
+            world.addChild(selectionHalo);
+        }
+
         if (orbitShips.length > 0) {
             const orbitRing = new Graphics()
-                .circle(0, 0, PLANET_RADIUS + 5)
+                .circle(0, 0, PLANET_RADIUS + 4.5)
                 .stroke({
-                    color: 0x8fa2bb,
-                    width: 1.2,
-                    alpha: 0.72,
+                    color: isSelected ? 0xb7d8ff : 0x8fa2bb,
+                    width: isSelected ? 1.6 : 1.1,
+                    alpha: isSelected ? 0.94 : 0.68,
                 });
             orbitRing.position.set(planet.x, y);
             world.addChild(orbitRing);
         }
-    
+
         const marker = new Graphics();
         if (starbase !== null) {
             marker.rect(
@@ -182,7 +193,7 @@ export function drawMapScene({
         } else {
             marker.circle(0, 0, PLANET_RADIUS);
         }
-    
+
         marker
             .fill(ownerColor(planet.owner_id))
             .stroke({
@@ -190,7 +201,7 @@ export function drawMapScene({
                 width: starbase !== null ? 1.8 : 1.2,
                 alpha: starbase !== null ? 0.95 : 0.58,
             });
-    
+
         marker.position.set(planet.x, y);
         marker.eventMode = "static";
         marker.cursor = "pointer";
@@ -202,18 +213,25 @@ export function drawMapScene({
             });
         });
         world.addChild(marker);
-    
-        const labelText = planetLabel(planet, labelMode);
+
+        const normalLabel = planetLabel(planet, labelMode);
+        const labelText = normalLabel ?? (
+            isSelected
+                ? planet.name ?? `#${planet.planet_id}`
+                : null
+        );
+
         if (labelText !== null) {
             const label = new Text({
                 text: labelText,
                 style: {
-                    fill: 0xc1ccda,
+                    fill: isSelected ? 0xf5f9ff : 0xc1ccda,
                     fontFamily: "Inter, Arial, sans-serif",
-                    fontSize: 11,
+                    fontSize: isSelected ? 12 : 11,
+                    fontWeight: isSelected ? "600" : "400",
                     stroke: {
                         color: 0x060a10,
-                        width: 3,
+                        width: isSelected ? 4 : 3,
                     },
                 },
                 resolution: 2,
@@ -225,16 +243,37 @@ export function drawMapScene({
             world.addChild(label);
         }
     }
-    
+
     for (const position of shipPositions) {
+        // Ships sitting on a planet are represented by the planet's orbit ring.
+        // Their factual observations remain selectable from the planet's Orbit panel.
+        if (position.planetId !== null) {
+            continue;
+        }
+
         const role = shipRole(position.ship);
-        const inOrbit = position.planetId !== null;
+        const isSelected = (
+            selected?.kind === "ship" &&
+            selected.value.ship_id === position.ship.ship_id
+        );
+
+        if (isSelected) {
+            const halo = new Graphics()
+                .circle(0, 0, 8)
+                .stroke({
+                    color: 0xe8f3ff,
+                    width: 1.6,
+                    alpha: 0.96,
+                });
+            halo.position.set(position.x, position.y);
+            world.addChild(halo);
+        }
+
         const marker = shipMarker(
             role,
             ownerColor(position.ship.owner_id),
-            inOrbit,
         );
-    
+
         marker.position.set(position.x, position.y);
         marker.eventMode = "static";
         marker.cursor = "pointer";

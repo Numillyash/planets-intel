@@ -13,7 +13,6 @@ interface PrivateIntelMapProps {
     players: PlayerInfo[];
 }
 
-
 function formatObservedAt(value: string): string {
     const parsed = new Date(value);
 
@@ -24,6 +23,21 @@ function formatObservedAt(value: string): string {
     return parsed.toLocaleString();
 }
 
+function selectedLabel(selected: SelectedEntity | null): string | null {
+    if (selected === null) {
+        return null;
+    }
+
+    if (selected.kind === "planet") {
+        return `Selected: ${selected.value.name ?? `Planet #${selected.value.planet_id}`}`;
+    }
+
+    if (selected.kind === "ship") {
+        return `Selected: ${selected.value.name ?? `Ship #${selected.value.ship_id}`}`;
+    }
+
+    return `Selected: Starbase #${selected.value.starbase_id}`;
+}
 
 export function PrivateIntelMap({
     intel,
@@ -33,7 +47,7 @@ export function PrivateIntelMap({
     players,
 }: PrivateIntelMapProps) {
     const [selected, setSelected] = useState<SelectedEntity | null>(null);
-    const [labelMode, setLabelMode] = useState<PlanetLabelMode>("name");
+    const [labelMode, setLabelMode] = useState<PlanetLabelMode>("none");
     const fitViewRef = useRef<(() => void) | null>(null);
 
     useEffect(() => {
@@ -86,6 +100,8 @@ export function PrivateIntelMap({
         );
     }
 
+    const selection = selectedLabel(selected);
+
     return (
         <section className="panel intel-map-panel">
             <div className="panel-header intel-map-header">
@@ -101,6 +117,9 @@ export function PrivateIntelMap({
                     <span>{intel.counts.planets} planets</span>
                     <span>{intel.counts.ships} ships</span>
                     <span>{intel.counts.starbases} bases</span>
+                    {selection !== null && (
+                        <span className="intel-detail-badge">{selection}</span>
+                    )}
                     <label className="intel-label-control">
                         <span>Planet labels</span>
                         <select
@@ -132,9 +151,10 @@ export function PrivateIntelMap({
                         intel={intel}
                         labelMode={labelMode}
                         onSelect={setSelected}
+                        selected={selected}
                     />
                     <div className="intel-map-help">
-                        Drag to pan · wheel to zoom · orbit ships are visually offset
+                        Drag to pan · wheel to zoom · orbit ring means ships are present
                     </div>
                     <div className="intel-map-legend">
                         <span><i className="legend-link" />≤ {PLANET_LINK_RANGE} ly</span>

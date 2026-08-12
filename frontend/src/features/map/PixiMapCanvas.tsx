@@ -14,11 +14,13 @@ import { drawMapScene } from "./mapScene";
 export function PixiMapCanvas({
     intel,
     labelMode,
+    selected,
     onSelect,
     fitViewRef,
 }: {
     intel: LatestPrivateIntelResponse;
     labelMode: PlanetLabelMode;
+    selected: SelectedEntity | null;
     onSelect: (entity: SelectedEntity) => void;
     fitViewRef: MutableRefObject<(() => void) | null>;
 }) {
@@ -87,6 +89,7 @@ export function PixiMapCanvas({
                 shipPositions,
                 basesByPlanet,
                 labelMode,
+                selected,
                 onSelect,
             });
 
@@ -237,10 +240,9 @@ export function PixiMapCanvas({
         labelMode,
         links,
         onSelect,
+        selected,
         shipPositions,
     ]);
 
     return <div className="intel-map-canvas-host" ref={hostRef} />;
 }
-
-
