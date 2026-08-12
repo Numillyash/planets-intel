@@ -27,7 +27,10 @@ import {
     radiationAtPoint,
 } from "./navigationAnalysis";
 import { drawMapScene } from "./mapScene";
-import { drawHistoricalShipTracks } from "./historicalTrackScene";
+import {
+    drawHistoricalShipTracks,
+    type ShipTrackMode,
+} from "./historicalTrackScene";
 import { drawMinefields } from "./minefieldScene";
 
 
@@ -56,6 +59,10 @@ export function PixiMapCanvas({
     const [appReadyRevision, setAppReadyRevision] = useState(0);
     const [historicalTracks, setHistoricalTracks] =
         useState<HistoricalShipTrack[]>([]);
+    const [trackMode, setTrackMode] = useState<ShipTrackMode>("all");
+    const [trackLookbackTurns, setTrackLookbackTurns] =
+        useState<number | null>(5);
+    const [trackFadePercent, setTrackFadePercent] = useState(20);
 
     const bounds = useMemo(
         () => observedBounds(intel),
@@ -87,6 +94,13 @@ export function PixiMapCanvas({
     useEffect(() => {
         let cancelled = false;
 
+        if (trackMode === "off") {
+            setHistoricalTracks([]);
+            return () => {
+                cancelled = true;
+            };
+        }
+
         async function loadTracks() {
             try {
                 const response = await getHistoricalShipTracks(
@@ -108,7 +122,7 @@ export function PixiMapCanvas({
         return () => {
             cancelled = true;
         };
-    }, [intel.game_id, intel.turn, linkedAccountId]);
+    }, [intel.game_id, intel.turn, linkedAccountId, trackMode]);
 
     useEffect(() => {
         const host = hostRef.current;
@@ -395,7 +409,10 @@ export function PixiMapCanvas({
             tracks: historicalTracks,
             bounds,
             selected,
-            mode: "all",
+            mode: trackMode,
+            throughTurn: intel.turn,
+            lookbackTurns: trackLookbackTurns,
+            fadePerTurn: trackFadePercent / 100,
         });
 
         drawMapScene({
@@ -428,7 +445,84 @@ export function PixiMapCanvas({
         onSelect,
         selected,
         shipPositions,
+        trackFadePercent,
+        trackLookbackTurns,
+        trackMode,
     ]);
 
-    return <div className="intel-map-canvas-host" ref={hostRef} />;
+    return (
+        <>
+            <div className="intel-map-canvas-host" ref={hostRef} />
+            <div
+                style={{
+                    position: "absolute",
+                    zIndex: 4,
+                    top: 52,
+                    right: 12,
+                    display: "flex",
+                    flexWrap: "wrap",
+                    justifyContent: "flex-end",
+                    gap: 8,
+                    maxWidth: "72%",
+                    padding: "7px 9px",
+                    border: "1px solid rgba(57, 71, 93, 0.72)",
+                    borderRadius: 8,
+                    background: "rgba(8, 13, 21, 0.88)",
+                    backdropFilter: "blur(5px)",
+                }}
+            >
+                <label className="intel-label-control">
+                    <span>Trails</span>
+                    <select
+                        className="secondary-button"
+                        onChange={(event) =>
+                            setTrackMode(event.target.value as ShipTrackMode)
+                        }
+                        value={trackMode}
+                    >
+                        <option value="all">All ships</option>
+                        <option value="selected">Selected ship</option>
+                        <option value="off">Off</option>
+                    </select>
+                </label>
+                <label className="intel-label-control">
+                    <span>History</span>
+                    <select
+                        className="secondary-button"
+                        onChange={(event) => {
+                            const value = event.target.value;
+                            setTrackLookbackTurns(
+                                value === "all" ? null : Number(value),
+                            );
+                        }}
+                        value={trackLookbackTurns === null ? "all" : String(trackLookbackTurns)}
+                    >
+                        <option value="1">1 turn back</option>
+                        <option value="3">3 turns back</option>
+                        <option value="5">5 turns back</option>
+                        <option value="10">10 turns back</option>
+                        <option value="20">20 turns back</option>
+                        <option value="all">All stored</option>
+                    </select>
+                </label>
+                <label className="intel-label-control">
+                    <span>Fade</span>
+                    <select
+                        className="secondary-button"
+                        onChange={(event) =>
+                            setTrackFadePercent(Number(event.target.value))
+                        }
+                        value={trackFadePercent}
+                    >
+                        <option value={0}>0% / turn</option>
+                        <option value={10}>10% / turn</option>
+                        <option value={20}>20% / turn</option>
+                        <option value={30}>30% / turn</option>
+                        <option value={40}>40% / turn</option>
+                        <option value={50}>50% / turn</option>
+                    </select>
+                </label>
+            </div>
+        </>
+    );
 }
