@@ -6,6 +6,7 @@ import {
     useState,
 } from "react";
 import { Application, Container, Graphics, Text } from "pixi.js";
+import type { HistoricalShipTrack } from "../../types/history";
 import type { PrivateIntelMapResponse } from "../../types/intel";
 import {
     observedBounds,
@@ -21,6 +22,10 @@ import {
     radiationAtPoint,
 } from "./navigationAnalysis";
 import { drawMapScene } from "./mapScene";
+import {
+    drawHistoricalShipTracks,
+    type ShipTrackMode,
+} from "./historicalTrackScene";
 
 
 export function PixiMapCanvas({
@@ -29,12 +34,16 @@ export function PixiMapCanvas({
     selected,
     onSelect,
     fitViewRef,
+    historicalTracks,
+    trackMode,
 }: {
     intel: PrivateIntelMapResponse;
     labelMode: PlanetLabelMode;
     selected: SelectedEntity | null;
     onSelect: (entity: SelectedEntity) => void;
     fitViewRef: MutableRefObject<(() => void) | null>;
+    historicalTracks: HistoricalShipTrack[];
+    trackMode: ShipTrackMode;
 }) {
     const hostRef = useRef<HTMLDivElement>(null);
     const appRef = useRef<Application | null>(null);
@@ -423,6 +432,14 @@ export function PixiMapCanvas({
             child.destroy();
         }
 
+        drawHistoricalShipTracks({
+            world,
+            tracks: historicalTracks,
+            bounds,
+            selected,
+            mode: trackMode,
+        });
+
         drawMapScene({
             world,
             intel,
@@ -439,9 +456,8 @@ export function PixiMapCanvas({
             hoverLayerRef.current.visible = false;
         }
 
-        // Selection, labels and periodic intel updates redraw the scene without
-        // altering the user's viewport. Only switching to another game gets an
-        // automatic fit; the explicit Fit view button remains available.
+        // Redraws from selection, timeline changes or periodic refresh keep the
+        // same transform. Only changing game triggers an automatic fit.
         if (lastFitGameIdRef.current !== intel.game_id) {
             lastFitGameIdRef.current = intel.game_id;
             window.requestAnimationFrame(() => fitViewRef.current?.());
@@ -451,12 +467,14 @@ export function PixiMapCanvas({
         basesByPlanet,
         bounds,
         fitViewRef,
+        historicalTracks,
         intel,
         labelMode,
         links,
         onSelect,
         selected,
         shipPositions,
+        trackMode,
     ]);
 
     return <div className="intel-map-canvas-host" ref={hostRef} />;
