@@ -381,6 +381,29 @@ export async function refreshPrivateIntel(
     return response.json() as Promise<LatestPrivateIntelResponse>;
 }
 
+export async function refreshAccessiblePrivateIntel(
+    gameId: number,
+): Promise<void> {
+    const response = await fetch(
+        `/api/games/${gameId}/private-intel/refresh-accessible`,
+        {
+            method: "POST",
+            credentials: "same-origin",
+            headers: {
+                Accept: "application/json",
+            },
+        },
+    );
+
+    if (!response.ok) {
+        throw new Error(
+            `Private intel auto-refresh failed: ${await parseErrorMessage(response)}`,
+        );
+    }
+
+    await response.json();
+}
+
 export function getCombinedPrivateIntel(
     gameId: number,
     linkedAccountId: number,

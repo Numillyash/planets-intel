@@ -1,4 +1,10 @@
-import { type MutableRefObject, useEffect, useMemo, useRef } from "react";
+import {
+    type MutableRefObject,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+} from "react";
 import { Application, Container, Graphics, Text } from "pixi.js";
 import type { PrivateIntelMapResponse } from "../../types/intel";
 import {
@@ -6,6 +12,7 @@ import {
     planetLinks,
     shipVisualPositions,
     starbaseByPlanetId,
+    type MapBounds,
     type PlanetLabelMode,
     type SelectedEntity,
 } from "./mapModel";
@@ -30,6 +37,15 @@ export function PixiMapCanvas({
     fitViewRef: MutableRefObject<(() => void) | null>;
 }) {
     const hostRef = useRef<HTMLDivElement>(null);
+    const appRef = useRef<Application | null>(null);
+    const worldRef = useRef<Container | null>(null);
+    const hoverLayerRef = useRef<Container | null>(null);
+    const hoverBackgroundRef = useRef<Graphics | null>(null);
+    const hoverTextRef = useRef<Text | null>(null);
+    const intelRef = useRef(intel);
+    const boundsRef = useRef<MapBounds | null>(null);
+    const lastFitGameIdRef = useRef<number | null>(null);
+    const [appReadyRevision, setAppReadyRevision] = useState(0);
 
     const bounds = useMemo(
         () => observedBounds(intel),
@@ -51,6 +67,9 @@ export function PixiMapCanvas({
         [intel.starbases],
     );
 
+    intelRef.current = intel;
+    boundsRef.current = bounds;
+
     useEffect(() => {
         const host = hostRef.current;
 
@@ -59,7 +78,6 @@ export function PixiMapCanvas({
         }
 
         let disposed = false;
-        let app: Application | null = null;
         let resizeObserver: ResizeObserver | null = null;
         let detachInteractions: (() => void) | null = null;
 
@@ -79,24 +97,13 @@ export function PixiMapCanvas({
                 return;
             }
 
-            app = nextApp;
+            appRef.current = nextApp;
             host.replaceChildren(nextApp.canvas);
             nextApp.canvas.className = "intel-pixi-canvas";
 
             const world = new Container();
+            worldRef.current = world;
             nextApp.stage.addChild(world);
-
-            drawMapScene({
-                world,
-                intel,
-                bounds,
-                links,
-                shipPositions,
-                basesByPlanet,
-                labelMode,
-                selected,
-                onSelect,
-            });
 
             const hoverLayer = new Container();
             hoverLayer.visible = false;
@@ -115,29 +122,55 @@ export function PixiMapCanvas({
             hoverText.position.set(8, 6);
             hoverLayer.addChild(hoverBackground, hoverText);
             nextApp.stage.addChild(hoverLayer);
+            hoverLayerRef.current = hoverLayer;
+            hoverBackgroundRef.current = hoverBackground;
+            hoverTextRef.current = hoverText;
 
             const fitView = () => {
-                const viewportWidth = Math.max(nextApp.screen.width, 1);
-                const viewportHeight = Math.max(nextApp.screen.height, 1);
-                const worldWidth = Math.max(bounds.maxX - bounds.minX, 1);
-                const worldHeight = Math.max(bounds.maxY - bounds.minY, 1);
+                const currentBounds = boundsRef.current;
+                const currentWorld = worldRef.current;
+                const currentApp = appRef.current;
+
+                if (
+                    currentBounds === null ||
+                    currentWorld === null ||
+                    currentApp === null
+                ) {
+                    return;
+                }
+
+                const viewportWidth = Math.max(currentApp.screen.width, 1);
+                const viewportHeight = Math.max(currentApp.screen.height, 1);
+                const worldWidth = Math.max(
+                    currentBounds.maxX - currentBounds.minX,
+                    1,
+                );
+                const worldHeight = Math.max(
+                    currentBounds.maxY - currentBounds.minY,
+                    1,
+                );
                 const horizontalScale = (viewportWidth - 70) / worldWidth;
                 const verticalScale = (viewportHeight - 70) / worldHeight;
                 const scale = Math.min(
                     Math.max(Math.min(horizontalScale, verticalScale), 0.08),
                     4,
                 );
-                const centerX = (bounds.minX + bounds.maxX) / 2;
-                const centerY = (bounds.minY + bounds.maxY) / 2;
+                const centerX = (
+                    currentBounds.minX + currentBounds.maxX
+                ) / 2;
+                const centerY = (
+                    currentBounds.minY + currentBounds.maxY
+                ) / 2;
 
-                world.scale.set(scale);
-                world.position.set(
+                currentWorld.scale.set(scale);
+                currentWorld.position.set(
                     viewportWidth / 2 - centerX * scale,
                     viewportHeight / 2 - centerY * scale,
                 );
             };
 
             fitViewRef.current = fitView;
+            lastFitGameIdRef.current = intelRef.current.game_id;
             fitView();
 
             const canvas = nextApp.canvas;
@@ -159,16 +192,45 @@ export function PixiMapCanvas({
             };
 
             const hideHazardTooltip = () => {
-                hoverLayer.visible = false;
+                const layer = hoverLayerRef.current;
+                if (layer !== null) {
+                    layer.visible = false;
+                }
             };
 
             const updateHazardTooltip = (point: { x: number; y: number }) => {
-                const scale = Math.max(world.scale.x, 0.0001);
-                const worldX = (point.x - world.position.x) / scale;
-                const renderedY = (point.y - world.position.y) / scale;
-                const factualY = bounds.minY + bounds.maxY - renderedY;
-                const radiation = radiationAtPoint(intel, worldX, factualY);
-                const storm = ionStormAtPoint(intel, worldX, factualY);
+                const currentWorld = worldRef.current;
+                const currentBounds = boundsRef.current;
+                const currentIntel = intelRef.current;
+                const layer = hoverLayerRef.current;
+                const background = hoverBackgroundRef.current;
+                const text = hoverTextRef.current;
+
+                if (
+                    currentWorld === null ||
+                    currentBounds === null ||
+                    layer === null ||
+                    background === null ||
+                    text === null
+                ) {
+                    return;
+                }
+
+                const scale = Math.max(currentWorld.scale.x, 0.0001);
+                const worldX = (point.x - currentWorld.position.x) / scale;
+                const renderedY = (point.y - currentWorld.position.y) / scale;
+                const factualY =
+                    currentBounds.minY + currentBounds.maxY - renderedY;
+                const radiation = radiationAtPoint(
+                    currentIntel,
+                    worldX,
+                    factualY,
+                );
+                const storm = ionStormAtPoint(
+                    currentIntel,
+                    worldX,
+                    factualY,
+                );
                 const lines: string[] = [];
 
                 if (radiation !== null) {
@@ -200,20 +262,26 @@ export function PixiMapCanvas({
                     return;
                 }
 
-                hoverText.text = lines.join("\n");
-                const width = hoverText.width + 16;
-                const height = hoverText.height + 12;
-                hoverBackground
+                text.text = lines.join("\n");
+                const width = text.width + 16;
+                const height = text.height + 12;
+                background
                     .clear()
                     .rect(0, 0, width, height)
                     .fill({ color: 0x0a111b, alpha: 0.94 })
                     .stroke({ color: 0x3b506b, width: 1, alpha: 0.9 });
 
-                hoverLayer.position.set(
-                    Math.min(point.x + 14, Math.max(nextApp.screen.width - width - 6, 6)),
-                    Math.min(point.y + 14, Math.max(nextApp.screen.height - height - 6, 6)),
+                layer.position.set(
+                    Math.min(
+                        point.x + 14,
+                        Math.max(nextApp.screen.width - width - 6, 6),
+                    ),
+                    Math.min(
+                        point.y + 14,
+                        Math.max(nextApp.screen.height - height - 6, 6),
+                    ),
                 );
-                hoverLayer.visible = true;
+                layer.visible = true;
             };
 
             const handlePointerDown = (event: PointerEvent) => {
@@ -233,10 +301,15 @@ export function PixiMapCanvas({
 
             const handlePointerMove = (event: PointerEvent) => {
                 const point = screenPoint(event);
+                const currentWorld = worldRef.current;
 
-                if (dragging && pointerId === event.pointerId) {
-                    world.position.x += point.x - lastX;
-                    world.position.y += point.y - lastY;
+                if (
+                    dragging &&
+                    pointerId === event.pointerId &&
+                    currentWorld !== null
+                ) {
+                    currentWorld.position.x += point.x - lastX;
+                    currentWorld.position.y += point.y - lastY;
                     lastX = point.x;
                     lastY = point.y;
                     hideHazardTooltip();
@@ -268,19 +341,24 @@ export function PixiMapCanvas({
                 event.preventDefault();
                 hideHazardTooltip();
 
+                const currentWorld = worldRef.current;
+                if (currentWorld === null) {
+                    return;
+                }
+
                 const point = screenPoint(event);
-                const oldScale = world.scale.x;
+                const oldScale = currentWorld.scale.x;
                 const factor = event.deltaY < 0 ? 1.12 : 0.89;
                 const nextScale = Math.min(
                     Math.max(oldScale * factor, 0.05),
                     10,
                 );
 
-                const worldX = (point.x - world.position.x) / oldScale;
-                const worldY = (point.y - world.position.y) / oldScale;
+                const worldX = (point.x - currentWorld.position.x) / oldScale;
+                const worldY = (point.y - currentWorld.position.y) / oldScale;
 
-                world.scale.set(nextScale);
-                world.position.set(
+                currentWorld.scale.set(nextScale);
+                currentWorld.position.set(
                     point.x - worldX * nextScale,
                     point.y - worldY * nextScale,
                 );
@@ -312,6 +390,7 @@ export function PixiMapCanvas({
                 });
             });
             resizeObserver.observe(host);
+            setAppReadyRevision((value) => value + 1);
         })();
 
         return () => {
@@ -320,11 +399,55 @@ export function PixiMapCanvas({
             resizeObserver?.disconnect();
             detachInteractions?.();
 
-            if (app !== null) {
-                app.destroy(true, true);
+            hoverLayerRef.current = null;
+            hoverBackgroundRef.current = null;
+            hoverTextRef.current = null;
+            worldRef.current = null;
+
+            const currentApp = appRef.current;
+            appRef.current = null;
+            if (currentApp !== null) {
+                currentApp.destroy(true, true);
             }
         };
+    }, [fitViewRef]);
+
+    useEffect(() => {
+        const world = worldRef.current;
+        if (world === null) {
+            return;
+        }
+
+        const oldChildren = world.removeChildren();
+        for (const child of oldChildren) {
+            child.destroy();
+        }
+
+        drawMapScene({
+            world,
+            intel,
+            bounds,
+            links,
+            shipPositions,
+            basesByPlanet,
+            labelMode,
+            selected,
+            onSelect,
+        });
+
+        if (hoverLayerRef.current !== null) {
+            hoverLayerRef.current.visible = false;
+        }
+
+        // Selection, labels and periodic intel updates redraw the scene without
+        // altering the user's viewport. Only switching to another game gets an
+        // automatic fit; the explicit Fit view button remains available.
+        if (lastFitGameIdRef.current !== intel.game_id) {
+            lastFitGameIdRef.current = intel.game_id;
+            window.requestAnimationFrame(() => fitViewRef.current?.());
+        }
     }, [
+        appReadyRevision,
         basesByPlanet,
         bounds,
         fitViewRef,

@@ -18,6 +18,7 @@ from app.schemas.combined_intel import CombinedPrivateIntelResponse
 from app.schemas.private_intel import LatestPrivateIntelResponse
 from app.services.combined_intel import get_combined_private_intel
 from app.services.private_intel import get_latest_private_intel
+from app.services.private_refresh import refresh_accessible_private_intel
 from app.services.private_sync import (
     PrivateSyncError,
     PrivateSyncTransportError,
@@ -145,6 +146,33 @@ async def refresh_private_intel(
         )
 
     return LatestPrivateIntelResponse(**result)
+
+
+@router.post(
+    "/games/{game_id}/private-intel/refresh-accessible",
+)
+async def refresh_accessible_private_intel_route(
+    game_id: int = Path(gt=0),
+    user: AppUser = Depends(require_user),
+) -> dict[str, object]:
+    try:
+        return await refresh_accessible_private_intel(
+            user_id=user.id,
+            game_id=game_id,
+        )
+    except httpx.TransportError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "Planets.nu public synchronization transport failed "
+                f"({type(exc).__name__})"
+            ),
+        ) from exc
+    except PlanetsNuError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Planets.nu public synchronization failed",
+        ) from exc
 
 
 @router.get(

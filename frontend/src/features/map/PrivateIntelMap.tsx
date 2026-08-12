@@ -1,10 +1,15 @@
 import {
+    useCallback,
     useEffect,
     useMemo,
     useRef,
     useState,
 } from "react";
-import { getCombinedPrivateIntel } from "../../api/client";
+import {
+    getCombinedPrivateIntel,
+    getLatestPrivateIntel,
+    refreshAccessiblePrivateIntel,
+} from "../../api/client";
 import type { PlayerInfo } from "../../types/api";
 import {
     isCombinedPrivateIntel,
@@ -25,6 +30,8 @@ interface PrivateIntelMapProps {
 }
 
 type IntelViewMode = "observer" | "combined";
+
+const AUTO_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
 function formatObservedAt(value: string): string {
     const parsed = new Date(value);
@@ -119,6 +126,43 @@ function latestCombinedObservedAt(
     return latest?.value ?? null;
 }
 
+function reconcileSelection(
+    selected: SelectedEntity | null,
+    intel: PrivateIntelMapResponse,
+): SelectedEntity | null {
+    if (selected === null) {
+        return null;
+    }
+
+    if (selected.kind === "planet") {
+        const value = intel.planets.find(
+            (planet) => planet.planet_id === selected.value.planet_id,
+        );
+        return value ? { kind: "planet", value } : null;
+    }
+
+    if (selected.kind === "ship") {
+        const value = intel.ships.find(
+            (ship) => ship.ship_id === selected.value.ship_id,
+        );
+        return value ? { kind: "ship", value } : null;
+    }
+
+    if (selected.kind === "starbase") {
+        const value = intel.starbases.find(
+            (starbase) => starbase.starbase_id === selected.value.starbase_id,
+        );
+        return value ? { kind: "starbase", value } : null;
+    }
+
+    const value = intel.stellar_cartography.find(
+        (feature) =>
+            feature.feature_type === selected.value.feature_type &&
+            feature.feature_id === selected.value.feature_id,
+    );
+    return value ? { kind: "stellar", value } : null;
+}
+
 export function PrivateIntelMap({
     intel,
     loading,
@@ -126,19 +170,28 @@ export function PrivateIntelMap({
     observerName,
     players,
 }: PrivateIntelMapProps) {
+    const [observerIntel, setObserverIntel] =
+        useState<PrivateIntelMapResponse | null>(intel);
     const [selected, setSelected] = useState<SelectedEntity | null>(null);
     const [labelMode, setLabelMode] = useState<PlanetLabelMode>("none");
-    const [viewMode, setViewMode] = useState<IntelViewMode>("observer");
+    const [viewMode, setViewMode] = useState<IntelViewMode>("combined");
     const [combinedIntel, setCombinedIntel] =
         useState<CombinedPrivateIntelResponse | null>(null);
     const [combinedLoading, setCombinedLoading] = useState(false);
     const [combinedError, setCombinedError] = useState<string | null>(null);
+    const [autoRefreshing, setAutoRefreshing] = useState(false);
+    const [autoRefreshError, setAutoRefreshError] = useState<string | null>(null);
     const [sharingRevision, setSharingRevision] = useState(0);
     const fitViewRef = useRef<(() => void) | null>(null);
+    const refreshInFlightRef = useRef(false);
+
+    useEffect(() => {
+        setObserverIntel(intel);
+    }, [intel]);
 
     const identity = useMemo(
-        () => primaryIdentity(intel),
-        [intel],
+        () => primaryIdentity(observerIntel),
+        [observerIntel],
     );
 
     useEffect(() => {
@@ -158,6 +211,67 @@ export function PrivateIntelMap({
             );
         };
     }, []);
+
+    const refreshAllSources = useCallback(async () => {
+        const gameId = identity?.gameId ?? null;
+        const linkedAccountId = identity?.linkedAccountId ?? null;
+
+        if (
+            gameId === null ||
+            linkedAccountId === null ||
+            refreshInFlightRef.current
+        ) {
+            return;
+        }
+
+        refreshInFlightRef.current = true;
+        setAutoRefreshing(true);
+        setAutoRefreshError(null);
+
+        try {
+            await refreshAccessiblePrivateIntel(gameId);
+
+            const latest = await getLatestPrivateIntel(
+                gameId,
+                linkedAccountId,
+            );
+            if (latest !== null) {
+                setObserverIntel(latest);
+            }
+
+            // Peers can change even if the primary snapshot hash is unchanged.
+            setSharingRevision((value) => value + 1);
+        } catch (reason) {
+            setAutoRefreshError(
+                reason instanceof Error
+                    ? reason.message
+                    : "Failed to refresh accessible private intelligence",
+            );
+        } finally {
+            refreshInFlightRef.current = false;
+            setAutoRefreshing(false);
+        }
+    }, [identity?.gameId, identity?.linkedAccountId]);
+
+    useEffect(() => {
+        if (identity === null) {
+            return;
+        }
+
+        void refreshAllSources();
+        const intervalId = window.setInterval(
+            () => void refreshAllSources(),
+            AUTO_REFRESH_INTERVAL_MS,
+        );
+
+        return () => {
+            window.clearInterval(intervalId);
+        };
+    }, [
+        identity?.gameId,
+        identity?.linkedAccountId,
+        refreshAllSources,
+    ]);
 
     useEffect(() => {
         let cancelled = false;
@@ -188,7 +302,6 @@ export function PrivateIntelMap({
                 }
             } catch (reason) {
                 if (!cancelled) {
-                    setCombinedIntel(null);
                     setCombinedError(
                         reason instanceof Error
                             ? reason.message
@@ -218,18 +331,26 @@ export function PrivateIntelMap({
     const displayIntel: PrivateIntelMapResponse | null =
         viewMode === "combined"
             ? combinedIntel
-            : intel;
+            : observerIntel;
 
     const effectiveLoading =
-        loading || (viewMode === "combined" && combinedLoading);
+        displayIntel === null &&
+        (loading || (viewMode === "combined" && combinedLoading));
     const effectiveError =
         viewMode === "combined"
-            ? combinedError ?? (intel === null ? error : null)
-            : error;
+            ? combinedError
+                ?? autoRefreshError
+                ?? (observerIntel === null ? error : null)
+            : autoRefreshError ?? error;
     const revisionKey = intelRevisionKey(displayIntel);
 
     useEffect(() => {
-        setSelected(null);
+        if (displayIntel === null) {
+            setSelected(null);
+            return;
+        }
+
+        setSelected((current) => reconcileSelection(current, displayIntel));
     }, [revisionKey, viewMode]);
 
     if (effectiveLoading) {
@@ -320,6 +441,9 @@ export function PrivateIntelMap({
                     <span>{displayIntel.counts.nebulas} nebulae</span>
                     <span>{displayIntel.counts.star_clusters} clusters</span>
                     <span>{displayIntel.counts.ion_storms} storms</span>
+                    <span>
+                        Auto refresh 5 min{autoRefreshing ? " · updating…" : ""}
+                    </span>
                     {selection !== null && (
                         <span className="intel-detail-badge">{selection}</span>
                     )}
@@ -332,21 +456,18 @@ export function PrivateIntelMap({
                             }
                             value={viewMode}
                         >
-                            <option value="observer">Observer only</option>
                             <option value="combined">Combined dashboard intel</option>
+                            <option value="observer">Observer only</option>
                         </select>
                     </label>
-                    {viewMode === "combined" && (
-                        <button
-                            className="secondary-button"
-                            onClick={() =>
-                                setSharingRevision((value) => value + 1)
-                            }
-                            type="button"
-                        >
-                            Refresh combined
-                        </button>
-                    )}
+                    <button
+                        className="secondary-button"
+                        disabled={autoRefreshing}
+                        onClick={() => void refreshAllSources()}
+                        type="button"
+                    >
+                        {autoRefreshing ? "Refreshing all…" : "Refresh all intel"}
+                    </button>
                     <label className="intel-label-control">
                         <span>Planet labels</span>
                         <select
