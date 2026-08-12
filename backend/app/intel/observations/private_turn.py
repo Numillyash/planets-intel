@@ -29,6 +29,7 @@ STELLAR_COLLECTIONS: tuple[tuple[str, str], ...] = (
     ("nebulas", "nebula"),
     ("ionstorms", "ion_storm"),
     ("stars", "star_cluster"),
+    ("minefields", "minefield"),
 )
 
 
@@ -297,53 +298,36 @@ def persist_private_turn(
         stellar_cartography,
     )
 
-    batch_table = (
-        PrivateObservationBatch.__table__
-    )
+    batch_table = PrivateObservationBatch.__table__
 
     batch_stmt = (
         pg_insert(batch_table)
         .values(
             game_id=game_id,
             turn=turn,
-            observer_planets_account_id=(
-                observer_planets_account_id
-            ),
-            source_player_slot_id=(
-                source_player_slot_id
-            ),
+            observer_planets_account_id=observer_planets_account_id,
+            source_player_slot_id=source_player_slot_id,
             source=PRIVATE_TURN_SOURCE,
             snapshot_hash=snapshot_hash,
         )
         .on_conflict_do_nothing(
-            constraint=(
-                "uq_private_observation_snapshot"
-            )
+            constraint="uq_private_observation_snapshot"
         )
         .returning(batch_table.c.id)
     )
 
-    batch_id = session.execute(
-        batch_stmt
-    ).scalar_one_or_none()
-
+    batch_id = session.execute(batch_stmt).scalar_one_or_none()
     created = batch_id is not None
 
     if not created:
         batch_id = session.execute(
-            select(
-                PrivateObservationBatch.id
-            ).where(
-                PrivateObservationBatch.game_id
-                == game_id,
-                PrivateObservationBatch.turn
-                == turn,
+            select(PrivateObservationBatch.id).where(
+                PrivateObservationBatch.game_id == game_id,
+                PrivateObservationBatch.turn == turn,
                 PrivateObservationBatch.observer_planets_account_id
                 == observer_planets_account_id,
-                PrivateObservationBatch.source
-                == PRIVATE_TURN_SOURCE,
-                PrivateObservationBatch.snapshot_hash
-                == snapshot_hash,
+                PrivateObservationBatch.source == PRIVATE_TURN_SOURCE,
+                PrivateObservationBatch.snapshot_hash == snapshot_hash,
             )
         ).scalar_one()
 
@@ -352,9 +336,7 @@ def persist_private_turn(
             "created": False,
             "game_id": game_id,
             "turn": turn,
-            "source_player_slot_id": (
-                source_player_slot_id
-            ),
+            "source_player_slot_id": source_player_slot_id,
             "snapshot_hash": snapshot_hash,
             "planets": len(planets),
             "ships": len(ships),
@@ -362,130 +344,55 @@ def persist_private_turn(
             "nebulas": len(stellar_cartography["nebula"]),
             "ion_storms": len(stellar_cartography["ion_storm"]),
             "star_clusters": len(stellar_cartography["star_cluster"]),
+            "minefields": len(stellar_cartography["minefield"]),
         }
 
     planet_rows = []
-
     for raw in planets:
         planet_rows.append(
             {
                 "batch_id": batch_id,
-                "planet_id": _required_int(
-                    raw,
-                    "id",
-                    "planet",
-                ),
-                "owner_id": _optional_int(
-                    raw,
-                    "ownerid",
-                    "planet",
-                ),
-                "info_turn": _optional_int(
-                    raw,
-                    "infoturn",
-                    "planet",
-                ),
-                "name": _optional_string(
-                    raw,
-                    "name",
-                    "planet",
-                ),
-                "x": _optional_int(
-                    raw,
-                    "x",
-                    "planet",
-                ),
-                "y": _optional_int(
-                    raw,
-                    "y",
-                    "planet",
-                ),
+                "planet_id": _required_int(raw, "id", "planet"),
+                "owner_id": _optional_int(raw, "ownerid", "planet"),
+                "info_turn": _optional_int(raw, "infoturn", "planet"),
+                "name": _optional_string(raw, "name", "planet"),
+                "x": _optional_int(raw, "x", "planet"),
+                "y": _optional_int(raw, "y", "planet"),
                 "payload": raw,
             }
         )
 
     ship_rows = []
-
     for raw in ships:
         ship_rows.append(
             {
                 "batch_id": batch_id,
-                "ship_id": _required_int(
-                    raw,
-                    "id",
-                    "ship",
-                ),
-                "owner_id": _optional_int(
-                    raw,
-                    "ownerid",
-                    "ship",
-                ),
-                "info_turn": _optional_int(
-                    raw,
-                    "infoturn",
-                    "ship",
-                ),
-                "hull_id": _optional_int(
-                    raw,
-                    "hullid",
-                    "ship",
-                ),
-                "name": _optional_string(
-                    raw,
-                    "name",
-                    "ship",
-                ),
-                "x": _optional_int(
-                    raw,
-                    "x",
-                    "ship",
-                ),
-                "y": _optional_int(
-                    raw,
-                    "y",
-                    "ship",
-                ),
-                "warp": _optional_int(
-                    raw,
-                    "warp",
-                    "ship",
-                ),
+                "ship_id": _required_int(raw, "id", "ship"),
+                "owner_id": _optional_int(raw, "ownerid", "ship"),
+                "info_turn": _optional_int(raw, "infoturn", "ship"),
+                "hull_id": _optional_int(raw, "hullid", "ship"),
+                "name": _optional_string(raw, "name", "ship"),
+                "x": _optional_int(raw, "x", "ship"),
+                "y": _optional_int(raw, "y", "ship"),
+                "warp": _optional_int(raw, "warp", "ship"),
                 "payload": raw,
             }
         )
 
     starbase_rows = []
-
     for raw in starbases:
         starbase_rows.append(
             {
                 "batch_id": batch_id,
-                "starbase_id": _required_int(
-                    raw,
-                    "id",
-                    "starbase",
-                ),
-                "planet_id": _optional_int(
-                    raw,
-                    "planetid",
-                    "starbase",
-                ),
-                "race_id": _optional_int(
-                    raw,
-                    "raceid",
-                    "starbase",
-                ),
-                "info_turn": _optional_int(
-                    raw,
-                    "infoturn",
-                    "starbase",
-                ),
+                "starbase_id": _required_int(raw, "id", "starbase"),
+                "planet_id": _optional_int(raw, "planetid", "starbase"),
+                "race_id": _optional_int(raw, "raceid", "starbase"),
+                "info_turn": _optional_int(raw, "infoturn", "starbase"),
                 "payload": raw,
             }
         )
 
     stellar_rows = []
-
     for feature_type, records in stellar_cartography.items():
         for raw in records:
             label = feature_type.replace("_", " ")
@@ -493,69 +400,28 @@ def persist_private_turn(
                 {
                     "batch_id": batch_id,
                     "feature_type": feature_type,
-                    "feature_id": _required_int(
-                        raw,
-                        "id",
-                        label,
-                    ),
-                    "name": _optional_string(
-                        raw,
-                        "name",
-                        label,
-                    ),
-                    "info_turn": _optional_int(
-                        raw,
-                        "infoturn",
-                        label,
-                    ),
-                    "x": _optional_int(
-                        raw,
-                        "x",
-                        label,
-                    ),
-                    "y": _optional_int(
-                        raw,
-                        "y",
-                        label,
-                    ),
-                    "radius": _optional_int(
-                        raw,
-                        "radius",
-                        label,
-                    ),
+                    "feature_id": _required_int(raw, "id", label),
+                    "name": _optional_string(raw, "name", label),
+                    "info_turn": _optional_int(raw, "infoturn", label),
+                    "x": _optional_int(raw, "x", label),
+                    "y": _optional_int(raw, "y", label),
+                    "radius": _optional_int(raw, "radius", label),
                     "payload": raw,
                 }
             )
 
     if planet_rows:
-        session.execute(
-            pg_insert(
-                PlanetObservation.__table__
-            ),
-            planet_rows,
-        )
+        session.execute(pg_insert(PlanetObservation.__table__), planet_rows)
 
     if ship_rows:
-        session.execute(
-            pg_insert(
-                ShipObservation.__table__
-            ),
-            ship_rows,
-        )
+        session.execute(pg_insert(ShipObservation.__table__), ship_rows)
 
     if starbase_rows:
-        session.execute(
-            pg_insert(
-                StarbaseObservation.__table__
-            ),
-            starbase_rows,
-        )
+        session.execute(pg_insert(StarbaseObservation.__table__), starbase_rows)
 
     if stellar_rows:
         session.execute(
-            pg_insert(
-                StellarCartographyObservation.__table__
-            ),
+            pg_insert(StellarCartographyObservation.__table__),
             stellar_rows,
         )
 
@@ -566,9 +432,7 @@ def persist_private_turn(
         "created": True,
         "game_id": game_id,
         "turn": turn,
-        "source_player_slot_id": (
-            source_player_slot_id
-        ),
+        "source_player_slot_id": source_player_slot_id,
         "snapshot_hash": snapshot_hash,
         "planets": len(planets),
         "ships": len(ships),
@@ -576,4 +440,5 @@ def persist_private_turn(
         "nebulas": len(stellar_cartography["nebula"]),
         "ion_storms": len(stellar_cartography["ion_storm"]),
         "star_clusters": len(stellar_cartography["star_cluster"]),
+        "minefields": len(stellar_cartography["minefield"]),
     }
