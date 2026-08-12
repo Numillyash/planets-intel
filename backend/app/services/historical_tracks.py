@@ -100,9 +100,8 @@ def get_historical_ship_tracks(
     metadata: dict[int, dict[str, Any]] = {}
 
     for (ship_id, observation_turn), entries in grouped.items():
-        # Prefer the latest snapshot available by the requested historical time.
-        # When observers disagree for the same info turn, the newest retrieved
-        # factual record is selected while all observer IDs remain in provenance.
+        # Prefer the latest factual record that was actually available by the
+        # requested historical turn; all contributing observers are retained.
         selected_ship, selected_batch, _ = max(
             entries,
             key=lambda entry: (
