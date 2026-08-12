@@ -23,7 +23,7 @@ def get_historical_ship_tracks(
     This prevents a stale sighting repeated in later turn files from looking like
     a new position. Only batches retrieved for turns <= through_turn are used,
     so historical mode never leaks future observations backwards. The returned
-    series is rendering data only; no path is inferred across observation gaps.
+    series is rendering data only; unknown movement across gaps stays unknown.
     """
 
     if through_turn <= 0:
