@@ -33,7 +33,7 @@ export function drawHistoricalShipTracks({
     for (const track of tracks) {
         const selectedTrack = selectedShipId === track.ship_id;
         if (mode === "selected" && !selectedTrack) continue;
-        if (track.points.length < 2) continue;
+        if (track.points.length === 0) continue;
 
         const color = trackColor(track.owner_id);
         const line = new Graphics();
@@ -44,7 +44,8 @@ export function drawHistoricalShipTracks({
             const current = track.points[index];
 
             // Never draw an invented straight path across turns in which the
-            // ship was not observed. The gap remains visibly disconnected.
+            // ship was not observed. Breadcrumbs on both sides make the gap
+            // visible without asserting how the ship travelled through it.
             if (current.gap_from_previous) continue;
 
             line
@@ -56,34 +57,45 @@ export function drawHistoricalShipTracks({
         if (hasSegment) {
             line.stroke({
                 color,
-                width: selectedTrack ? 2.4 : 1,
-                alpha: selectedTrack ? 0.92 : 0.16,
+                width: selectedTrack ? 2.5 : 1.15,
+                alpha: selectedTrack ? 0.94 : 0.3,
             });
             world.addChild(line);
         }
 
-        if (selectedTrack) {
-            for (const point of track.points) {
-                const marker = new Graphics()
-                    .circle(0, 0, 2.7)
-                    .fill({ color, alpha: 0.96 })
-                    .stroke({ color: 0xffffff, width: 0.7, alpha: 0.75 });
-                marker.position.set(point.x, renderY(point.y, bounds));
-                world.addChild(marker);
-
-                const label = new Text({
-                    text: `T${point.turn}`,
-                    style: {
-                        fill: 0xcbd8e8,
-                        fontFamily: "Inter, Arial, sans-serif",
-                        fontSize: 9,
-                        stroke: { color: 0x060a10, width: 3 },
-                    },
-                    resolution: 2,
+        for (const point of track.points) {
+            const marker = new Graphics()
+                .circle(0, 0, selectedTrack ? 2.8 : 1.45)
+                .fill({
+                    color,
+                    alpha: selectedTrack ? 0.98 : 0.4,
                 });
-                label.position.set(point.x + 4, renderY(point.y, bounds) - 11);
-                world.addChild(label);
+            if (selectedTrack) {
+                marker.stroke({
+                    color: 0xffffff,
+                    width: 0.7,
+                    alpha: 0.76,
+                });
             }
+            marker.position.set(point.x, renderY(point.y, bounds));
+            world.addChild(marker);
+
+            if (!selectedTrack) continue;
+
+            const label = new Text({
+                text: point.gap_from_previous
+                    ? `T${point.turn} · reacquired`
+                    : `T${point.turn}`,
+                style: {
+                    fill: point.gap_from_previous ? 0xffcf7d : 0xcbd8e8,
+                    fontFamily: "Inter, Arial, sans-serif",
+                    fontSize: 9,
+                    stroke: { color: 0x060a10, width: 3 },
+                },
+                resolution: 2,
+            });
+            label.position.set(point.x + 4, renderY(point.y, bounds) - 11);
+            world.addChild(label);
         }
     }
 }
