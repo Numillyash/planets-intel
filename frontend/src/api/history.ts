@@ -1,18 +1,15 @@
 import type { LatestPrivateIntelResponse } from "../types/api";
-import type {
-    CombinedPrivateIntelResponse,
-} from "../types/intel";
+import type { CombinedPrivateIntelResponse } from "../types/intel";
 import type {
     HistoricalBackfillTurnResponse,
     HistoricalIntelStatus,
+    HistoricalShipTracksResponse,
 } from "../types/history";
 
 async function parseErrorMessage(response: Response): Promise<string> {
     try {
         const payload = await response.json() as { detail?: string };
-        if (payload.detail) {
-            return payload.detail;
-        }
+        if (payload.detail) return payload.detail;
     } catch {
         // Fall back to HTTP status below.
     }
@@ -24,10 +21,7 @@ async function apiGetOptional<T>(url: string): Promise<T | null> {
         credentials: "same-origin",
         headers: { Accept: "application/json" },
     });
-
-    if (response.status === 404) {
-        return null;
-    }
+    if (response.status === 404) return null;
     if (!response.ok) {
         throw new Error(
             `Historical intel request failed: ${await parseErrorMessage(response)}`,
@@ -76,6 +70,27 @@ export async function getHistoricalIntelStatus(
         );
     }
     return response.json() as Promise<HistoricalIntelStatus>;
+}
+
+export async function getHistoricalShipTracks(
+    gameId: number,
+    linkedAccountId: number,
+    throughTurn: number,
+): Promise<HistoricalShipTracksResponse> {
+    const response = await fetch(
+        `/api/games/${gameId}/private-intel/history/ship-tracks`
+        + `?linked_account_id=${linkedAccountId}&through_turn=${throughTurn}`,
+        {
+            credentials: "same-origin",
+            headers: { Accept: "application/json" },
+        },
+    );
+    if (!response.ok) {
+        throw new Error(
+            `Historical ship tracks failed: ${await parseErrorMessage(response)}`,
+        );
+    }
+    return response.json() as Promise<HistoricalShipTracksResponse>;
 }
 
 export async function backfillHistoricalTurn(
