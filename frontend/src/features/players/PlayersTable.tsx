@@ -2,27 +2,13 @@ import type {
     PlayerInfo,
     ScoreHistoryItem,
 } from "../../types/api";
+import { raceName } from "../../lib/races";
 
 
 interface PlayersTableProps {
     players: PlayerInfo[];
     latestScores: Map<number, ScoreHistoryItem>;
 }
-
-
-const raceNames: Record<number, string> = {
-    1: "Federation",
-    2: "Lizards",
-    3: "Bird Men",
-    4: "Fascists",
-    5: "Privateers",
-    6: "Cyborg",
-    7: "Crystal People",
-    8: "Evil Empire",
-    9: "Robots",
-    10: "Rebels",
-    11: "Colonies",
-};
 
 
 function formatDelta(
@@ -97,10 +83,7 @@ export function PlayersTable({
                                     </td>
 
                                     <td>
-                                        {raceNames[
-                                            player.race_id
-                                        ] ??
-                                            `Race ${player.race_id}`}
+                                        {raceName(player.race_id)}
                                     </td>
 
                                     <td>

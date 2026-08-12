@@ -4,6 +4,7 @@ import type {
     MapStarbaseObservation,
     PrivateIntelMapResponse,
 } from "../../types/intel";
+import { raceVisual } from "../../lib/races";
 import {
     PLANET_RADIUS,
     planetLabel,
@@ -18,27 +19,16 @@ import {
     type ShipVisualPosition,
 } from "./mapModel";
 
-const OWNER_COLORS = [
-    0x60a5fa,
-    0xf87171,
-    0x4ade80,
-    0xfbbf24,
-    0xc084fc,
-    0x22d3ee,
-    0xfb7185,
-    0xa3e635,
-    0xf97316,
-    0x818cf8,
-    0x2dd4bf,
-];
+
+const UNKNOWN_OWNER_COLOR = 0x7b8798;
+
 
 function ownerColor(ownerId: number | null): number {
-    if (ownerId === null || ownerId <= 0) {
-        return 0x7b8798;
-    }
-
-    return OWNER_COLORS[(ownerId - 1) % OWNER_COLORS.length];
+    // In the classic 11-race game format player slots 1..11 map to the
+    // corresponding race ids. Unknown/neutral ownership stays gray.
+    return raceVisual(ownerId)?.color ?? UNKNOWN_OWNER_COLOR;
 }
+
 
 function shipMarker(role: ShipRole, color: number): Graphics {
     const marker = new Graphics();
@@ -81,6 +71,7 @@ function shipMarker(role: ShipRole, color: number): Graphics {
     return marker;
 }
 
+
 function planetIsSelected(
     selected: SelectedEntity | null,
     planet: PlanetObservationResponse,
@@ -104,6 +95,7 @@ function planetIsSelected(
         selected.value.y === planet.y
     );
 }
+
 
 export function drawMapScene({
     world,
