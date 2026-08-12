@@ -12,6 +12,7 @@ export interface MineralFacts {
 }
 
 export interface PlanetFacts {
+    friendlyCode: string | null;
     temperature: number | null;
     mines: number | null;
     factories: number | null;
@@ -34,6 +35,7 @@ export interface PlanetFacts {
 }
 
 export interface ShipFacts {
+    friendlyCode: string | null;
     hullName: string | null;
     engineName: string | null;
     engineId: number | null;
@@ -73,26 +75,18 @@ type Payload = Record<string, unknown>;
 
 function value(payload: Payload, ...keys: string[]): unknown {
     for (const key of keys) {
-        if (Object.prototype.hasOwnProperty.call(payload, key)) {
-            return payload[key];
-        }
+        if (Object.prototype.hasOwnProperty.call(payload, key)) return payload[key];
     }
-
     const normalizedKeys = new Set(keys.map((key) => key.toLowerCase()));
     for (const [key, item] of Object.entries(payload)) {
-        if (normalizedKeys.has(key.toLowerCase())) {
-            return item;
-        }
+        if (normalizedKeys.has(key.toLowerCase())) return item;
     }
-
     return undefined;
 }
 
 export function factNumber(payload: Payload, ...keys: string[]): number | null {
     const item = value(payload, ...keys);
-    if (typeof item === "number" && Number.isFinite(item)) {
-        return item;
-    }
+    if (typeof item === "number" && Number.isFinite(item)) return item;
     if (typeof item === "string" && item.trim() !== "") {
         const parsed = Number(item);
         return Number.isFinite(parsed) ? parsed : null;
@@ -100,30 +94,20 @@ export function factNumber(payload: Payload, ...keys: string[]): number | null {
     return null;
 }
 
-function nonNegativeFactNumber(
-    payload: Payload,
-    ...keys: string[]
-): number | null {
+function nonNegativeFactNumber(payload: Payload, ...keys: string[]): number | null {
     const item = factNumber(payload, ...keys);
     return item !== null && item >= 0 ? item : null;
 }
 
-function positiveFactNumber(
-    payload: Payload,
-    ...keys: string[]
-): number | null {
+function positiveFactNumber(payload: Payload, ...keys: string[]): number | null {
     const item = factNumber(payload, ...keys);
     return item !== null && item > 0 ? item : null;
 }
 
 export function factString(payload: Payload, ...keys: string[]): string | null {
     const item = value(payload, ...keys);
-    if (typeof item === "string" && item.trim() !== "") {
-        return item.trim();
-    }
-    if (typeof item === "number" && Number.isFinite(item)) {
-        return String(item);
-    }
+    if (typeof item === "string" && item.trim() !== "") return item.trim();
+    if (typeof item === "number" && Number.isFinite(item)) return String(item);
     return null;
 }
 
@@ -134,107 +118,39 @@ function firstDisplayValue(
     numericPrefix: string,
 ): string | null {
     const named = factString(payload, ...stringKeys);
-    if (named !== null) {
-        return named;
-    }
-
+    if (named !== null) return named;
     const numeric = factNumber(payload, ...numberKeys);
-    if (numeric === null || numeric <= 0) {
-        return null;
-    }
+    if (numeric === null || numeric <= 0) return null;
     return `${numericPrefix} ${numeric}`;
 }
 
 function mineralFacts(payload: Payload, mineral: string): MineralFacts {
     return {
         surface: nonNegativeFactNumber(payload, mineral),
-        ground: nonNegativeFactNumber(
-            payload,
-            `ground${mineral}`,
-            `${mineral}ground`,
-            `${mineral}_ground`,
-        ),
-        density: nonNegativeFactNumber(
-            payload,
-            `density${mineral}`,
-            `${mineral}density`,
-            `${mineral}_density`,
-        ),
-        production: nonNegativeFactNumber(
-            payload,
-            `${mineral}production`,
-            `${mineral}produced`,
-            `${mineral}rate`,
-            `${mineral}_production`,
-        ),
+        ground: nonNegativeFactNumber(payload, `ground${mineral}`, `${mineral}ground`, `${mineral}_ground`),
+        density: nonNegativeFactNumber(payload, `density${mineral}`, `${mineral}density`, `${mineral}_density`),
+        production: nonNegativeFactNumber(payload, `${mineral}production`, `${mineral}produced`, `${mineral}rate`, `${mineral}_production`),
     };
 }
 
 export function planetFacts(planet: PlanetObservationResponse): PlanetFacts {
     const payload = planet.payload;
-
     const facts: Omit<PlanetFacts, "knownFieldCount"> = {
+        friendlyCode: factString(payload, "friendlycode", "friendly_code", "fcode"),
         temperature: nonNegativeFactNumber(payload, "temp", "temperature"),
         mines: nonNegativeFactNumber(payload, "mines"),
         factories: nonNegativeFactNumber(payload, "factories"),
-        defense: nonNegativeFactNumber(
-            payload,
-            "defense",
-            "defenseposts",
-            "defense_posts",
-        ),
+        defense: nonNegativeFactNumber(payload, "defense", "defenseposts", "defense_posts"),
         supplies: nonNegativeFactNumber(payload, "supplies"),
-        megacredits: nonNegativeFactNumber(
-            payload,
-            "megacredits",
-            "money",
-            "mc",
-        ),
-        clans: nonNegativeFactNumber(
-            payload,
-            "clans",
-            "colonistclans",
-            "colonists",
-        ),
-        colonistHappiness: factNumber(
-            payload,
-            "colonisthappypoints",
-            "colonisthappiness",
-            "colonisthappy",
-        ),
-        colonistTaxRate: nonNegativeFactNumber(
-            payload,
-            "colonisttaxrate",
-            "colonisttax",
-        ),
-        nativeRace: firstDisplayValue(
-            payload,
-            ["nativeracename", "native_race_name"],
-            ["nativerace", "nativeraceid", "native_race_id"],
-            "Race",
-        ),
-        nativeClans: nonNegativeFactNumber(
-            payload,
-            "nativeclans",
-            "native_clans",
-        ),
-        nativeGovernment: firstDisplayValue(
-            payload,
-            ["nativegovernmentname", "native_government_name"],
-            ["nativegovernment", "nativegovernmentid", "native_government"],
-            "Government",
-        ),
-        nativeHappiness: factNumber(
-            payload,
-            "nativehappypoints",
-            "nativehappiness",
-            "nativehappy",
-        ),
-        nativeTaxRate: nonNegativeFactNumber(
-            payload,
-            "nativetaxrate",
-            "nativetax",
-        ),
+        megacredits: nonNegativeFactNumber(payload, "megacredits", "money", "mc"),
+        clans: nonNegativeFactNumber(payload, "clans", "colonistclans", "colonists"),
+        colonistHappiness: factNumber(payload, "colonisthappypoints", "colonisthappiness", "colonisthappy"),
+        colonistTaxRate: nonNegativeFactNumber(payload, "colonisttaxrate", "colonisttax"),
+        nativeRace: firstDisplayValue(payload, ["nativeracename", "native_race_name"], ["nativerace", "nativeraceid", "native_race_id"], "Race"),
+        nativeClans: nonNegativeFactNumber(payload, "nativeclans", "native_clans"),
+        nativeGovernment: firstDisplayValue(payload, ["nativegovernmentname", "native_government_name"], ["nativegovernment", "nativegovernmentid", "native_government"], "Government"),
+        nativeHappiness: factNumber(payload, "nativehappypoints", "nativehappiness", "nativehappy"),
+        nativeTaxRate: nonNegativeFactNumber(payload, "nativetaxrate", "nativetax"),
         neutronium: mineralFacts(payload, "neutronium"),
         duranium: mineralFacts(payload, "duranium"),
         tritanium: mineralFacts(payload, "tritanium"),
@@ -242,19 +158,10 @@ export function planetFacts(planet: PlanetObservationResponse): PlanetFacts {
     };
 
     const scalarValues = [
-        facts.temperature,
-        facts.mines,
-        facts.factories,
-        facts.defense,
-        facts.supplies,
-        facts.megacredits,
-        facts.clans,
-        facts.colonistHappiness,
-        facts.colonistTaxRate,
-        facts.nativeRace,
-        facts.nativeClans,
-        facts.nativeGovernment,
-        facts.nativeHappiness,
+        facts.friendlyCode, facts.temperature, facts.mines, facts.factories,
+        facts.defense, facts.supplies, facts.megacredits, facts.clans,
+        facts.colonistHappiness, facts.colonistTaxRate, facts.nativeRace,
+        facts.nativeClans, facts.nativeGovernment, facts.nativeHappiness,
         facts.nativeTaxRate,
     ];
     const mineralValues = Object.values({
@@ -266,15 +173,14 @@ export function planetFacts(planet: PlanetObservationResponse): PlanetFacts {
 
     return {
         ...facts,
-        knownFieldCount: [...scalarValues, ...mineralValues].filter(
-            (item) => item !== null,
-        ).length,
+        knownFieldCount: [...scalarValues, ...mineralValues].filter((item) => item !== null).length,
     };
 }
 
 export function shipFacts(ship: ShipObservationResponse): ShipFacts {
     const payload = ship.payload;
     return {
+        friendlyCode: factString(payload, "friendlycode", "friendly_code", "fcode"),
         hullName: factString(payload, "hullname", "hull_name"),
         engineName: factString(payload, "enginename", "engine_name"),
         engineId: positiveFactNumber(payload, "engineid", "engine_id"),
@@ -285,12 +191,7 @@ export function shipFacts(ship: ShipObservationResponse): ShipFacts {
         bays: nonNegativeFactNumber(payload, "bays", "fighterbays", "baycount"),
         damage: nonNegativeFactNumber(payload, "damage"),
         crew: nonNegativeFactNumber(payload, "crew"),
-        mission: firstDisplayValue(
-            payload,
-            ["missionname", "mission_name"],
-            ["mission"],
-            "Mission",
-        ),
+        mission: firstDisplayValue(payload, ["missionname", "mission_name"], ["mission"], "Mission"),
         fuel: nonNegativeFactNumber(payload, "neutronium", "fuel"),
         clans: nonNegativeFactNumber(payload, "clans", "colonists"),
         supplies: nonNegativeFactNumber(payload, "supplies"),
