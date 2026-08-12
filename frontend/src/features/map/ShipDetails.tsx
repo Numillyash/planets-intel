@@ -110,6 +110,7 @@ export function ShipDetails({
                 <dl className="intel-fact-list">
                     <FactRow label="ID" value={ship.ship_id} />
                     <FactRow label="Owner" value={playerName(ship.owner_id, players)} />
+                    <FactRow label="Friendly code" value={facts.friendlyCode ?? "—"} />
                     <FactRow label="Hull" value={facts.hullName ?? `Hull #${ship.hull_id ?? "—"}`} />
                     <FactRow label="Engine" value={facts.engineName ?? (facts.engineId !== null ? `Engine #${facts.engineId}` : "—")} />
                     <FactRow label="Damage" value={formatPercent(facts.damage)} />
@@ -160,7 +161,7 @@ export function ShipDetails({
                             ? `${routeDistance(plannedRoute).toFixed(1)} ly · ${plannedRoute.length - 1} leg${plannedRoute.length === 2 ? "" : "s"}`
                             : "No movement orders observed"
                     } />
-                    <FactRow label="History" value={
+                    <FactRow label="Payload history" value={
                         historyRoute.length >= 2
                             ? `${historyRoute.length} observed points`
                             : "—"
@@ -168,7 +169,7 @@ export function ShipDetails({
                     <FactRow label="Mission" value={facts.mission ?? "—"} />
                 </dl>
                 <p className="intel-no-facts" style={{ marginTop: 8 }}>
-                    Cyan line = observed movement orders. Faint line = movement history when present in the turn payload. Host effects such as tow, warp wells and ion storms can change the final position.
+                    Cyan line = observed movement orders. Factual multi-turn tracks are reconstructed separately from stored turn snapshots and are drawn behind the current map.
                 </p>
             </DetailSection>
 
@@ -179,43 +180,13 @@ export function ShipDetails({
                     </p>
                 ) : (
                     <dl className="intel-fact-list">
-                        <FactRow
-                            label="Max radiation"
-                            value={radiation.maxRadiation}
-                        />
-                        <FactRow
-                            label="Cluster"
-                            value={radiationClusterName ?? "None on route"}
-                        />
-                        <FactRow
-                            label="Crew loss"
-                            value={
-                                robotImmune
-                                    ? "0 (Robots immune)"
-                                    : nominalRadiationLoss
-                            }
-                        />
-                        <FactRow
-                            label="Crew after"
-                            value={
-                                crewAfterRadiation !== null
-                                    ? crewAfterRadiation
-                                    : "—"
-                            }
-                        />
-                        <FactRow
-                            label="Clans after"
-                            value={
-                                clansAfterRadiation !== null
-                                    ? clansAfterRadiation
-                                    : "—"
-                            }
-                        />
+                        <FactRow label="Max radiation" value={radiation.maxRadiation} />
+                        <FactRow label="Cluster" value={radiationClusterName ?? "None on route"} />
+                        <FactRow label="Crew loss" value={robotImmune ? "0 (Robots immune)" : nominalRadiationLoss} />
+                        <FactRow label="Crew after" value={crewAfterRadiation !== null ? crewAfterRadiation : "—"} />
+                        <FactRow label="Clans after" value={clansAfterRadiation !== null ? clansAfterRadiation : "—"} />
                         {isCloaked && radiation.maxRadiation > 0 && !robotImmune && (
-                            <FactRow
-                                label="If cloak holds"
-                                value={`normal ≈ ${Math.ceil(radiation.maxRadiation / 2)}, advanced ≈ ${Math.ceil(radiation.maxRadiation / 3)}`}
-                            />
+                            <FactRow label="If cloak holds" value={`normal ≈ ${Math.ceil(radiation.maxRadiation / 2)}, advanced ≈ ${Math.ceil(radiation.maxRadiation / 3)}`} />
                         )}
                     </dl>
                 )}
@@ -227,22 +198,10 @@ export function ShipDetails({
             {ionHazard !== null && (
                 <DetailSection title="Ion storm hazard">
                     <dl className="intel-fact-list">
-                        <FactRow
-                            label="Local voltage"
-                            value={`${Math.round(ionHazard.localVoltage)} meV`}
-                        />
-                        <FactRow
-                            label="Class"
-                            value={ionHazard.stormClass}
-                        />
-                        <FactRow
-                            label="Storm warp"
-                            value={ionHazard.warp ?? "—"}
-                        />
-                        <FactRow
-                            label="Heading"
-                            value={ionHazard.heading ?? "—"}
-                        />
+                        <FactRow label="Local voltage" value={`${Math.round(ionHazard.localVoltage)} meV`} />
+                        <FactRow label="Class" value={ionHazard.stormClass} />
+                        <FactRow label="Storm warp" value={ionHazard.warp ?? "—"} />
+                        <FactRow label="Heading" value={ionHazard.heading ?? "—"} />
                         <FactRow
                             label="Drag"
                             value={
