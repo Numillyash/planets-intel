@@ -16,7 +16,9 @@ from app.models.user import AppUser
 from app.planetsnu.client import PlanetsNuError
 from app.schemas.combined_intel import CombinedPrivateIntelResponse
 from app.schemas.private_intel import LatestPrivateIntelResponse
-from app.services.combined_intel import get_combined_private_intel
+from app.services.accessible_combined_intel import (
+    get_accessible_combined_private_intel,
+)
 from app.services.private_intel import get_latest_private_intel
 from app.services.private_refresh import refresh_accessible_private_intel
 from app.services.private_sync import (
@@ -98,8 +100,6 @@ async def refresh_private_intel(
     )
 
     try:
-        # Refresh canonical game/player state first so a newly selected game
-        # can immediately accept its first private observation.
         await sync_public_game(game_id)
         await sync_private_game(
             linked_account_id=linked_account_id,
@@ -184,7 +184,7 @@ def combined_private_intel(
     linked_account_id: int = Query(gt=0),
     user: AppUser = Depends(require_user),
 ) -> CombinedPrivateIntelResponse:
-    result = get_combined_private_intel(
+    result = get_accessible_combined_private_intel(
         user_id=user.id,
         game_id=game_id,
         linked_account_id=linked_account_id,

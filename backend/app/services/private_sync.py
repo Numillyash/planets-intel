@@ -27,7 +27,11 @@ class PrivateSyncTransportError(PrivateSyncError):
 async def sync_private_game(
     linked_account_id: int,
     game_id: int,
+    turn: int | None = None,
 ) -> dict[str, Any]:
+    if turn is not None and turn <= 0:
+        raise PrivateSyncError("turn must be positive")
+
     with SessionLocal() as session:
         account = session.execute(
             select(PlanetsAccount).where(
@@ -61,6 +65,7 @@ async def sync_private_game(
                 payload = await client.load_turn(
                     game_id=game_id,
                     api_key=api_key,
+                    turn=turn,
                 )
                 break
             except httpx.TransportError as exc:
@@ -90,6 +95,24 @@ async def sync_private_game(
     if not isinstance(rst, dict):
         raise PrivateSyncError(
             "private turn has no rst object"
+        )
+
+    game_payload = rst.get("game")
+    if not isinstance(game_payload, dict):
+        raise PrivateSyncError(
+            "private turn has no game object"
+        )
+
+    returned_turn = game_payload.get("turn")
+    if isinstance(returned_turn, bool) or not isinstance(returned_turn, int):
+        raise PrivateSyncError(
+            "private turn has invalid game turn"
+        )
+
+    if turn is not None and returned_turn != turn:
+        raise PrivateSyncError(
+            "Planets.nu returned a different historical turn "
+            f"(requested {turn}, got {returned_turn})"
         )
 
     player = rst.get("player")
@@ -202,5 +225,6 @@ async def sync_private_game(
         "linked_account_id": linked_account_id,
         "planets_account_id": source_account_id,
         "planets_username": planets_username,
+        "requested_turn": turn,
         **result,
     }

@@ -149,20 +149,27 @@ class PlanetsNuClient:
 
         return payload
 
-
     async def load_turn(
         self,
         game_id: int,
         api_key: str,
+        turn: int | None = None,
     ) -> dict[str, Any]:
+        data: dict[str, Any] = {
+            "gameid": game_id,
+            "apikey": api_key,
+            "forsave": "false" if turn is not None else "true",
+            "activity": "false" if turn is not None else "true",
+        }
+
+        if turn is not None:
+            if turn <= 0:
+                raise ValueError("turn must be positive")
+            data["turn"] = turn
+
         payload = await self.post_form(
             "game/loadturn",
-            data={
-                "gameid": game_id,
-                "apikey": api_key,
-                "forsave": "true",
-                "activity": "true",
-            },
+            data=data,
             headers={
                 "Origin": "https://planets.nu",
                 "Referer": "https://planets.nu/",
