@@ -52,6 +52,7 @@ def _serialize_batch(
         "nebula": 0,
         "ion_storm": 0,
         "star_cluster": 0,
+        "minefield": 0,
     }
     for item in stellar_cartography:
         if item.feature_type in feature_counts:
@@ -82,6 +83,7 @@ def _serialize_batch(
             "nebulas": feature_counts["nebula"],
             "ion_storms": feature_counts["ion_storm"],
             "star_clusters": feature_counts["star_cluster"],
+            "minefields": feature_counts["minefield"],
         },
         "planets": [
             {
