@@ -93,9 +93,9 @@ export function drawMinefields({
 
         const source = minefieldSourcePlanet(intel, feature);
         if (
-            source?.planet.x !== null &&
-            source?.planet.y !== null &&
-            source !== null
+            source !== null &&
+            source.planet.x !== null &&
+            source.planet.y !== null
         ) {
             const sourceY = renderY(source.planet.y, bounds);
             const guide = new Graphics()
