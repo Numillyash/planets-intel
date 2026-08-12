@@ -28,6 +28,7 @@ import {
 } from "./navigationAnalysis";
 import { drawMapScene } from "./mapScene";
 import { drawHistoricalShipTracks } from "./historicalTrackScene";
+import { drawMinefields } from "./minefieldScene";
 
 
 export function PixiMapCanvas({
@@ -380,6 +381,14 @@ export function PixiMapCanvas({
 
         const oldChildren = world.removeChildren();
         for (const child of oldChildren) child.destroy();
+
+        drawMinefields({
+            world,
+            intel,
+            bounds,
+            selected,
+            onSelect,
+        });
 
         drawHistoricalShipTracks({
             world,
