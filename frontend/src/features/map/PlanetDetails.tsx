@@ -75,6 +75,7 @@ export function PlanetDetails({
             <dl className="intel-fact-list intel-fact-list-summary">
                 <FactRow label="ID" value={planet.planet_id} />
                 <FactRow label="Owner" value={playerName(planet.owner_id, players)} />
+                <FactRow label="Friendly code" value={facts.friendlyCode ?? "—"} />
                 <FactRow label="Info turn" value={planet.info_turn ?? "—"} />
                 <FactRow label="Position" value={
                     planet.x !== null && planet.y !== null
@@ -96,26 +97,12 @@ export function PlanetDetails({
                 {hasResources ? (
                     <>
                         <div className="intel-resource-summary">
-                            <div>
-                                <span>Supplies</span>
-                                <strong>{formatInteger(facts.supplies)}</strong>
-                            </div>
-                            <div>
-                                <span>MegaCredits</span>
-                                <strong>{formatInteger(facts.megacredits)}</strong>
-                            </div>
+                            <div><span>Supplies</span><strong>{formatInteger(facts.supplies)}</strong></div>
+                            <div><span>MegaCredits</span><strong>{formatInteger(facts.megacredits)}</strong></div>
                         </div>
                         <div className="intel-mineral-table-wrap">
                             <table className="intel-mineral-table">
-                                <thead>
-                                    <tr>
-                                        <th>Mineral</th>
-                                        <th>Surface</th>
-                                        <th>Ground</th>
-                                        <th>Density</th>
-                                        <th>Prod.</th>
-                                    </tr>
-                                </thead>
+                                <thead><tr><th>Mineral</th><th>Surface</th><th>Ground</th><th>Density</th><th>Prod.</th></tr></thead>
                                 <tbody>
                                     <MineralRow label="Neutronium" facts={facts.neutronium} />
                                     <MineralRow label="Duranium" facts={facts.duranium} />
@@ -126,9 +113,7 @@ export function PlanetDetails({
                         </div>
                     </>
                 ) : (
-                    <p className="intel-no-facts">
-                        This factual observation does not contain detailed resource data.
-                    </p>
+                    <p className="intel-no-facts">This factual observation does not contain detailed resource data.</p>
                 )}
             </DetailSection>
 
@@ -138,24 +123,18 @@ export function PlanetDetails({
                         <div className="intel-colony-card">
                             <span>Colonists</span>
                             <strong>{formatInteger(facts.clans)} clans</strong>
-                            <small>
-                                Happiness {formatInteger(facts.colonistHappiness)} · Tax {formatPercent(facts.colonistTaxRate)}
-                            </small>
+                            <small>Happiness {formatInteger(facts.colonistHappiness)} · Tax {formatPercent(facts.colonistTaxRate)}</small>
                         </div>
                         <div className="intel-colony-card">
                             <span>Natives</span>
                             <strong>{facts.nativeRace ?? "None / unknown"}</strong>
                             <small>{formatInteger(facts.nativeClans)} clans</small>
                             <small>{facts.nativeGovernment ?? "Government unknown"}</small>
-                            <small>
-                                Happiness {formatInteger(facts.nativeHappiness)} · Tax {formatPercent(facts.nativeTaxRate)}
-                            </small>
+                            <small>Happiness {formatInteger(facts.nativeHappiness)} · Tax {formatPercent(facts.nativeTaxRate)}</small>
                         </div>
                     </div>
                 ) : (
-                    <p className="intel-no-facts">
-                        No colony or native population facts are present in this observation.
-                    </p>
+                    <p className="intel-no-facts">No colony or native population facts are present in this observation.</p>
                 )}
             </DetailSection>
 
@@ -163,30 +142,15 @@ export function PlanetDetails({
                 <DetailSection title="Orbit">
                     <div className="intel-orbit-list">
                         {starbase !== null && (
-                            <button
-                                className="intel-orbit-item"
-                                onClick={() => onSelect({ kind: "starbase", value: starbase })}
-                                type="button"
-                            >
+                            <button className="intel-orbit-item" onClick={() => onSelect({ kind: "starbase", value: starbase })} type="button">
                                 <span className="intel-orbit-symbol intel-orbit-symbol-base" />
-                                <span>
-                                    <strong>Starbase #{starbase.starbase_id}</strong>
-                                    <small>Open factual starbase observation</small>
-                                </span>
+                                <span><strong>Starbase #{starbase.starbase_id}</strong><small>Open factual starbase observation</small></span>
                             </button>
                         )}
                         {orbitShips.map((ship) => (
-                            <button
-                                className="intel-orbit-item"
-                                key={ship.ship_id}
-                                onClick={() => onSelect({ kind: "ship", value: ship })}
-                                type="button"
-                            >
+                            <button className="intel-orbit-item" key={ship.ship_id} onClick={() => onSelect({ kind: "ship", value: ship })} type="button">
                                 <span className={`intel-orbit-symbol intel-orbit-symbol-${shipRole(ship)}`} />
-                                <span>
-                                    <strong>{ship.name ?? `Ship ${ship.ship_id}`}</strong>
-                                    <small>{SHIP_ROLE_LABEL[shipRole(ship)]} · ID {ship.ship_id}</small>
-                                </span>
+                                <span><strong>{ship.name ?? `Ship ${ship.ship_id}`}</strong><small>{SHIP_ROLE_LABEL[shipRole(ship)]} · ID {ship.ship_id}</small></span>
                             </button>
                         ))}
                     </div>
