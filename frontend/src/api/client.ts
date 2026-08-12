@@ -357,6 +357,30 @@ export function getLatestPrivateIntel(
     );
 }
 
+export async function refreshPrivateIntel(
+    gameId: number,
+    linkedAccountId: number,
+): Promise<LatestPrivateIntelResponse> {
+    const response = await fetch(
+        `/api/games/${gameId}/private-intel/refresh?linked_account_id=${linkedAccountId}`,
+        {
+            method: "POST",
+            credentials: "same-origin",
+            headers: {
+                Accept: "application/json",
+            },
+        },
+    );
+
+    if (!response.ok) {
+        throw new Error(
+            `Private intel refresh failed: ${await parseErrorMessage(response)}`,
+        );
+    }
+
+    return response.json() as Promise<LatestPrivateIntelResponse>;
+}
+
 export function getCombinedPrivateIntel(
     gameId: number,
     linkedAccountId: number,

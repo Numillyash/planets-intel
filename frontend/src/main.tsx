@@ -15,6 +15,7 @@ import {
     getScoreHistory,
     login,
     logout,
+    refreshPrivateIntel,
 } from "./api/client";
 import { AccountSettings } from "./features/account/AccountSettings";
 import { PrivateIntelMap } from "./features/map/PrivateIntelMap";
@@ -287,12 +288,18 @@ function Dashboard({ user, onLogout }: DashboardProps) {
         };
     }, [selectedGameId]);
 
+    const selectedAccount =
+        accounts.find((account) => account.id === selectedAccountId) ?? null;
+    const selectedGame =
+        games.find((item) => item.id === selectedGameId) ?? null;
+
     useEffect(() => {
         let cancelled = false;
 
         if (
             selectedAccountId === null ||
-            selectedGameId === null
+            selectedGameId === null ||
+            selectedGame === null
         ) {
             setPrivateIntel(null);
             setPrivateIntelError(null);
@@ -304,6 +311,10 @@ function Dashboard({ user, onLogout }: DashboardProps) {
 
         const accountId = selectedAccountId;
         const gameId = selectedGameId;
+        const expectedTurn = selectedGame.turn;
+        const isRunning =
+            selectedGame.status_name.toLowerCase() === "running" ||
+            selectedGame.status_id === 2;
 
         async function loadPrivateIntel() {
             setPrivateIntelLoading(true);
@@ -311,10 +322,21 @@ function Dashboard({ user, onLogout }: DashboardProps) {
             setPrivateIntel(null);
 
             try {
-                const response = await getLatestPrivateIntel(
+                let response = await getLatestPrivateIntel(
                     gameId,
                     accountId,
                 );
+
+                const needsRefresh =
+                    response === null ||
+                    response.turn < expectedTurn;
+
+                if (needsRefresh && isRunning) {
+                    response = await refreshPrivateIntel(
+                        gameId,
+                        accountId,
+                    );
+                }
 
                 if (!cancelled) {
                     setPrivateIntel(response);
@@ -338,7 +360,7 @@ function Dashboard({ user, onLogout }: DashboardProps) {
         return () => {
             cancelled = true;
         };
-    }, [selectedAccountId, selectedGameId]);
+    }, [selectedAccountId, selectedGameId, selectedGame]);
 
     const latestScores = useMemo(() => {
         const result = new Map<number, ScoreHistoryResponse["items"][number]>();
@@ -353,10 +375,39 @@ function Dashboard({ user, onLogout }: DashboardProps) {
         return result;
     }, [history]);
 
-    const selectedAccount =
-        accounts.find((account) => account.id === selectedAccountId) ?? null;
-    const selectedGame =
-        games.find((item) => item.id === selectedGameId) ?? null;
+    async function handlePrivateIntelRefresh() {
+        if (
+            selectedAccountId === null ||
+            selectedGameId === null
+        ) {
+            return;
+        }
+
+        const accountId = selectedAccountId;
+        const gameId = selectedGameId;
+
+        setPrivateIntelLoading(true);
+        setPrivateIntelError(null);
+
+        try {
+            const response = await refreshPrivateIntel(
+                gameId,
+                accountId,
+            );
+            setPrivateIntel(response);
+
+            const refreshedHistory = await getScoreHistory(gameId);
+            setHistory(refreshedHistory);
+        } catch (reason) {
+            setPrivateIntelError(
+                reason instanceof Error
+                    ? reason.message
+                    : "Failed to refresh private intelligence",
+            );
+        } finally {
+            setPrivateIntelLoading(false);
+        }
+    }
 
     async function handleLogout() {
         setLoggingOut(true);
@@ -518,8 +569,33 @@ function Dashboard({ user, onLogout }: DashboardProps) {
             </section>
 
             {selectedAccount && (
-                <div className="eyebrow">
-                    Observer provenance: {selectedAccount.planets_username}
+                <div
+                    style={{
+                        alignItems: "center",
+                        display: "flex",
+                        flexWrap: "wrap",
+                        gap: 12,
+                        justifyContent: "space-between",
+                    }}
+                >
+                    <div className="eyebrow">
+                        Observer provenance: {selectedAccount.planets_username}
+                    </div>
+                    <button
+                        className="secondary-button"
+                        disabled={
+                            privateIntelLoading ||
+                            selectedGameId === null
+                        }
+                        onClick={() => {
+                            void handlePrivateIntelRefresh();
+                        }}
+                        type="button"
+                    >
+                        {privateIntelLoading
+                            ? "Syncing private intel…"
+                            : "Refresh private intel"}
+                    </button>
                 </div>
             )}
 
