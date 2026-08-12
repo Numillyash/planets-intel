@@ -10,6 +10,9 @@ from app.models.planet_observation import PlanetObservation
 from app.models.private_observation_batch import PrivateObservationBatch
 from app.models.ship_observation import ShipObservation
 from app.models.starbase_observation import StarbaseObservation
+from app.models.stellar_cartography_observation import (
+    StellarCartographyObservation,
+)
 
 
 PRIVATE_TURN_SOURCE = "planets.nu/loadturn"
@@ -20,6 +23,12 @@ SENSITIVE_KEYS = frozenset(
         "password",
         "savekey",
     }
+)
+
+STELLAR_COLLECTIONS: tuple[tuple[str, str], ...] = (
+    ("nebulas", "nebula"),
+    ("ionstorms", "ion_storm"),
+    ("stars", "star_cluster"),
 )
 
 
@@ -65,6 +74,35 @@ def _require_entity_list(
     if not isinstance(value, list):
         raise PrivateTurnObservationError(
             f"rst.{name} must be a list"
+        )
+
+    result: list[dict[str, Any]] = []
+
+    for index, item in enumerate(value):
+        if not isinstance(item, dict):
+            raise PrivateTurnObservationError(
+                f"rst.{name}[{index}] must be an object"
+            )
+
+        result.append(
+            _sanitize(item)
+        )
+
+    return result
+
+
+def _optional_entity_list(
+    rst: dict[str, Any],
+    name: str,
+) -> list[dict[str, Any]]:
+    value = rst.get(name, [])
+
+    if value is None:
+        return []
+
+    if not isinstance(value, list):
+        raise PrivateTurnObservationError(
+            f"rst.{name} must be a list when present"
         )
 
     result: list[dict[str, Any]] = []
@@ -154,11 +192,13 @@ def _snapshot_hash(
     planets: list[dict[str, Any]],
     ships: list[dict[str, Any]],
     starbases: list[dict[str, Any]],
+    stellar_cartography: dict[str, list[dict[str, Any]]],
 ) -> str:
     canonical = {
         "planets": planets,
         "ships": ships,
         "starbases": starbases,
+        "stellar_cartography": stellar_cartography,
     }
 
     encoded = json.dumps(
@@ -243,10 +283,18 @@ def persist_private_turn(
         "rst.starbases",
     )
 
+    stellar_cartography: dict[str, list[dict[str, Any]]] = {}
+    for source_name, feature_type in STELLAR_COLLECTIONS:
+        stellar_cartography[feature_type] = _sort_by_id(
+            _optional_entity_list(rst, source_name),
+            f"rst.{source_name}",
+        )
+
     snapshot_hash = _snapshot_hash(
         planets,
         ships,
         starbases,
+        stellar_cartography,
     )
 
     batch_table = (
@@ -311,6 +359,9 @@ def persist_private_turn(
             "planets": len(planets),
             "ships": len(ships),
             "starbases": len(starbases),
+            "nebulas": len(stellar_cartography["nebula"]),
+            "ion_storms": len(stellar_cartography["ion_storm"]),
+            "star_clusters": len(stellar_cartography["star_cluster"]),
         }
 
     planet_rows = []
@@ -433,6 +484,49 @@ def persist_private_turn(
             }
         )
 
+    stellar_rows = []
+
+    for feature_type, records in stellar_cartography.items():
+        for raw in records:
+            label = feature_type.replace("_", " ")
+            stellar_rows.append(
+                {
+                    "batch_id": batch_id,
+                    "feature_type": feature_type,
+                    "feature_id": _required_int(
+                        raw,
+                        "id",
+                        label,
+                    ),
+                    "name": _optional_string(
+                        raw,
+                        "name",
+                        label,
+                    ),
+                    "info_turn": _optional_int(
+                        raw,
+                        "infoturn",
+                        label,
+                    ),
+                    "x": _optional_int(
+                        raw,
+                        "x",
+                        label,
+                    ),
+                    "y": _optional_int(
+                        raw,
+                        "y",
+                        label,
+                    ),
+                    "radius": _optional_int(
+                        raw,
+                        "radius",
+                        label,
+                    ),
+                    "payload": raw,
+                }
+            )
+
     if planet_rows:
         session.execute(
             pg_insert(
@@ -457,6 +551,14 @@ def persist_private_turn(
             starbase_rows,
         )
 
+    if stellar_rows:
+        session.execute(
+            pg_insert(
+                StellarCartographyObservation.__table__
+            ),
+            stellar_rows,
+        )
+
     session.flush()
 
     return {
@@ -471,4 +573,7 @@ def persist_private_turn(
         "planets": len(planets),
         "ships": len(ships),
         "starbases": len(starbases),
+        "nebulas": len(stellar_cartography["nebula"]),
+        "ion_storms": len(stellar_cartography["ion_storm"]),
+        "star_clusters": len(stellar_cartography["star_cluster"]),
     }

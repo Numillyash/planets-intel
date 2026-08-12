@@ -2,6 +2,7 @@ import { Container, Graphics, Text } from "pixi.js";
 import type { PlanetObservationResponse } from "../../types/api";
 import type {
     MapStarbaseObservation,
+    MapStellarCartographyObservation,
     PrivateIntelMapResponse,
 } from "../../types/intel";
 import { raceVisual } from "../../lib/races";
@@ -24,9 +25,269 @@ const UNKNOWN_OWNER_COLOR = 0x7b8798;
 
 
 function ownerColor(ownerId: number | null): number {
-    // In the classic 11-race game format player slots 1..11 map to the
-    // corresponding race ids. Unknown/neutral ownership stays gray.
     return raceVisual(ownerId)?.color ?? UNKNOWN_OWNER_COLOR;
+}
+
+
+function payloadNumber(
+    feature: MapStellarCartographyObservation,
+    key: string,
+): number | null {
+    const value = feature.payload[key];
+    return typeof value === "number" && Number.isFinite(value)
+        ? value
+        : null;
+}
+
+
+function clamp(value: number, min: number, max: number): number {
+    return Math.min(Math.max(value, min), max);
+}
+
+
+function starClusterColor(temperature: number | null): number {
+    if (temperature === null) return 0xd7e4f5;
+    if (temperature <= 3000) return 0xef5a4f;
+    if (temperature <= 6000) return 0xf0cf55;
+    if (temperature <= 10000) return 0xa97855;
+    if (temperature <= 20000) return 0xf2f3e9;
+    return 0x86bfff;
+}
+
+
+function featureIsSelected(
+    selected: SelectedEntity | null,
+    feature: MapStellarCartographyObservation,
+): boolean {
+    return selected?.kind === "stellar" &&
+        selected.value.feature_type === feature.feature_type &&
+        selected.value.feature_id === feature.feature_id;
+}
+
+
+function addSelectedFeatureLabel(
+    world: Container,
+    feature: MapStellarCartographyObservation,
+    x: number,
+    y: number,
+) {
+    const kindLabel = feature.feature_type === "nebula"
+        ? "Nebula"
+        : feature.feature_type === "ion_storm"
+            ? "Ion storm"
+            : "Star cluster";
+
+    const label = new Text({
+        text: feature.name ?? `${kindLabel} #${feature.feature_id}`,
+        style: {
+            fill: 0xf4f8ff,
+            fontFamily: "Inter, Arial, sans-serif",
+            fontSize: 12,
+            fontWeight: "600",
+            stroke: {
+                color: 0x060a10,
+                width: 4,
+            },
+        },
+        resolution: 2,
+    });
+    label.position.set(x + 10, y - 16);
+    world.addChild(label);
+}
+
+
+function drawNebula(
+    world: Container,
+    feature: MapStellarCartographyObservation,
+    bounds: MapBounds,
+    selected: SelectedEntity | null,
+    onSelect: (entity: SelectedEntity) => void,
+) {
+    if (feature.x === null || feature.y === null || feature.radius === null) {
+        return;
+    }
+
+    const y = renderY(feature.y, bounds);
+    const intensity = payloadNumber(feature, "intensity") ?? 0;
+    const alpha = 0.07 + clamp(intensity / 100, 0, 1) * 0.08;
+    const isSelected = featureIsSelected(selected, feature);
+
+    const cloud = new Graphics()
+        .circle(0, 0, feature.radius)
+        .fill({ color: 0x3f7fae, alpha })
+        .stroke({
+            color: isSelected ? 0xaedfff : 0x5c9cca,
+            width: isSelected ? 2 : 1,
+            alpha: isSelected ? 0.9 : 0.32,
+        });
+
+    cloud.circle(0, 0, feature.radius * 0.72).stroke({
+        color: 0x76b5da,
+        width: 1,
+        alpha: 0.12,
+    });
+    cloud.circle(0, 0, feature.radius * 0.42).stroke({
+        color: 0x91c8e6,
+        width: 1,
+        alpha: 0.09,
+    });
+
+    cloud.position.set(feature.x, y);
+    cloud.eventMode = "static";
+    cloud.cursor = "pointer";
+    cloud.on("pointertap", (event) => {
+        event.stopPropagation();
+        onSelect({ kind: "stellar", value: feature });
+    });
+    world.addChild(cloud);
+
+    if (isSelected) {
+        addSelectedFeatureLabel(world, feature, feature.x, y);
+    }
+}
+
+
+function drawStarCluster(
+    world: Container,
+    feature: MapStellarCartographyObservation,
+    bounds: MapBounds,
+    selected: SelectedEntity | null,
+    onSelect: (entity: SelectedEntity) => void,
+) {
+    if (feature.x === null || feature.y === null || feature.radius === null) {
+        return;
+    }
+
+    const y = renderY(feature.y, bounds);
+    const mass = payloadNumber(feature, "mass");
+    const temperature = payloadNumber(feature, "temp");
+    const haloRadius = mass !== null && mass > 0
+        ? Math.sqrt(mass)
+        : feature.radius;
+    const color = starClusterColor(temperature);
+    const isSelected = featureIsSelected(selected, feature);
+
+    const halo = new Graphics()
+        .circle(0, 0, haloRadius)
+        .fill({ color, alpha: 0.045 })
+        .stroke({
+            color,
+            width: isSelected ? 2 : 1.1,
+            alpha: isSelected ? 0.78 : 0.25,
+        });
+    halo.position.set(feature.x, y);
+    world.addChild(halo);
+
+    const core = new Graphics()
+        .circle(0, 0, feature.radius)
+        .fill({ color, alpha: 0.45 })
+        .stroke({
+            color: isSelected ? 0xffffff : color,
+            width: isSelected ? 2.2 : 1.4,
+            alpha: 0.92,
+        });
+    core.position.set(feature.x, y);
+    core.eventMode = "static";
+    core.cursor = "pointer";
+    core.on("pointertap", (event) => {
+        event.stopPropagation();
+        onSelect({ kind: "stellar", value: feature });
+    });
+    world.addChild(core);
+
+    if (isSelected) {
+        addSelectedFeatureLabel(world, feature, feature.x, y);
+    }
+}
+
+
+function drawIonStorm(
+    world: Container,
+    feature: MapStellarCartographyObservation,
+    bounds: MapBounds,
+    selected: SelectedEntity | null,
+    onSelect: (entity: SelectedEntity) => void,
+) {
+    if (feature.x === null || feature.y === null || feature.radius === null) {
+        return;
+    }
+
+    const y = renderY(feature.y, bounds);
+    const voltage = payloadNumber(feature, "voltage") ?? 0;
+    const heading = payloadNumber(feature, "heading");
+    const warp = payloadNumber(feature, "warp") ?? 0;
+    const isGrowing = feature.payload.isgrowing === true;
+    const isSelected = featureIsSelected(selected, feature);
+    const alpha = 0.07 + clamp(voltage / 300, 0, 1) * 0.13;
+
+    const storm = new Graphics()
+        .circle(0, 0, feature.radius)
+        .fill({ color: 0xe7bd3d, alpha })
+        .stroke({
+            color: isSelected ? 0xffef9a : 0xe8c95d,
+            width: isSelected ? 2 : 1.1,
+            alpha: isSelected ? 0.9 : 0.48,
+        });
+
+    storm.circle(0, 0, feature.radius * 0.68).stroke({
+        color: 0xf2d96b,
+        width: 1,
+        alpha: isGrowing ? 0.28 : 0.15,
+    });
+
+    storm.position.set(feature.x, y);
+    storm.eventMode = "static";
+    storm.cursor = "pointer";
+    storm.on("pointertap", (event) => {
+        event.stopPropagation();
+        onSelect({ kind: "stellar", value: feature });
+    });
+    world.addChild(storm);
+
+    const center = new Graphics()
+        .circle(0, 0, 2.4)
+        .fill({ color: 0xffdf62, alpha: 0.9 });
+    center.position.set(feature.x, y);
+    world.addChild(center);
+
+    if (heading !== null && warp > 0) {
+        const angle = heading * Math.PI / 180;
+        const length = 14 + Math.min(warp, 20) * 4;
+        const dx = Math.sin(angle) * length;
+        const dy = -Math.cos(angle) * length;
+        const vector = new Graphics()
+            .moveTo(feature.x, y)
+            .lineTo(feature.x + dx, y + dy)
+            .stroke({
+                color: 0xffd95c,
+                width: 1.3,
+                alpha: 0.8,
+            });
+        world.addChild(vector);
+    }
+
+    if (isSelected) {
+        addSelectedFeatureLabel(world, feature, feature.x, y);
+    }
+}
+
+
+function drawStellarCartography(
+    world: Container,
+    intel: PrivateIntelMapResponse,
+    bounds: MapBounds,
+    selected: SelectedEntity | null,
+    onSelect: (entity: SelectedEntity) => void,
+) {
+    for (const feature of intel.stellar_cartography) {
+        if (feature.feature_type === "nebula") {
+            drawNebula(world, feature, bounds, selected, onSelect);
+        } else if (feature.feature_type === "star_cluster") {
+            drawStarCluster(world, feature, bounds, selected, onSelect);
+        } else if (feature.feature_type === "ion_storm") {
+            drawIonStorm(world, feature, bounds, selected, onSelect);
+        }
+    }
 }
 
 
@@ -76,7 +337,7 @@ function planetIsSelected(
     selected: SelectedEntity | null,
     planet: PlanetObservationResponse,
 ): boolean {
-    if (selected === null) {
+    if (selected === null || selected.kind === "stellar") {
         return false;
     }
 
@@ -118,6 +379,14 @@ export function drawMapScene({
     selected: SelectedEntity | null;
     onSelect: (entity: SelectedEntity) => void;
 }) {
+    drawStellarCartography(
+        world,
+        intel,
+        bounds,
+        selected,
+        onSelect,
+    );
+
     const linkLayer = new Graphics();
     for (const link of links) {
         if (
@@ -241,9 +510,6 @@ export function drawMapScene({
     }
 
     for (const position of shipPositions) {
-        // At-planet ships are intentionally not drawn as separate glyphs.
-        // The orbit ring signals their presence, and the planet Orbit panel
-        // remains the factual selector for individual ships.
         if (position.planetId !== null) {
             continue;
         }

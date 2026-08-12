@@ -215,6 +215,9 @@ export interface PrivateIntelCounts {
     planets: number;
     ships: number;
     starbases: number;
+    nebulas: number;
+    ion_storms: number;
+    star_clusters: number;
 }
 
 export interface PlanetObservationResponse {
@@ -247,6 +250,22 @@ export interface StarbaseObservationResponse {
     payload: Record<string, unknown>;
 }
 
+export type StellarCartographyFeatureType =
+    | "nebula"
+    | "ion_storm"
+    | "star_cluster";
+
+export interface StellarCartographyObservationResponse {
+    feature_type: StellarCartographyFeatureType;
+    feature_id: number;
+    name: string | null;
+    info_turn: number | null;
+    x: number | null;
+    y: number | null;
+    radius: number | null;
+    payload: Record<string, unknown>;
+}
+
 export interface LatestPrivateIntelResponse {
     game_id: number;
     turn: number;
@@ -256,4 +275,5 @@ export interface LatestPrivateIntelResponse {
     planets: PlanetObservationResponse[];
     ships: ShipObservationResponse[];
     starbases: StarbaseObservationResponse[];
+    stellar_cartography: StellarCartographyObservationResponse[];
 }

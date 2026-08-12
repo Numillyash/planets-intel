@@ -9,6 +9,7 @@ from app.schemas.private_intel import (
     PrivateIntelObserver,
     ShipObservationResponse,
     StarbaseObservationResponse,
+    StellarCartographyObservationResponse,
 )
 
 
@@ -51,6 +52,14 @@ class CombinedStarbaseObservationResponse(StarbaseObservationResponse):
     provenance: list[CombinedIntelEntityProvenance]
 
 
+class CombinedStellarCartographyObservationResponse(
+    StellarCartographyObservationResponse
+):
+    selected_source_linked_account_id: int
+    field_sources: dict[str, int]
+    provenance: list[CombinedIntelEntityProvenance]
+
+
 class CombinedPrivateIntelResponse(BaseModel):
     mode: Literal["combined"] = "combined"
     aggregation_policy: Literal["freshest_field_union"] = (
@@ -66,3 +75,6 @@ class CombinedPrivateIntelResponse(BaseModel):
     planets: list[CombinedPlanetObservationResponse]
     ships: list[CombinedShipObservationResponse]
     starbases: list[CombinedStarbaseObservationResponse]
+    stellar_cartography: list[
+        CombinedStellarCartographyObservationResponse
+    ]

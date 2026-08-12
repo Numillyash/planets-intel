@@ -5,6 +5,7 @@ import type {
     PrivateIntelObserver,
     ShipObservationResponse,
     StarbaseObservationResponse,
+    StellarCartographyObservationResponse,
 } from "./api";
 
 export interface DashboardIntelShareAccount {
@@ -68,6 +69,9 @@ export type MapShipObservation = ShipObservationResponse &
 export type MapStarbaseObservation = StarbaseObservationResponse &
     CombinedEntityMetadata;
 
+export type MapStellarCartographyObservation =
+    StellarCartographyObservationResponse & CombinedEntityMetadata;
+
 export interface CombinedPrivateIntelResponse {
     mode: "combined";
     aggregation_policy: "freshest_field_union";
@@ -79,6 +83,7 @@ export interface CombinedPrivateIntelResponse {
     planets: MapPlanetObservation[];
     ships: MapShipObservation[];
     starbases: MapStarbaseObservation[];
+    stellar_cartography: MapStellarCartographyObservation[];
 }
 
 export type PrivateIntelMapResponse =

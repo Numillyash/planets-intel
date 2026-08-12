@@ -1,7 +1,7 @@
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class PrivateIntelObserver(BaseModel):
@@ -23,6 +23,9 @@ class PrivateIntelCounts(BaseModel):
     planets: int
     ships: int
     starbases: int
+    nebulas: int = 0
+    ion_storms: int = 0
+    star_clusters: int = 0
 
 
 class PlanetObservationResponse(BaseModel):
@@ -55,6 +58,21 @@ class StarbaseObservationResponse(BaseModel):
     payload: dict[str, Any]
 
 
+class StellarCartographyObservationResponse(BaseModel):
+    feature_type: Literal[
+        "nebula",
+        "ion_storm",
+        "star_cluster",
+    ]
+    feature_id: int
+    name: str | None
+    info_turn: int | None
+    x: int | None
+    y: int | None
+    radius: int | None
+    payload: dict[str, Any]
+
+
 class LatestPrivateIntelResponse(BaseModel):
     game_id: int
     turn: int
@@ -66,3 +84,6 @@ class LatestPrivateIntelResponse(BaseModel):
     planets: list[PlanetObservationResponse]
     ships: list[ShipObservationResponse]
     starbases: list[StarbaseObservationResponse]
+    stellar_cartography: list[
+        StellarCartographyObservationResponse
+    ] = Field(default_factory=list)

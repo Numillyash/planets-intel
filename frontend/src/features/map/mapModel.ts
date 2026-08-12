@@ -6,6 +6,7 @@ import type {
     MapPlanetObservation,
     MapShipObservation,
     MapStarbaseObservation,
+    MapStellarCartographyObservation,
     PrivateIntelMapResponse,
 } from "../../types/intel";
 
@@ -15,7 +16,8 @@ export type ShipRole = "freighter" | "torpedo" | "carrier" | "warship";
 export type SelectedEntity =
     | { kind: "planet"; value: MapPlanetObservation }
     | { kind: "ship"; value: MapShipObservation }
-    | { kind: "starbase"; value: MapStarbaseObservation };
+    | { kind: "starbase"; value: MapStarbaseObservation }
+    | { kind: "stellar"; value: MapStellarCartographyObservation };
 
 export interface MapBounds {
     minX: number;
@@ -118,6 +120,29 @@ export function observedBounds(intel: PrivateIntelMapResponse): MapBounds {
     for (const ship of intel.ships) {
         if (ship.x !== null && ship.y !== null) {
             coordinates.push({ x: ship.x, y: ship.y });
+        }
+    }
+
+    for (const feature of intel.stellar_cartography) {
+        if (feature.x === null || feature.y === null) {
+            continue;
+        }
+
+        const radius = Math.max(feature.radius ?? 0, 0);
+        coordinates.push(
+            { x: feature.x - radius, y: feature.y - radius },
+            { x: feature.x + radius, y: feature.y + radius },
+        );
+
+        if (feature.feature_type === "star_cluster") {
+            const mass = feature.payload.mass;
+            if (typeof mass === "number" && Number.isFinite(mass) && mass > 0) {
+                const haloRadius = Math.sqrt(mass);
+                coordinates.push(
+                    { x: feature.x - haloRadius, y: feature.y - haloRadius },
+                    { x: feature.x + haloRadius, y: feature.y + haloRadius },
+                );
+            }
         }
     }
 

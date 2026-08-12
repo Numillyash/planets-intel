@@ -8,6 +8,9 @@ from app.models.planets_account import PlanetsAccount
 from app.models.private_observation_batch import PrivateObservationBatch
 from app.models.ship_observation import ShipObservation
 from app.models.starbase_observation import StarbaseObservation
+from app.models.stellar_cartography_observation import (
+    StellarCartographyObservation,
+)
 from app.services.payload_safety import sanitize_observation_payload
 
 
@@ -82,6 +85,27 @@ def get_latest_private_intel(
             )
         ).scalars().all()
 
+        stellar_cartography = session.execute(
+            select(StellarCartographyObservation)
+            .where(
+                StellarCartographyObservation.batch_id
+                == batch.id
+            )
+            .order_by(
+                StellarCartographyObservation.feature_type,
+                StellarCartographyObservation.feature_id,
+            )
+        ).scalars().all()
+
+        feature_counts = {
+            "nebula": 0,
+            "ion_storm": 0,
+            "star_cluster": 0,
+        }
+        for item in stellar_cartography:
+            if item.feature_type in feature_counts:
+                feature_counts[item.feature_type] += 1
+
         return {
             "game_id": game_id,
             "turn": batch.turn,
@@ -119,6 +143,9 @@ def get_latest_private_intel(
                 "planets": len(planets),
                 "ships": len(ships),
                 "starbases": len(starbases),
+                "nebulas": feature_counts["nebula"],
+                "ion_storms": feature_counts["ion_storm"],
+                "star_clusters": feature_counts["star_cluster"],
             },
 
             "planets": [
@@ -166,5 +193,21 @@ def get_latest_private_intel(
                     ),
                 }
                 for item in starbases
+            ],
+
+            "stellar_cartography": [
+                {
+                    "feature_type": item.feature_type,
+                    "feature_id": item.feature_id,
+                    "name": item.name,
+                    "info_turn": item.info_turn,
+                    "x": item.x,
+                    "y": item.y,
+                    "radius": item.radius,
+                    "payload": sanitize_observation_payload(
+                        item.payload
+                    ),
+                }
+                for item in stellar_cartography
             ],
         }

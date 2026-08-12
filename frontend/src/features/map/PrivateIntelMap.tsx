@@ -49,7 +49,16 @@ function selectedLabel(selected: SelectedEntity | null): string | null {
         return `Selected: ${selected.value.name ?? `Ship #${selected.value.ship_id}`}`;
     }
 
-    return `Selected: Starbase #${selected.value.starbase_id}`;
+    if (selected.kind === "starbase") {
+        return `Selected: Starbase #${selected.value.starbase_id}`;
+    }
+
+    const kind = selected.value.feature_type === "nebula"
+        ? "Nebula"
+        : selected.value.feature_type === "ion_storm"
+            ? "Ion storm"
+            : "Star cluster";
+    return `Selected: ${selected.value.name ?? `${kind} #${selected.value.feature_id}`}`;
 }
 
 function intelRevisionKey(intel: PrivateIntelMapResponse | null): string {
@@ -237,7 +246,7 @@ export function PrivateIntelMap({
         );
     }
 
-    if (effectiveError !== null) {
+    if (effectiveError !== null && displayIntel === null) {
         return (
             <section className="panel intel-map-panel">
                 <div className="panel-header">
@@ -298,11 +307,19 @@ export function PrivateIntelMap({
                             ` · Observed through ${formatObservedAt(latestObservedAt)}`
                         )}
                     </p>
+                    {effectiveError !== null && (
+                        <p style={{ color: "#d88787", marginTop: 6 }}>
+                            Refresh warning: {effectiveError}
+                        </p>
+                    )}
                 </div>
                 <div className="intel-map-actions">
                     <span>{displayIntel.counts.planets} planets</span>
                     <span>{displayIntel.counts.ships} ships</span>
                     <span>{displayIntel.counts.starbases} bases</span>
+                    <span>{displayIntel.counts.nebulas} nebulae</span>
+                    <span>{displayIntel.counts.star_clusters} clusters</span>
+                    <span>{displayIntel.counts.ion_storms} storms</span>
                     {selection !== null && (
                         <span className="intel-detail-badge">{selection}</span>
                     )}
@@ -371,6 +388,18 @@ export function PrivateIntelMap({
                         <span><i className="legend-planet" />Planet</span>
                         <span><i className="legend-starbase" />Planet + base</span>
                         <span><i className="legend-orbit" />Ships in orbit</span>
+                        <span>
+                            <i style={{ border: "1px solid #5c9cca", borderRadius: "50%", background: "rgba(63,127,174,.35)" }} />
+                            Nebula
+                        </span>
+                        <span>
+                            <i style={{ border: "1px solid #d7e4f5", borderRadius: "50%", background: "rgba(215,228,245,.35)" }} />
+                            Star cluster
+                        </span>
+                        <span>
+                            <i style={{ border: "1px solid #e8c95d", borderRadius: "50%", background: "rgba(231,189,61,.35)" }} />
+                            Ion storm
+                        </span>
                         <span><i className="legend-freighter" />Freighter</span>
                         <span><i className="legend-torpedo" />Torpedo</span>
                         <span><i className="legend-carrier" />Carrier</span>

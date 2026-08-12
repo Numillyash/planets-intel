@@ -9,6 +9,7 @@ import { DetailSection } from "./DetailPrimitives";
 import { PlanetDetails } from "./PlanetDetails";
 import { ShipDetails } from "./ShipDetails";
 import { StarbaseDetails } from "./StarbaseDetails";
+import { StellarFeatureDetails } from "./StellarFeatureDetails";
 
 function EntityProvenance({
     selected,
@@ -87,8 +88,9 @@ export function EntityDetails({
             <div className="intel-map-empty-selection">
                 <strong>Select an entity</strong>
                 <p>
-                    Click a planet or a deep-space ship. Ships in orbit are
-                    listed inside the selected planet's Orbit section.
+                    Click a planet, deep-space ship, nebula, star cluster,
+                    or ion storm. Ships in orbit are listed inside the
+                    selected planet's Orbit section.
                 </p>
             </div>
         );
@@ -114,13 +116,17 @@ export function EntityDetails({
                 ship={selected.value}
             />
         );
-    } else {
+    } else if (selected.kind === "starbase") {
         details = (
             <StarbaseDetails
                 intel={intel}
                 onSelect={onSelect}
                 starbase={selected.value}
             />
+        );
+    } else {
+        details = (
+            <StellarFeatureDetails feature={selected.value} />
         );
     }
 

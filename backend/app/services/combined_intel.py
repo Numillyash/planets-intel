@@ -10,6 +10,9 @@ from app.models.planets_account import PlanetsAccount
 from app.models.private_observation_batch import PrivateObservationBatch
 from app.models.ship_observation import ShipObservation
 from app.models.starbase_observation import StarbaseObservation
+from app.models.stellar_cartography_observation import (
+    StellarCartographyObservation,
+)
 from app.services.payload_safety import sanitize_observation_payload
 
 
@@ -20,6 +23,7 @@ class _Snapshot:
     planets: list[PlanetObservation]
     ships: list[ShipObservation]
     starbases: list[StarbaseObservation]
+    stellar_cartography: list[StellarCartographyObservation]
 
 
 def _load_latest_snapshot(
@@ -70,12 +74,24 @@ def _load_latest_snapshot(
         ).scalars().all()
     )
 
+    stellar_cartography = list(
+        session.execute(
+            select(StellarCartographyObservation)
+            .where(StellarCartographyObservation.batch_id == batch.id)
+            .order_by(
+                StellarCartographyObservation.feature_type,
+                StellarCartographyObservation.feature_id,
+            )
+        ).scalars().all()
+    )
+
     return _Snapshot(
         account=account,
         batch=batch,
         planets=planets,
         ships=ships,
         starbases=starbases,
+        stellar_cartography=stellar_cartography,
     )
 
 
@@ -321,6 +337,52 @@ def _merge_starbases(
     return result
 
 
+def _merge_stellar_cartography(
+    snapshots: list[_Snapshot],
+) -> list[dict[str, Any]]:
+    grouped: dict[
+        tuple[str, int],
+        list[tuple[_Snapshot, StellarCartographyObservation]],
+    ] = {}
+
+    for snapshot in snapshots:
+        for item in snapshot.stellar_cartography:
+            key = (item.feature_type, item.feature_id)
+            grouped.setdefault(key, []).append((snapshot, item))
+
+    result: list[dict[str, Any]] = []
+
+    for feature_type, feature_id in sorted(grouped):
+        entries = grouped[(feature_type, feature_id)]
+        values, field_sources = _base_fields(
+            entries,
+            (
+                "name",
+                "info_turn",
+                "x",
+                "y",
+                "radius",
+            ),
+        )
+        payload, payload_sources = _merge_payload(entries)
+        field_sources.update(payload_sources)
+        selected_source, provenance = _common_entity_metadata(entries)
+
+        result.append(
+            {
+                "feature_type": feature_type,
+                "feature_id": feature_id,
+                **values,
+                "payload": payload,
+                "selected_source_linked_account_id": selected_source,
+                "field_sources": field_sources,
+                "provenance": provenance,
+            }
+        )
+
+    return result
+
+
 def get_combined_private_intel(
     *,
     user_id: int,
@@ -395,6 +457,17 @@ def get_combined_private_intel(
         planets = _merge_planets(snapshots)
         ships = _merge_ships(snapshots)
         starbases = _merge_starbases(snapshots)
+        stellar_cartography = _merge_stellar_cartography(snapshots)
+
+        feature_counts = {
+            "nebula": 0,
+            "ion_storm": 0,
+            "star_cluster": 0,
+        }
+        for item in stellar_cartography:
+            feature_type = item["feature_type"]
+            if feature_type in feature_counts:
+                feature_counts[feature_type] += 1
 
         return {
             "mode": "combined",
@@ -436,8 +509,12 @@ def get_combined_private_intel(
                 "planets": len(planets),
                 "ships": len(ships),
                 "starbases": len(starbases),
+                "nebulas": feature_counts["nebula"],
+                "ion_storms": feature_counts["ion_storm"],
+                "star_clusters": feature_counts["star_cluster"],
             },
             "planets": planets,
             "ships": ships,
             "starbases": starbases,
+            "stellar_cartography": stellar_cartography,
         }
