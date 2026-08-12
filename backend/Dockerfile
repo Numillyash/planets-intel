@@ -26,6 +26,8 @@ COPY backend/app /app/app
 COPY backend/alembic.ini /app/alembic.ini
 COPY backend/alembic /app/alembic
 
+RUN python -m compileall -q /app/app /app/alembic
+
 COPY --from=frontend-build /frontend/dist /app/frontend_dist
 
 EXPOSE 8000
