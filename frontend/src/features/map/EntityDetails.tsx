@@ -88,9 +88,9 @@ export function EntityDetails({
             <div className="intel-map-empty-selection">
                 <strong>Select an entity</strong>
                 <p>
-                    Click a planet, deep-space ship, nebula, star cluster,
-                    or ion storm. Ships in orbit are listed inside the
-                    selected planet's Orbit section.
+                    Click a planet, deep-space ship, minefield, nebula,
+                    star cluster, or ion storm. Ships in orbit are listed
+                    inside the selected planet's Orbit section.
                 </p>
             </div>
         );
@@ -126,7 +126,12 @@ export function EntityDetails({
         );
     } else {
         details = (
-            <StellarFeatureDetails feature={selected.value} />
+            <StellarFeatureDetails
+                feature={selected.value}
+                intel={intel}
+                onSelect={onSelect}
+                players={players}
+            />
         );
     }
 
