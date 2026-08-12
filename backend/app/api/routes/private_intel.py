@@ -9,8 +9,14 @@ from fastapi import (
 
 from app.api.dependencies.auth import require_user
 from app.models.user import AppUser
+from app.schemas.combined_intel import (
+    CombinedPrivateIntelResponse,
+)
 from app.schemas.private_intel import (
     LatestPrivateIntelResponse,
+)
+from app.services.combined_intel import (
+    get_combined_private_intel,
 )
 from app.services.private_intel import (
     get_latest_private_intel,
@@ -49,5 +55,36 @@ def latest_private_intel(
         )
 
     return LatestPrivateIntelResponse(
+        **result
+    )
+
+
+@router.get(
+    "/games/{game_id}/private-intel/combined",
+    response_model=CombinedPrivateIntelResponse,
+)
+def combined_private_intel(
+    game_id: int = Path(gt=0),
+    linked_account_id: int = Query(gt=0),
+    user: AppUser = Depends(
+        require_user
+    ),
+) -> CombinedPrivateIntelResponse:
+    result = get_combined_private_intel(
+        user_id=user.id,
+        game_id=game_id,
+        linked_account_id=linked_account_id,
+    )
+
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                "Private intelligence snapshot "
+                "not found"
+            ),
+        )
+
+    return CombinedPrivateIntelResponse(
         **result
     )

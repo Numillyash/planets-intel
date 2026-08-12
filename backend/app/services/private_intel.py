@@ -8,6 +8,7 @@ from app.models.planets_account import PlanetsAccount
 from app.models.private_observation_batch import PrivateObservationBatch
 from app.models.ship_observation import ShipObservation
 from app.models.starbase_observation import StarbaseObservation
+from app.services.payload_safety import sanitize_observation_payload
 
 
 def get_latest_private_intel(
@@ -128,7 +129,9 @@ def get_latest_private_intel(
                     "name": item.name,
                     "x": item.x,
                     "y": item.y,
-                    "payload": item.payload,
+                    "payload": sanitize_observation_payload(
+                        item.payload
+                    ),
                 }
                 for item in planets
             ],
@@ -143,7 +146,9 @@ def get_latest_private_intel(
                     "x": item.x,
                     "y": item.y,
                     "warp": item.warp,
-                    "payload": item.payload,
+                    "payload": sanitize_observation_payload(
+                        item.payload
+                    ),
                 }
                 for item in ships
             ],
@@ -156,7 +161,9 @@ def get_latest_private_intel(
                     "planet_id": item.planet_id,
                     "race_id": item.race_id,
                     "info_turn": item.info_turn,
-                    "payload": item.payload,
+                    "payload": sanitize_observation_payload(
+                        item.payload
+                    ),
                 }
                 for item in starbases
             ],

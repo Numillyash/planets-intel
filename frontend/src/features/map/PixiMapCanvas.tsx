@@ -1,6 +1,6 @@
 import { type MutableRefObject, useEffect, useMemo, useRef } from "react";
 import { Application, Container } from "pixi.js";
-import type { LatestPrivateIntelResponse } from "../../types/api";
+import type { PrivateIntelMapResponse } from "../../types/intel";
 import {
     observedBounds,
     planetLinks,
@@ -18,7 +18,7 @@ export function PixiMapCanvas({
     onSelect,
     fitViewRef,
 }: {
-    intel: LatestPrivateIntelResponse;
+    intel: PrivateIntelMapResponse;
     labelMode: PlanetLabelMode;
     selected: SelectedEntity | null;
     onSelect: (entity: SelectedEntity) => void;

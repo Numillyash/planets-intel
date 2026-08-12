@@ -1,4 +1,8 @@
-import type { LatestPrivateIntelResponse, PlayerInfo, ShipObservationResponse } from "../../types/api";
+import type { PlayerInfo } from "../../types/api";
+import type {
+    MapShipObservation,
+    PrivateIntelMapResponse,
+} from "../../types/intel";
 import { SHIP_ROLE_LABEL, shipRole, type SelectedEntity } from "./mapModel";
 import { formatInteger, formatPercent, shipFacts } from "./observationView";
 import { DetailSection, FactRow, playerName } from "./DetailPrimitives";
@@ -9,8 +13,8 @@ export function ShipDetails({
     players,
     onSelect,
 }: {
-    ship: ShipObservationResponse;
-    intel: LatestPrivateIntelResponse;
+    ship: MapShipObservation;
+    intel: PrivateIntelMapResponse;
     players: PlayerInfo[];
     onSelect: (entity: SelectedEntity) => void;
 }) {

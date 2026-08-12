@@ -1,4 +1,7 @@
-import type { LatestPrivateIntelResponse, StarbaseObservationResponse } from "../../types/api";
+import type {
+    MapStarbaseObservation,
+    PrivateIntelMapResponse,
+} from "../../types/intel";
 import type { SelectedEntity } from "./mapModel";
 import { formatInteger, formatPercent, starbaseFacts } from "./observationView";
 import { DetailSection, FactRow } from "./DetailPrimitives";
@@ -8,8 +11,8 @@ export function StarbaseDetails({
     intel,
     onSelect,
 }: {
-    starbase: StarbaseObservationResponse;
-    intel: LatestPrivateIntelResponse;
+    starbase: MapStarbaseObservation;
+    intel: PrivateIntelMapResponse;
     onSelect: (entity: SelectedEntity) => void;
 }) {
     const facts = starbaseFacts(starbase);

@@ -1,5 +1,9 @@
 import { Container, Graphics, Text } from "pixi.js";
-import type { LatestPrivateIntelResponse, PlanetObservationResponse } from "../../types/api";
+import type { PlanetObservationResponse } from "../../types/api";
+import type {
+    MapStarbaseObservation,
+    PrivateIntelMapResponse,
+} from "../../types/intel";
 import {
     PLANET_RADIUS,
     planetLabel,
@@ -113,11 +117,11 @@ export function drawMapScene({
     onSelect,
 }: {
     world: Container;
-    intel: LatestPrivateIntelResponse;
+    intel: PrivateIntelMapResponse;
     bounds: MapBounds;
     links: PlanetLink[];
     shipPositions: ShipVisualPosition[];
-    basesByPlanet: Map<number, LatestPrivateIntelResponse["starbases"][number]>;
+    basesByPlanet: Map<number, MapStarbaseObservation>;
     labelMode: PlanetLabelMode;
     selected: SelectedEntity | null;
     onSelect: (entity: SelectedEntity) => void;
@@ -245,8 +249,9 @@ export function drawMapScene({
     }
 
     for (const position of shipPositions) {
-        // Ships sitting on a planet are represented by the planet's orbit ring.
-        // Their factual observations remain selectable from the planet's Orbit panel.
+        // At-planet ships are intentionally not drawn as separate glyphs.
+        // The orbit ring signals their presence, and the planet Orbit panel
+        // remains the factual selector for individual ships.
         if (position.planetId !== null) {
             continue;
         }

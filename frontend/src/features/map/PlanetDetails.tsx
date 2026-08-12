@@ -1,4 +1,8 @@
-import type { LatestPrivateIntelResponse, PlanetObservationResponse, PlayerInfo } from "../../types/api";
+import type { PlayerInfo } from "../../types/api";
+import type {
+    MapPlanetObservation,
+    PrivateIntelMapResponse,
+} from "../../types/intel";
 import type { SelectedEntity } from "./mapModel";
 import { SHIP_ROLE_LABEL, shipRole, shipsAtPlanet } from "./mapModel";
 import { formatInteger, formatPercent, formatTemperature, planetFacts } from "./observationView";
@@ -10,8 +14,8 @@ export function PlanetDetails({
     players,
     onSelect,
 }: {
-    planet: PlanetObservationResponse;
-    intel: LatestPrivateIntelResponse;
+    planet: MapPlanetObservation;
+    intel: PrivateIntelMapResponse;
     players: PlayerInfo[];
     onSelect: (entity: SelectedEntity) => void;
 }) {

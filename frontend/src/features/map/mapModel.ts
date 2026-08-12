@@ -1,17 +1,21 @@
 import type {
-    LatestPrivateIntelResponse,
     PlanetObservationResponse,
     ShipObservationResponse,
-    StarbaseObservationResponse,
 } from "../../types/api";
+import type {
+    MapPlanetObservation,
+    MapShipObservation,
+    MapStarbaseObservation,
+    PrivateIntelMapResponse,
+} from "../../types/intel";
 
 export type PlanetLabelMode = "none" | "id" | "name";
 export type ShipRole = "freighter" | "torpedo" | "carrier" | "warship";
 
 export type SelectedEntity =
-    | { kind: "planet"; value: PlanetObservationResponse }
-    | { kind: "ship"; value: ShipObservationResponse }
-    | { kind: "starbase"; value: StarbaseObservationResponse };
+    | { kind: "planet"; value: MapPlanetObservation }
+    | { kind: "ship"; value: MapShipObservation }
+    | { kind: "starbase"; value: MapStarbaseObservation };
 
 export interface MapBounds {
     minX: number;
@@ -21,12 +25,12 @@ export interface MapBounds {
 }
 
 export interface PlanetLink {
-    from: PlanetObservationResponse;
-    to: PlanetObservationResponse;
+    from: MapPlanetObservation;
+    to: MapPlanetObservation;
 }
 
 export interface ShipVisualPosition {
-    ship: ShipObservationResponse;
+    ship: MapShipObservation;
     anchorX: number;
     anchorY: number;
     x: number;
@@ -102,7 +106,7 @@ export function shipRole(ship: ShipObservationResponse): ShipRole {
     return "warship";
 }
 
-export function observedBounds(intel: LatestPrivateIntelResponse): MapBounds {
+export function observedBounds(intel: PrivateIntelMapResponse): MapBounds {
     const coordinates: Array<{ x: number; y: number }> = [];
 
     for (const planet of intel.planets) {
@@ -158,11 +162,11 @@ export function planetLabel(
 }
 
 export function planetLinks(
-    planets: PlanetObservationResponse[],
+    planets: MapPlanetObservation[],
     maxDistance = PLANET_LINK_RANGE,
 ): PlanetLink[] {
     const positioned = planets.filter(
-        (planet): planet is PlanetObservationResponse & { x: number; y: number } =>
+        (planet): planet is MapPlanetObservation & { x: number; y: number } =>
             planet.x !== null && planet.y !== null,
     );
     const maxDistanceSquared = maxDistance * maxDistance;
@@ -184,9 +188,9 @@ export function planetLinks(
 }
 
 export function starbaseByPlanetId(
-    starbases: StarbaseObservationResponse[],
-): Map<number, StarbaseObservationResponse> {
-    const result = new Map<number, StarbaseObservationResponse>();
+    starbases: MapStarbaseObservation[],
+): Map<number, MapStarbaseObservation> {
+    const result = new Map<number, MapStarbaseObservation>();
     for (const starbase of starbases) {
         if (starbase.planet_id !== null) {
             result.set(starbase.planet_id, starbase);
@@ -196,9 +200,9 @@ export function starbaseByPlanetId(
 }
 
 export function shipsAtPlanet(
-    ships: ShipObservationResponse[],
+    ships: MapShipObservation[],
     planet: PlanetObservationResponse,
-): ShipObservationResponse[] {
+): MapShipObservation[] {
     if (planet.x === null || planet.y === null) {
         return [];
     }
@@ -239,17 +243,17 @@ function clusteredOffset(
 }
 
 export function shipVisualPositions(
-    intel: LatestPrivateIntelResponse,
+    intel: PrivateIntelMapResponse,
     bounds: MapBounds,
 ): ShipVisualPosition[] {
-    const planetAt = new Map<string, PlanetObservationResponse>();
+    const planetAt = new Map<string, MapPlanetObservation>();
     for (const planet of intel.planets) {
         if (planet.x !== null && planet.y !== null) {
             planetAt.set(coordinateKey(planet.x, planet.y), planet);
         }
     }
 
-    const groups = new Map<string, ShipObservationResponse[]>();
+    const groups = new Map<string, MapShipObservation[]>();
     for (const ship of intel.ships) {
         if (ship.x === null || ship.y === null) {
             continue;

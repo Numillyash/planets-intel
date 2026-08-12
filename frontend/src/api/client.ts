@@ -11,7 +11,12 @@ import type {
     ScoreHistoryResponse,
     UnlinkPlanetsAccountResponse,
 } from "../types/api";
-
+import type {
+    CombinedPrivateIntelResponse,
+    DashboardIntelShareResponse,
+    DashboardIntelShareRevokeResponse,
+    DashboardIntelSharesResponse,
+} from "../types/intel";
 
 async function parseErrorMessage(
     response: Response,
@@ -31,7 +36,6 @@ async function parseErrorMessage(
     return `${response.status} ${response.statusText}`;
 }
 
-
 async function apiGet<T>(url: string): Promise<T> {
     const response = await fetch(url, {
         credentials: "same-origin",
@@ -48,7 +52,6 @@ async function apiGet<T>(url: string): Promise<T> {
 
     return response.json() as Promise<T>;
 }
-
 
 async function apiGetOptional<T>(
     url: string,
@@ -73,7 +76,6 @@ async function apiGetOptional<T>(
     return response.json() as Promise<T>;
 }
 
-
 export async function getCurrentUser(): Promise<CurrentUserResponse | null> {
     const response = await fetch("/api/auth/me", {
         credentials: "same-origin",
@@ -94,7 +96,6 @@ export async function getCurrentUser(): Promise<CurrentUserResponse | null> {
 
     return response.json() as Promise<CurrentUserResponse>;
 }
-
 
 export async function login(
     username: string,
@@ -124,7 +125,6 @@ export async function login(
     return payload.user;
 }
 
-
 export async function logout(): Promise<void> {
     const response = await fetch("/api/auth/logout", {
         method: "POST",
@@ -146,7 +146,6 @@ export async function logout(): Promise<void> {
         throw new Error("Logout failed");
     }
 }
-
 
 export async function changePassword(
     currentPassword: string,
@@ -178,13 +177,11 @@ export async function changePassword(
     }
 }
 
-
 export function getPlanetsAccounts(): Promise<PlanetsAccountsResponse> {
     return apiGet<PlanetsAccountsResponse>(
         "/api/planets/accounts",
     );
 }
-
 
 export async function linkPlanetsAccount(
     username: string,
@@ -211,7 +208,6 @@ export async function linkPlanetsAccount(
 
     return response.json() as Promise<PlanetsAccountResponse>;
 }
-
 
 export async function unlinkPlanetsAccount(
     accountId: number,
@@ -240,6 +236,93 @@ export async function unlinkPlanetsAccount(
     }
 }
 
+export function getDashboardIntelShares(): Promise<DashboardIntelSharesResponse> {
+    return apiGet<DashboardIntelSharesResponse>(
+        "/api/intel/shares",
+    );
+}
+
+export async function requestDashboardIntelShare(
+    sourceAccountId: number,
+    targetPlanetsUsername: string,
+): Promise<DashboardIntelShareResponse> {
+    const response = await fetch("/api/intel/shares", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+            source_account_id: sourceAccountId,
+            target_planets_username: targetPlanetsUsername,
+        }),
+    });
+
+    if (!response.ok) {
+        throw new Error(
+            await parseErrorMessage(response),
+        );
+    }
+
+    return response.json() as Promise<DashboardIntelShareResponse>;
+}
+
+export async function acceptDashboardIntelShare(
+    shareId: number,
+    accountId: number,
+): Promise<DashboardIntelShareResponse> {
+    const response = await fetch(
+        `/api/intel/shares/${shareId}/accept`,
+        {
+            method: "POST",
+            credentials: "same-origin",
+            headers: {
+                Accept: "application/json",
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                account_id: accountId,
+            }),
+        },
+    );
+
+    if (!response.ok) {
+        throw new Error(
+            await parseErrorMessage(response),
+        );
+    }
+
+    return response.json() as Promise<DashboardIntelShareResponse>;
+}
+
+export async function revokeDashboardIntelShare(
+    shareId: number,
+    accountId: number,
+): Promise<void> {
+    const response = await fetch(
+        `/api/intel/shares/${shareId}?account_id=${accountId}`,
+        {
+            method: "DELETE",
+            credentials: "same-origin",
+            headers: {
+                Accept: "application/json",
+            },
+        },
+    );
+
+    if (!response.ok) {
+        throw new Error(
+            await parseErrorMessage(response),
+        );
+    }
+
+    const payload = await response.json() as DashboardIntelShareRevokeResponse;
+
+    if (!payload.success) {
+        throw new Error("Failed to revoke dashboard intel share");
+    }
+}
 
 export function getAccountGames(
     accountId: number,
@@ -249,7 +332,6 @@ export function getAccountGames(
     );
 }
 
-
 export function getGame(
     gameId: number,
 ): Promise<GameDetailsResponse> {
@@ -257,7 +339,6 @@ export function getGame(
         `/api/games/${gameId}`,
     );
 }
-
 
 export function getScoreHistory(
     gameId: number,
@@ -267,12 +348,20 @@ export function getScoreHistory(
     );
 }
 
-
 export function getLatestPrivateIntel(
     gameId: number,
     linkedAccountId: number,
 ): Promise<LatestPrivateIntelResponse | null> {
     return apiGetOptional<LatestPrivateIntelResponse>(
         `/api/games/${gameId}/private-intel/latest?linked_account_id=${linkedAccountId}`,
+    );
+}
+
+export function getCombinedPrivateIntel(
+    gameId: number,
+    linkedAccountId: number,
+): Promise<CombinedPrivateIntelResponse | null> {
+    return apiGetOptional<CombinedPrivateIntelResponse>(
+        `/api/games/${gameId}/private-intel/combined?linked_account_id=${linkedAccountId}`,
     );
 }

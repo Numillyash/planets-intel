@@ -1,3 +1,4 @@
+from app.models.dashboard_intel_share import DashboardIntelShare
 from app.models.game import Game
 from app.models.game_player_slot import GamePlayerSlot
 from app.models.planet_observation import PlanetObservation
@@ -13,6 +14,7 @@ from app.models.user import AppUser
 __all__ = [
     "AppSession",
     "AppUser",
+    "DashboardIntelShare",
     "Game",
     "GamePlayerSlot",
     "PlanetObservation",

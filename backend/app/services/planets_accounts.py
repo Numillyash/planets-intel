@@ -1,9 +1,10 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import delete, or_, select
 
 from app.core.credentials import encrypt_credential
 from app.db.session import SessionLocal
+from app.models.dashboard_intel_share import DashboardIntelShare
 from app.models.planets_account import PlanetsAccount
 from app.planetsnu.client import PlanetsNuClient
 
@@ -130,6 +131,19 @@ def unlink_planets_account(
 
         now = datetime.now(
             timezone.utc
+        )
+
+        # Unlink is also an explicit withdrawal of dashboard-sharing consent.
+        # Re-linking the account later must not silently restore old shares.
+        session.execute(
+            delete(DashboardIntelShare).where(
+                or_(
+                    DashboardIntelShare.account_low_id
+                    == account.id,
+                    DashboardIntelShare.account_high_id
+                    == account.id,
+                )
+            )
         )
 
         account.api_key_encrypted = (
