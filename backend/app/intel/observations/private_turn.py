@@ -447,7 +447,9 @@ def persist_private_turn(
         right = raw.get("right")
         left_side = left if isinstance(left, dict) else {}
         right_side = right if isinstance(right, dict) else {}
-        battle_turn = _optional_int(raw, "turn", "vcr") ?? turn
+        battle_turn = _optional_int(raw, "turn", "vcr")
+        if battle_turn is None:
+            battle_turn = turn
 
         combat_rows.append(
             {
