@@ -21,14 +21,11 @@ export interface GameSettings {
     map_shape: number;
     num_planets: number;
     ship_limit: number;
-
     planet_scan_range: number;
     ship_scan_range: number;
-
     max_allies: number;
     max_share_intel: number;
     max_safe_passage: number;
-
     all_visible: boolean;
     all_planets_visible: boolean;
     planet_ownership_visible: boolean;
@@ -36,20 +33,15 @@ export interface GameSettings {
     ships_at_planets_visible: boolean;
     minefields_visible: boolean;
     all_wormholes_visible: boolean;
-
     unlimited_fuel: boolean;
     unlimited_ammo: boolean;
     no_supplies: boolean;
-
     military_score_percent: number;
-
     production_queue: boolean;
     planetary_production_queue: boolean;
-
     fight_or_fail: number;
     fof_active_turn: number;
     fof_increment: number;
-
     nebulas: number;
     stars: number;
     max_wormholes: number;
@@ -61,14 +53,11 @@ export interface PlayerInfo {
     account_id: number;
     username: string;
     race_id: number;
-
     status: number;
     turn_status: number;
-
     planets: number;
     ships: number;
     starbases: number;
-
     turn_ready: boolean;
 }
 
@@ -88,7 +77,6 @@ export interface GameDetailsResponse {
     settings: GameSettings;
     players: PlayerInfo[];
     relations: RelationInfo[];
-
     schedule: string;
     time_to_host: string;
     year_from: string;
@@ -100,22 +88,17 @@ export interface ScoreHistoryItem {
     turn: number;
     slot_id: number;
     account_id: number | null;
-
     capital_ships: number;
     freighters: number;
     planets: number;
     starbases: number;
-
     military_score: number;
     inventory_score: number;
     priority_points: number;
     military_percent: number;
-
     victory_score: number;
-
     previous_turn: number | null;
     turn_gap: number | null;
-
     delta_capital_ships: number | null;
     delta_freighters: number | null;
     delta_planets: number | null;
@@ -123,7 +106,6 @@ export interface ScoreHistoryItem {
     delta_military_score: number | null;
     delta_inventory_score: number | null;
     delta_priority_points: number | null;
-
     source_date_added: string | null;
     observed_at: string;
 }
@@ -132,11 +114,9 @@ export interface ScoreHistoryResponse {
     game_id: number;
     current_turn: number;
     source: string;
-
     slot_id: number | null;
     from_turn: number | null;
     to_turn: number | null;
-
     count: number;
     items: ScoreHistoryItem[];
 }
@@ -147,17 +127,9 @@ export interface CurrentUserResponse {
     display_name: string;
 }
 
-export interface LoginResponse {
-    user: CurrentUserResponse;
-}
-
-export interface LogoutResponse {
-    success: boolean;
-}
-
-export interface ChangePasswordResponse {
-    success: boolean;
-}
+export interface LoginResponse { user: CurrentUserResponse; }
+export interface LogoutResponse { success: boolean; }
+export interface ChangePasswordResponse { success: boolean; }
 
 export interface PlanetsAccountResponse {
     id: number;
@@ -168,13 +140,8 @@ export interface PlanetsAccountResponse {
     last_error: string | null;
 }
 
-export interface PlanetsAccountsResponse {
-    accounts: PlanetsAccountResponse[];
-}
-
-export interface UnlinkPlanetsAccountResponse {
-    success: boolean;
-}
+export interface PlanetsAccountsResponse { accounts: PlanetsAccountResponse[]; }
+export interface UnlinkPlanetsAccountResponse { success: boolean; }
 
 export interface AccountGameSummary {
     id: number;
@@ -218,6 +185,7 @@ export interface PrivateIntelCounts {
     nebulas: number;
     ion_storms: number;
     star_clusters: number;
+    minefields: number;
 }
 
 export interface PlanetObservationResponse {
@@ -253,7 +221,8 @@ export interface StarbaseObservationResponse {
 export type StellarCartographyFeatureType =
     | "nebula"
     | "ion_storm"
-    | "star_cluster";
+    | "star_cluster"
+    | "minefield";
 
 export interface StellarCartographyObservationResponse {
     feature_type: StellarCartographyFeatureType;
