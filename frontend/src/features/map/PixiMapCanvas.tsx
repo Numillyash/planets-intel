@@ -28,6 +28,7 @@ import {
 } from "./navigationAnalysis";
 import { drawMapScene } from "./mapScene";
 import {
+    drawCurrentCombatContacts,
     drawHistoricalShipTracks,
     type ShipTrackMode,
 } from "./historicalTrackScene";
@@ -94,13 +95,6 @@ export function PixiMapCanvas({
     useEffect(() => {
         let cancelled = false;
 
-        if (trackMode === "off") {
-            setHistoricalTracks([]);
-            return () => {
-                cancelled = true;
-            };
-        }
-
         async function loadTracks() {
             try {
                 const response = await getHistoricalShipTracks(
@@ -122,7 +116,7 @@ export function PixiMapCanvas({
         return () => {
             cancelled = true;
         };
-    }, [intel.game_id, intel.turn, linkedAccountId, trackMode]);
+    }, [intel.game_id, intel.turn, linkedAccountId]);
 
     useEffect(() => {
         const host = hostRef.current;
@@ -425,6 +419,13 @@ export function PixiMapCanvas({
             labelMode,
             selected,
             onSelect,
+        });
+
+        drawCurrentCombatContacts({
+            world,
+            tracks: historicalTracks,
+            bounds,
+            throughTurn: intel.turn,
         });
 
         if (hoverLayerRef.current !== null) hoverLayerRef.current.visible = false;

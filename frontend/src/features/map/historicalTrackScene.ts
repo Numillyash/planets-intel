@@ -174,9 +174,6 @@ export function drawHistoricalShipTracks({
             const previous = points[index - 1];
             const current = points[index];
 
-            // Never draw an invented straight path across turns in which the
-            // ship was not observed. Breadcrumbs on both sides make the gap
-            // visible without asserting how the ship travelled through it.
             if (current.gap_from_previous) continue;
 
             const line = new Graphics()
@@ -207,5 +204,101 @@ export function drawHistoricalShipTracks({
                 fadePerTurn,
             });
         }
+    }
+}
+
+export function drawCurrentCombatContacts({
+    world,
+    tracks,
+    bounds,
+    throughTurn,
+}: {
+    world: Container;
+    tracks: HistoricalShipTrack[];
+    bounds: MapBounds;
+    throughTurn: number;
+}) {
+    const grouped = new Map<
+        string,
+        Array<{
+            track: HistoricalShipTrack;
+            point: HistoricalShipTrackPoint;
+        }>
+    >();
+
+    for (const track of tracks) {
+        const point = track.points.find(
+            (item) => item.turn === throughTurn && item.evidence === "combat",
+        );
+        if (point === undefined) continue;
+
+        const key = `${point.x}:${point.y}`;
+        const group = grouped.get(key) ?? [];
+        group.push({ track, point });
+        grouped.set(key, group);
+    }
+
+    for (const group of grouped.values()) {
+        group.sort((left, right) => left.track.ship_id - right.track.ship_id);
+
+        group.forEach(({ track, point }, index) => {
+            const centerX = point.x;
+            const centerY = renderY(point.y, bounds);
+            const count = group.length;
+            const angle = -Math.PI / 2
+                + (Math.PI * 2 * index) / Math.max(count, 1);
+            const offsetRadius = count > 1 ? 13 : 11;
+            const x = centerX + Math.cos(angle) * offsetRadius;
+            const y = centerY + Math.sin(angle) * offsetRadius;
+            const color = trackColor(track.owner_id);
+
+            const connector = new Graphics()
+                .moveTo(centerX, centerY)
+                .lineTo(x, y)
+                .stroke({
+                    color: 0xffc4c4,
+                    width: 0.75,
+                    alpha: 0.66,
+                });
+            world.addChild(connector);
+
+            const marker = new Graphics()
+                .moveTo(0, -4.8)
+                .lineTo(4.8, 0)
+                .lineTo(0, 4.8)
+                .lineTo(-4.8, 0)
+                .closePath()
+                .fill({ color, alpha: 0.96 })
+                .stroke({
+                    color: 0xffffff,
+                    width: 1.1,
+                    alpha: 0.94,
+                })
+                .moveTo(-3, -3)
+                .lineTo(3, 3)
+                .moveTo(3, -3)
+                .lineTo(-3, 3)
+                .stroke({
+                    color: 0xffb5b5,
+                    width: 1,
+                    alpha: 0.95,
+                });
+            marker.position.set(x, y);
+            world.addChild(marker);
+
+            const name = track.name ?? `Ship #${track.ship_id}`;
+            const label = new Text({
+                text: `${name} · combat T${throughTurn}`,
+                style: {
+                    fill: 0xffd7d7,
+                    fontFamily: "Inter, Arial, sans-serif",
+                    fontSize: 8.5,
+                    stroke: { color: 0x060a10, width: 3 },
+                },
+                resolution: 2,
+            });
+            label.position.set(x + 6, y - 11);
+            world.addChild(label);
+        });
     }
 }
