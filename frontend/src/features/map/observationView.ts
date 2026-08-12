@@ -100,6 +100,22 @@ export function factNumber(payload: Payload, ...keys: string[]): number | null {
     return null;
 }
 
+function nonNegativeFactNumber(
+    payload: Payload,
+    ...keys: string[]
+): number | null {
+    const item = factNumber(payload, ...keys);
+    return item !== null && item >= 0 ? item : null;
+}
+
+function positiveFactNumber(
+    payload: Payload,
+    ...keys: string[]
+): number | null {
+    const item = factNumber(payload, ...keys);
+    return item !== null && item > 0 ? item : null;
+}
+
 export function factString(payload: Payload, ...keys: string[]): string | null {
     const item = value(payload, ...keys);
     if (typeof item === "string" && item.trim() !== "") {
@@ -123,7 +139,7 @@ function firstDisplayValue(
     }
 
     const numeric = factNumber(payload, ...numberKeys);
-    if (numeric === null || numeric === 0) {
+    if (numeric === null || numeric <= 0) {
         return null;
     }
     return `${numericPrefix} ${numeric}`;
@@ -131,20 +147,20 @@ function firstDisplayValue(
 
 function mineralFacts(payload: Payload, mineral: string): MineralFacts {
     return {
-        surface: factNumber(payload, mineral),
-        ground: factNumber(
+        surface: nonNegativeFactNumber(payload, mineral),
+        ground: nonNegativeFactNumber(
             payload,
             `ground${mineral}`,
             `${mineral}ground`,
             `${mineral}_ground`,
         ),
-        density: factNumber(
+        density: nonNegativeFactNumber(
             payload,
             `density${mineral}`,
             `${mineral}density`,
             `${mineral}_density`,
         ),
-        production: factNumber(
+        production: nonNegativeFactNumber(
             payload,
             `${mineral}production`,
             `${mineral}produced`,
@@ -158,20 +174,35 @@ export function planetFacts(planet: PlanetObservationResponse): PlanetFacts {
     const payload = planet.payload;
 
     const facts: Omit<PlanetFacts, "knownFieldCount"> = {
-        temperature: factNumber(payload, "temp", "temperature"),
-        mines: factNumber(payload, "mines"),
-        factories: factNumber(payload, "factories"),
-        defense: factNumber(payload, "defense", "defenseposts", "defense_posts"),
-        supplies: factNumber(payload, "supplies"),
-        megacredits: factNumber(payload, "megacredits", "money", "mc"),
-        clans: factNumber(payload, "clans", "colonistclans", "colonists"),
+        temperature: nonNegativeFactNumber(payload, "temp", "temperature"),
+        mines: nonNegativeFactNumber(payload, "mines"),
+        factories: nonNegativeFactNumber(payload, "factories"),
+        defense: nonNegativeFactNumber(
+            payload,
+            "defense",
+            "defenseposts",
+            "defense_posts",
+        ),
+        supplies: nonNegativeFactNumber(payload, "supplies"),
+        megacredits: nonNegativeFactNumber(
+            payload,
+            "megacredits",
+            "money",
+            "mc",
+        ),
+        clans: nonNegativeFactNumber(
+            payload,
+            "clans",
+            "colonistclans",
+            "colonists",
+        ),
         colonistHappiness: factNumber(
             payload,
             "colonisthappypoints",
             "colonisthappiness",
             "colonisthappy",
         ),
-        colonistTaxRate: factNumber(
+        colonistTaxRate: nonNegativeFactNumber(
             payload,
             "colonisttaxrate",
             "colonisttax",
@@ -182,7 +213,11 @@ export function planetFacts(planet: PlanetObservationResponse): PlanetFacts {
             ["nativerace", "nativeraceid", "native_race_id"],
             "Race",
         ),
-        nativeClans: factNumber(payload, "nativeclans", "native_clans"),
+        nativeClans: nonNegativeFactNumber(
+            payload,
+            "nativeclans",
+            "native_clans",
+        ),
         nativeGovernment: firstDisplayValue(
             payload,
             ["nativegovernmentname", "native_government_name"],
@@ -195,7 +230,11 @@ export function planetFacts(planet: PlanetObservationResponse): PlanetFacts {
             "nativehappiness",
             "nativehappy",
         ),
-        nativeTaxRate: factNumber(payload, "nativetaxrate", "nativetax"),
+        nativeTaxRate: nonNegativeFactNumber(
+            payload,
+            "nativetaxrate",
+            "nativetax",
+        ),
         neutronium: mineralFacts(payload, "neutronium"),
         duranium: mineralFacts(payload, "duranium"),
         tritanium: mineralFacts(payload, "tritanium"),
@@ -238,31 +277,31 @@ export function shipFacts(ship: ShipObservationResponse): ShipFacts {
     return {
         hullName: factString(payload, "hullname", "hull_name"),
         engineName: factString(payload, "enginename", "engine_name"),
-        engineId: factNumber(payload, "engineid", "engine_id"),
-        beams: factNumber(payload, "beams", "beamcount", "beam_count"),
+        engineId: positiveFactNumber(payload, "engineid", "engine_id"),
+        beams: nonNegativeFactNumber(payload, "beams", "beamcount", "beam_count"),
         beamName: factString(payload, "beamname", "beam_name"),
-        tubes: factNumber(payload, "tubes", "torpedotubes", "tube_count"),
+        tubes: nonNegativeFactNumber(payload, "tubes", "torpedotubes", "tube_count"),
         torpedoName: factString(payload, "torpedoname", "torpedo_name"),
-        bays: factNumber(payload, "bays", "fighterbays", "baycount"),
-        damage: factNumber(payload, "damage"),
-        crew: factNumber(payload, "crew"),
+        bays: nonNegativeFactNumber(payload, "bays", "fighterbays", "baycount"),
+        damage: nonNegativeFactNumber(payload, "damage"),
+        crew: nonNegativeFactNumber(payload, "crew"),
         mission: firstDisplayValue(
             payload,
             ["missionname", "mission_name"],
             ["mission"],
             "Mission",
         ),
-        fuel: factNumber(payload, "neutronium", "fuel"),
-        clans: factNumber(payload, "clans", "colonists"),
-        supplies: factNumber(payload, "supplies"),
-        megacredits: factNumber(payload, "megacredits", "money"),
-        duranium: factNumber(payload, "duranium"),
-        tritanium: factNumber(payload, "tritanium"),
-      molybdenum: factNumber(payload, "molybdenum"),
-        torpedoes: factNumber(payload, "torpedoes", "torps"),
-        fighters: factNumber(payload, "fighters"),
-        waypointX: factNumber(payload, "waypointx", "targetx", "waypoint_x"),
-        waypointY: factNumber(payload, "waypointy", "targety", "waypoint_y"),
+        fuel: nonNegativeFactNumber(payload, "neutronium", "fuel"),
+        clans: nonNegativeFactNumber(payload, "clans", "colonists"),
+        supplies: nonNegativeFactNumber(payload, "supplies"),
+        megacredits: nonNegativeFactNumber(payload, "megacredits", "money"),
+        duranium: nonNegativeFactNumber(payload, "duranium"),
+        tritanium: nonNegativeFactNumber(payload, "tritanium"),
+        molybdenum: nonNegativeFactNumber(payload, "molybdenum"),
+        torpedoes: nonNegativeFactNumber(payload, "torpedoes", "torps"),
+        fighters: nonNegativeFactNumber(payload, "fighters"),
+        waypointX: nonNegativeFactNumber(payload, "waypointx", "targetx", "waypoint_x"),
+        waypointY: nonNegativeFactNumber(payload, "waypointy", "targety", "waypoint_y"),
     };
 }
 
@@ -270,13 +309,13 @@ export function starbaseFacts(starbase: StarbaseObservationResponse): StarbaseFa
     const payload = starbase.payload;
     return {
         name: factString(payload, "name", "starbasename", "starbase_name"),
-        damage: factNumber(payload, "damage"),
-        defense: factNumber(payload, "defense"),
-        fighters: factNumber(payload, "fighters"),
-        beamTech: factNumber(payload, "beamtechlevel", "beamtech", "beam_tech"),
-        engineTech: factNumber(payload, "enginetechlevel", "enginetech", "engine_tech"),
-        hullTech: factNumber(payload, "hulltechlevel", "hulltech", "hull_tech"),
-        torpedoTech: factNumber(payload, "torptechlevel", "torpedotechlevel", "torp_tech"),
+        damage: nonNegativeFactNumber(payload, "damage"),
+        defense: nonNegativeFactNumber(payload, "defense"),
+        fighters: nonNegativeFactNumber(payload, "fighters"),
+        beamTech: positiveFactNumber(payload, "beamtechlevel", "beamtech", "beam_tech"),
+        engineTech: positiveFactNumber(payload, "enginetechlevel", "enginetech", "engine_tech"),
+        hullTech: positiveFactNumber(payload, "hulltechlevel", "hulltech", "hull_tech"),
+        torpedoTech: positiveFactNumber(payload, "torptechlevel", "torpedotechlevel", "torp_tech"),
     };
 }
 
