@@ -26,6 +26,7 @@ class PrivateIntelCounts(BaseModel):
     nebulas: int = 0
     ion_storms: int = 0
     star_clusters: int = 0
+    minefields: int = 0
 
 
 class PlanetObservationResponse(BaseModel):
@@ -63,6 +64,7 @@ class StellarCartographyObservationResponse(BaseModel):
         "nebula",
         "ion_storm",
         "star_cluster",
+        "minefield",
     ]
     feature_id: int
     name: str | None
