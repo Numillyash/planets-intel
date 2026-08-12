@@ -41,6 +41,8 @@ export interface HistoricalBackfillTurnResponse {
     results: HistoricalBackfillAccountResult[];
 }
 
+export type HistoricalShipEvidence = "scan" | "combat";
+
 export interface HistoricalShipTrackPoint {
     turn: number;
     snapshot_turn: number;
@@ -49,6 +51,8 @@ export interface HistoricalShipTrackPoint {
     linked_account_ids: number[];
     observer_names: string[];
     gap_from_previous: boolean;
+    evidence: HistoricalShipEvidence;
+    combat_vcr_id: number | null;
 }
 
 export interface HistoricalShipTrack {

@@ -1,5 +1,8 @@
 import { Container, Graphics, Text } from "pixi.js";
-import type { HistoricalShipTrack } from "../../types/history";
+import type {
+    HistoricalShipTrack,
+    HistoricalShipTrackPoint,
+} from "../../types/history";
 import { raceVisual } from "../../lib/races";
 import { renderY, type MapBounds, type SelectedEntity } from "./mapModel";
 
@@ -25,6 +28,107 @@ function fadedAlpha(
     );
     const alpha = baseAlpha * Math.pow(retainedPerTurn, age);
     return Math.min(Math.max(alpha, minimumAlpha), 1);
+}
+
+function drawTrackPoint({
+    world,
+    point,
+    bounds,
+    color,
+    selectedTrack,
+    throughTurn,
+    fadePerTurn,
+}: {
+    world: Container;
+    point: HistoricalShipTrackPoint;
+    bounds: MapBounds;
+    color: number;
+    selectedTrack: boolean;
+    throughTurn: number;
+    fadePerTurn: number;
+}) {
+    const x = point.x;
+    const y = renderY(point.y, bounds);
+    const isCombat = point.evidence === "combat";
+    const alpha = fadedAlpha(
+        selectedTrack ? 0.98 : isCombat ? 0.82 : 0.45,
+        point.turn,
+        throughTurn,
+        fadePerTurn,
+        selectedTrack ? 0.1 : isCombat ? 0.16 : 0.03,
+    );
+
+    if (isCombat) {
+        const marker = new Graphics()
+            .circle(0, 0, selectedTrack ? 5.2 : 4.4)
+            .stroke({
+                color,
+                width: selectedTrack ? 1.8 : 1.25,
+                alpha,
+            })
+            .moveTo(-3.2, -3.2)
+            .lineTo(3.2, 3.2)
+            .moveTo(3.2, -3.2)
+            .lineTo(-3.2, 3.2)
+            .stroke({
+                color: 0xffd4d4,
+                width: selectedTrack ? 1.5 : 1.1,
+                alpha: Math.min(alpha + 0.12, 1),
+            });
+        marker.position.set(x, y);
+        world.addChild(marker);
+    } else {
+        const marker = new Graphics()
+            .circle(0, 0, selectedTrack ? 2.8 : 1.45)
+            .fill({ color, alpha });
+        if (selectedTrack) {
+            marker.stroke({
+                color: 0xffffff,
+                width: 0.7,
+                alpha: fadedAlpha(
+                    0.76,
+                    point.turn,
+                    throughTurn,
+                    fadePerTurn,
+                    0.08,
+                ),
+            });
+        }
+        marker.position.set(x, y);
+        world.addChild(marker);
+    }
+
+    if (!selectedTrack) return;
+
+    const labelAlpha = fadedAlpha(
+        1,
+        point.turn,
+        throughTurn,
+        fadePerTurn,
+        0.18,
+    );
+    const suffix = point.evidence === "combat"
+        ? ` · combat${point.combat_vcr_id !== null ? ` #${point.combat_vcr_id}` : ""}`
+        : point.gap_from_previous
+            ? " · reacquired"
+            : "";
+    const label = new Text({
+        text: `T${point.turn}${suffix}`,
+        style: {
+            fill: point.evidence === "combat"
+                ? 0xffd1d1
+                : point.gap_from_previous
+                    ? 0xffcf7d
+                    : 0xcbd8e8,
+            fontFamily: "Inter, Arial, sans-serif",
+            fontSize: 9,
+            stroke: { color: 0x060a10, width: 3 },
+        },
+        resolution: 2,
+    });
+    label.alpha = labelAlpha;
+    label.position.set(x + 5, y - 12);
+    world.addChild(label);
 }
 
 export function drawHistoricalShipTracks({
@@ -93,61 +197,15 @@ export function drawHistoricalShipTracks({
         }
 
         for (const point of points) {
-            const marker = new Graphics()
-                .circle(0, 0, selectedTrack ? 2.8 : 1.45)
-                .fill({
-                    color,
-                    alpha: fadedAlpha(
-                        selectedTrack ? 0.98 : 0.45,
-                        point.turn,
-                        throughTurn,
-                        fadePerTurn,
-                        selectedTrack ? 0.1 : 0.03,
-                    ),
-                });
-            if (selectedTrack) {
-                marker.stroke({
-                    color: 0xffffff,
-                    width: 0.7,
-                    alpha: fadedAlpha(
-                        0.76,
-                        point.turn,
-                        throughTurn,
-                        fadePerTurn,
-                        0.08,
-                    ),
-                });
-            }
-            marker.position.set(point.x, renderY(point.y, bounds));
-            world.addChild(marker);
-
-            if (!selectedTrack) continue;
-
-            const labelAlpha = fadedAlpha(
-                1,
-                point.turn,
+            drawTrackPoint({
+                world,
+                point,
+                bounds,
+                color,
+                selectedTrack,
                 throughTurn,
                 fadePerTurn,
-                0.18,
-            );
-            const label = new Text({
-                text: point.gap_from_previous
-                    ? `T${point.turn} · reacquired`
-                    : `T${point.turn}`,
-                style: {
-                    fill: point.gap_from_previous ? 0xffcf7d : 0xcbd8e8,
-                    fontFamily: "Inter, Arial, sans-serif",
-                    fontSize: 9,
-                    stroke: {
-                        color: 0x060a10,
-                        width: 3,
-                    },
-                },
-                resolution: 2,
             });
-            label.alpha = labelAlpha;
-            label.position.set(point.x + 4, renderY(point.y, bounds) - 11);
-            world.addChild(label);
         }
     }
 }

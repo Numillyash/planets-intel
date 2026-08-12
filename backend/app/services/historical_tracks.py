@@ -4,6 +4,7 @@ from typing import Any
 from sqlalchemy import select
 
 from app.db.session import SessionLocal
+from app.models.combat_observation import CombatObservation
 from app.models.planets_account import PlanetsAccount
 from app.models.private_observation_batch import PrivateObservationBatch
 from app.models.ship_observation import ShipObservation
@@ -17,13 +18,13 @@ def get_historical_ship_tracks(
     linked_account_id: int,
     through_turn: int,
 ) -> dict[str, Any] | None:
-    """Build factual ship tracks from stored observer-specific snapshots.
+    """Build factual ship tracks from stored scan and combat evidence.
 
-    A point is keyed by the ship's own info_turn rather than by the batch turn.
-    This prevents a stale sighting repeated in later turn files from looking like
-    a new position. Only batches retrieved for turns <= through_turn are used,
-    so historical mode never leaks future observations backwards. The returned
-    series is rendering data only; unknown movement across gaps stays unknown.
+    Scan points are keyed by the ship's own info_turn so a stale sighting
+    repeated in later turn files does not look like new movement. VCR combat
+    points are later host-phase evidence and therefore take precedence over a
+    scan point for the same ship and turn. Unknown movement across observation
+    gaps stays unknown; no path is inferred between non-consecutive turns.
     """
 
     if through_turn <= 0:
@@ -47,7 +48,7 @@ def get_historical_ship_tracks(
         return None
 
     with SessionLocal() as session:
-        rows = session.execute(
+        scan_rows = session.execute(
             select(
                 ShipObservation,
                 PrivateObservationBatch,
@@ -79,12 +80,43 @@ def get_historical_ship_tracks(
             )
         ).all()
 
-    grouped: dict[
-        tuple[int, int],
-        list[tuple[ShipObservation, PrivateObservationBatch, PlanetsAccount]],
-    ] = defaultdict(list)
+        combat_rows = session.execute(
+            select(
+                CombatObservation,
+                PrivateObservationBatch,
+                PlanetsAccount,
+            )
+            .join(
+                PrivateObservationBatch,
+                PrivateObservationBatch.id == CombatObservation.batch_id,
+            )
+            .join(
+                PlanetsAccount,
+                PlanetsAccount.id
+                == PrivateObservationBatch.observer_planets_account_id,
+            )
+            .where(
+                PrivateObservationBatch.game_id == game_id,
+                PrivateObservationBatch.turn <= through_turn,
+                PrivateObservationBatch.observer_planets_account_id.in_(
+                    accessible_ids
+                ),
+                CombatObservation.battle_turn <= through_turn,
+                CombatObservation.x.is_not(None),
+                CombatObservation.y.is_not(None),
+            )
+            .order_by(
+                CombatObservation.battle_turn,
+                CombatObservation.vcr_id,
+                PrivateObservationBatch.observed_at,
+                PrivateObservationBatch.id,
+            )
+        ).all()
 
-    for ship, batch, account in rows:
+    candidates: dict[tuple[int, int], list[dict[str, Any]]] = defaultdict(list)
+    metadata_candidates: dict[int, list[dict[str, Any]]] = defaultdict(list)
+
+    for ship, batch, account in scan_rows:
         observation_turn = (
             ship.info_turn
             if ship.info_turn is not None and ship.info_turn > 0
@@ -92,52 +124,110 @@ def get_historical_ship_tracks(
         )
         if observation_turn <= 0 or observation_turn > through_turn:
             continue
-        grouped[(ship.ship_id, observation_turn)].append(
-            (ship, batch, account)
+
+        candidate = {
+            "ship_id": ship.ship_id,
+            "turn": observation_turn,
+            "snapshot_turn": batch.turn,
+            "x": ship.x,
+            "y": ship.y,
+            "linked_account_id": account.id,
+            "observer_name": account.planets_username,
+            "name": ship.name,
+            "owner_id": ship.owner_id,
+            "evidence": "scan",
+            "combat_vcr_id": None,
+            "phase_priority": 0,
+            "sort_key": (
+                0,
+                batch.turn,
+                batch.observed_at,
+                batch.id,
+            ),
+        }
+        candidates[(ship.ship_id, observation_turn)].append(candidate)
+        metadata_candidates[ship.ship_id].append(candidate)
+
+    def add_combat_side(
+        combat: CombatObservation,
+        batch: PrivateObservationBatch,
+        account: PlanetsAccount,
+        *,
+        object_id: int | None,
+        is_starbase: bool | None,
+        owner_id: int | None,
+        name: str | None,
+    ) -> None:
+        if object_id is None or is_starbase is True:
+            return
+        if combat.x is None or combat.y is None:
+            return
+
+        candidate = {
+            "ship_id": object_id,
+            "turn": combat.battle_turn,
+            "snapshot_turn": batch.turn,
+            "x": combat.x,
+            "y": combat.y,
+            "linked_account_id": account.id,
+            "observer_name": account.planets_username,
+            "name": name,
+            "owner_id": owner_id,
+            "evidence": "combat",
+            "combat_vcr_id": combat.vcr_id,
+            # Combat is later host-phase positional evidence than an ordinary
+            # scan for the same turn, so prefer it when both are available.
+            "phase_priority": 1,
+            "sort_key": (
+                1,
+                batch.turn,
+                batch.observed_at,
+                batch.id,
+                combat.vcr_id,
+            ),
+        }
+        candidates[(object_id, combat.battle_turn)].append(candidate)
+        metadata_candidates[object_id].append(candidate)
+
+    for combat, batch, account in combat_rows:
+        add_combat_side(
+            combat,
+            batch,
+            account,
+            object_id=combat.left_object_id,
+            is_starbase=combat.left_is_starbase,
+            owner_id=combat.left_owner_id,
+            name=combat.left_name,
+        )
+        add_combat_side(
+            combat,
+            batch,
+            account,
+            object_id=combat.right_object_id,
+            is_starbase=combat.right_is_starbase,
+            owner_id=combat.right_owner_id,
+            name=combat.right_name,
         )
 
     points_by_ship: dict[int, list[dict[str, Any]]] = defaultdict(list)
-    metadata: dict[int, dict[str, Any]] = {}
 
-    for (ship_id, observation_turn), entries in grouped.items():
-        # Prefer the latest factual record that was actually available by the
-        # requested historical turn; all contributing observers are retained.
-        selected_ship, selected_batch, _ = max(
-            entries,
-            key=lambda entry: (
-                entry[1].turn,
-                entry[1].observed_at,
-                entry[1].id,
-            ),
-        )
-
-        source_ids = sorted({entry[2].id for entry in entries})
-        source_names = sorted({entry[2].planets_username for entry in entries})
+    for (ship_id, observation_turn), entries in candidates.items():
+        selected = max(entries, key=lambda entry: entry["sort_key"])
+        source_ids = sorted({entry["linked_account_id"] for entry in entries})
+        source_names = sorted({entry["observer_name"] for entry in entries})
 
         points_by_ship[ship_id].append(
             {
                 "turn": observation_turn,
-                "snapshot_turn": selected_batch.turn,
-                "x": selected_ship.x,
-                "y": selected_ship.y,
+                "snapshot_turn": selected["snapshot_turn"],
+                "x": selected["x"],
+                "y": selected["y"],
                 "linked_account_ids": source_ids,
                 "observer_names": source_names,
+                "evidence": selected["evidence"],
+                "combat_vcr_id": selected["combat_vcr_id"],
             }
         )
-
-        current_meta = metadata.get(ship_id)
-        meta_key = (
-            observation_turn,
-            selected_batch.turn,
-            selected_batch.observed_at,
-            selected_batch.id,
-        )
-        if current_meta is None or meta_key > current_meta["_key"]:
-            metadata[ship_id] = {
-                "_key": meta_key,
-                "name": selected_ship.name,
-                "owner_id": selected_ship.owner_id,
-            }
 
     tracks: list[dict[str, Any]] = []
 
@@ -162,12 +252,21 @@ def get_historical_ship_tracks(
             )
             previous_turn = turn
 
-        meta = metadata[ship_id]
+        meta_entries = metadata_candidates.get(ship_id, [])
+        latest_meta = max(
+            meta_entries,
+            key=lambda entry: (
+                entry["turn"],
+                entry["phase_priority"],
+                entry["sort_key"],
+            ),
+        ) if meta_entries else None
+
         tracks.append(
             {
                 "ship_id": ship_id,
-                "name": meta["name"],
-                "owner_id": meta["owner_id"],
+                "name": latest_meta["name"] if latest_meta else None,
+                "owner_id": latest_meta["owner_id"] if latest_meta else None,
                 "first_turn": points[0]["turn"],
                 "last_turn": points[-1]["turn"],
                 "points": points,

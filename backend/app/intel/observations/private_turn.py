@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
+from app.models.combat_observation import CombatObservation
 from app.models.planet_observation import PlanetObservation
 from app.models.private_observation_batch import PrivateObservationBatch
 from app.models.ship_observation import ShipObservation
@@ -154,6 +155,27 @@ def _optional_int(
     return value
 
 
+def _optional_bool(
+    raw: dict[str, Any],
+    key: str,
+    label: str,
+) -> bool | None:
+    value = raw.get(key)
+
+    if value is None:
+        return None
+
+    if isinstance(value, bool):
+        return value
+
+    if isinstance(value, int) and value in (0, 1):
+        return bool(value)
+
+    raise PrivateTurnObservationError(
+        f"{label}.{key} must be a boolean, 0/1, or null"
+    )
+
+
 def _optional_string(
     raw: dict[str, Any],
     key: str,
@@ -194,12 +216,14 @@ def _snapshot_hash(
     ships: list[dict[str, Any]],
     starbases: list[dict[str, Any]],
     stellar_cartography: dict[str, list[dict[str, Any]]],
+    combats: list[dict[str, Any]],
 ) -> str:
     canonical = {
         "planets": planets,
         "ships": ships,
         "starbases": starbases,
         "stellar_cartography": stellar_cartography,
+        "combats": combats,
     }
 
     encoded = json.dumps(
@@ -291,11 +315,17 @@ def persist_private_turn(
             f"rst.{source_name}",
         )
 
+    combats = _sort_by_id(
+        _optional_entity_list(rst, "vcrs"),
+        "rst.vcrs",
+    )
+
     snapshot_hash = _snapshot_hash(
         planets,
         ships,
         starbases,
         stellar_cartography,
+        combats,
     )
 
     batch_table = PrivateObservationBatch.__table__
@@ -345,6 +375,7 @@ def persist_private_turn(
             "ion_storms": len(stellar_cartography["ion_storm"]),
             "star_clusters": len(stellar_cartography["star_cluster"]),
             "minefields": len(stellar_cartography["minefield"]),
+            "combat_reports": len(combats),
         }
 
     planet_rows = []
@@ -410,6 +441,36 @@ def persist_private_turn(
                 }
             )
 
+    combat_rows = []
+    for raw in combats:
+        left = raw.get("left")
+        right = raw.get("right")
+        left_side = left if isinstance(left, dict) else {}
+        right_side = right if isinstance(right, dict) else {}
+        battle_turn = _optional_int(raw, "turn", "vcr") ?? turn
+
+        combat_rows.append(
+            {
+                "batch_id": batch_id,
+                "vcr_id": _required_int(raw, "id", "vcr"),
+                "battle_turn": battle_turn,
+                "battle_type": _optional_int(raw, "battletype", "vcr"),
+                "x": _optional_int(raw, "x", "vcr"),
+                "y": _optional_int(raw, "y", "vcr"),
+                "left_owner_id": _optional_int(raw, "leftownerid", "vcr"),
+                "right_owner_id": _optional_int(raw, "rightownerid", "vcr"),
+                "left_object_id": _optional_int(left_side, "objectid", "vcr.left"),
+                "right_object_id": _optional_int(right_side, "objectid", "vcr.right"),
+                "left_is_starbase": _optional_bool(left_side, "hasstarbase", "vcr.left"),
+                "right_is_starbase": _optional_bool(right_side, "hasstarbase", "vcr.right"),
+                "left_hull_id": _optional_int(left_side, "hullid", "vcr.left"),
+                "right_hull_id": _optional_int(right_side, "hullid", "vcr.right"),
+                "left_name": _optional_string(left_side, "name", "vcr.left"),
+                "right_name": _optional_string(right_side, "name", "vcr.right"),
+                "payload": raw,
+            }
+        )
+
     if planet_rows:
         session.execute(pg_insert(PlanetObservation.__table__), planet_rows)
 
@@ -423,6 +484,12 @@ def persist_private_turn(
         session.execute(
             pg_insert(StellarCartographyObservation.__table__),
             stellar_rows,
+        )
+
+    if combat_rows:
+        session.execute(
+            pg_insert(CombatObservation.__table__),
+            combat_rows,
         )
 
     session.flush()
@@ -441,4 +508,5 @@ def persist_private_turn(
         "ion_storms": len(stellar_cartography["ion_storm"]),
         "star_clusters": len(stellar_cartography["star_cluster"]),
         "minefields": len(stellar_cartography["minefield"]),
+        "combat_reports": len(combats),
     }
