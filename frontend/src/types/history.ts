@@ -40,3 +40,28 @@ export interface HistoricalBackfillTurnResponse {
     failed: number;
     results: HistoricalBackfillAccountResult[];
 }
+
+export interface HistoricalShipTrackPoint {
+    turn: number;
+    snapshot_turn: number;
+    x: number;
+    y: number;
+    linked_account_ids: number[];
+    observer_names: string[];
+    gap_from_previous: boolean;
+}
+
+export interface HistoricalShipTrack {
+    ship_id: number;
+    name: string | null;
+    owner_id: number | null;
+    first_turn: number;
+    last_turn: number;
+    points: HistoricalShipTrackPoint[];
+}
+
+export interface HistoricalShipTracksResponse {
+    game_id: number;
+    through_turn: number;
+    tracks: HistoricalShipTrack[];
+}
