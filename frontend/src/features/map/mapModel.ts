@@ -169,8 +169,12 @@ export function observedBounds(intel: PrivateIntelMapResponse): MapBounds {
     };
 }
 
-export function renderY(y: number, bounds: MapBounds): number {
-    return bounds.minY + bounds.maxY - y;
+export function renderY(y: number, _bounds: MapBounds): number {
+    // Keep the factual-to-render transform independent from whichever entities
+    // happen to be visible in one snapshot. The previous minY+maxY-y transform
+    // changed its translation as snapshot bounds changed, making the whole map
+    // appear to move when stepping through historical turns.
+    return -y;
 }
 
 export function planetLabel(
