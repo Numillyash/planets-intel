@@ -20,6 +20,10 @@ class PrivateSyncError(RuntimeError):
     pass
 
 
+class PrivateSyncTransportError(PrivateSyncError):
+    pass
+
+
 async def sync_private_game(
     linked_account_id: int,
     game_id: int,
@@ -42,21 +46,15 @@ async def sync_private_game(
             )
 
         encrypted_api_key = account.api_key_encrypted
-
-        expected_planets_account_id = (
-            account.planets_account_id
-        )
-
+        expected_planets_account_id = account.planets_account_id
         planets_username = account.planets_username
 
-    api_key = decrypt_credential(
-        encrypted_api_key
-    )
+    api_key = decrypt_credential(encrypted_api_key)
 
     try:
         client = PlanetsNuClient()
         payload = None
-        last_transport_error = None
+        last_transport_error: httpx.TransportError | None = None
 
         for attempt in range(1, 4):
             try:
@@ -65,11 +63,7 @@ async def sync_private_game(
                     api_key=api_key,
                 )
                 break
-
-            except (
-                httpx.ConnectError,
-                httpx.TimeoutException,
-            ) as exc:
+            except httpx.TransportError as exc:
                 last_transport_error = exc
 
                 if attempt == 3:
@@ -78,9 +72,14 @@ async def sync_private_game(
                 await asyncio.sleep(attempt)
 
         if payload is None:
-            raise PrivateSyncError(
-                "private Planets.nu request failed "
-                "after 3 transport attempts"
+            error_name = (
+                type(last_transport_error).__name__
+                if last_transport_error is not None
+                else "TransportError"
+            )
+            raise PrivateSyncTransportError(
+                "private Planets.nu request failed after "
+                f"3 transport attempts ({error_name})"
             ) from last_transport_error
 
     finally:
@@ -106,10 +105,7 @@ async def sync_private_game(
 
     if (
         isinstance(source_player_slot_id, bool)
-        or not isinstance(
-            source_player_slot_id,
-            int,
-        )
+        or not isinstance(source_player_slot_id, int)
     ):
         raise PrivateSyncError(
             "private turn has invalid player id"
@@ -117,10 +113,7 @@ async def sync_private_game(
 
     if (
         isinstance(source_account_id, bool)
-        or not isinstance(
-            source_account_id,
-            int,
-        )
+        or not isinstance(source_account_id, int)
         or source_account_id <= 0
     ):
         raise PrivateSyncError(
@@ -143,8 +136,7 @@ async def sync_private_game(
 
     if (
         expected_planets_account_id is not None
-        and source_account_id
-        != expected_planets_account_id
+        and source_account_id != expected_planets_account_id
     ):
         raise PrivateSyncError(
             "private turn belongs to a different "
@@ -153,9 +145,7 @@ async def sync_private_game(
 
     with SessionLocal() as session:
         game_exists = session.execute(
-            select(Game.id).where(
-                Game.id == game_id
-            )
+            select(Game.id).where(Game.id == game_id)
         ).scalar_one_or_none()
 
         if game_exists is None:
@@ -167,8 +157,7 @@ async def sync_private_game(
         slot = session.execute(
             select(GamePlayerSlot).where(
                 GamePlayerSlot.game_id == game_id,
-                GamePlayerSlot.slot_id
-                == source_player_slot_id,
+                GamePlayerSlot.slot_id == source_player_slot_id,
             )
         ).scalar_one_or_none()
 
@@ -191,29 +180,19 @@ async def sync_private_game(
         ).scalar_one()
 
         if account.planets_account_id is None:
-            account.planets_account_id = (
-                source_account_id
-            )
-
-        elif (
-            account.planets_account_id
-            != source_account_id
-        ):
+            account.planets_account_id = source_account_id
+        elif account.planets_account_id != source_account_id:
             raise PrivateSyncError(
                 "linked account id changed during sync"
             )
 
-        account.last_verified_at = datetime.now(
-            timezone.utc
-        )
+        account.last_verified_at = datetime.now(timezone.utc)
         account.last_error = None
 
         result = persist_private_turn(
             session,
             game_id=game_id,
-            observer_planets_account_id=(
-                linked_account_id
-            ),
+            observer_planets_account_id=linked_account_id,
             payload=payload,
         )
 

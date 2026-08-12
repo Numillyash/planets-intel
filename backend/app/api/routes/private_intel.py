@@ -1,3 +1,4 @@
+import httpx
 from fastapi import (
     APIRouter,
     Depends,
@@ -13,26 +14,32 @@ from app.db.session import SessionLocal
 from app.models.planets_account import PlanetsAccount
 from app.models.user import AppUser
 from app.planetsnu.client import PlanetsNuError
-from app.schemas.combined_intel import (
-    CombinedPrivateIntelResponse,
-)
-from app.schemas.private_intel import (
-    LatestPrivateIntelResponse,
-)
-from app.services.combined_intel import (
-    get_combined_private_intel,
-)
-from app.services.private_intel import (
-    get_latest_private_intel,
-)
+from app.schemas.combined_intel import CombinedPrivateIntelResponse
+from app.schemas.private_intel import LatestPrivateIntelResponse
+from app.services.combined_intel import get_combined_private_intel
+from app.services.private_intel import get_latest_private_intel
 from app.services.private_sync import (
     PrivateSyncError,
+    PrivateSyncTransportError,
     sync_private_game,
 )
 from app.services.public_sync import sync_public_game
 
 
 router = APIRouter()
+
+
+def _latest_or_none(
+    *,
+    user_id: int,
+    game_id: int,
+    linked_account_id: int,
+) -> dict | None:
+    return get_latest_private_intel(
+        user_id=user_id,
+        game_id=game_id,
+        linked_account_id=linked_account_id,
+    )
 
 
 @router.get(
@@ -42,30 +49,21 @@ router = APIRouter()
 def latest_private_intel(
     game_id: int = Path(gt=0),
     linked_account_id: int = Query(gt=0),
-    user: AppUser = Depends(
-        require_user
-    ),
+    user: AppUser = Depends(require_user),
 ) -> LatestPrivateIntelResponse:
-    result = get_latest_private_intel(
+    result = _latest_or_none(
         user_id=user.id,
         game_id=game_id,
-        linked_account_id=(
-            linked_account_id
-        ),
+        linked_account_id=linked_account_id,
     )
 
     if result is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=(
-                "Private intelligence snapshot "
-                "not found"
-            ),
+            detail="Private intelligence snapshot not found",
         )
 
-    return LatestPrivateIntelResponse(
-        **result
-    )
+    return LatestPrivateIntelResponse(**result)
 
 
 @router.post(
@@ -75,9 +73,7 @@ def latest_private_intel(
 async def refresh_private_intel(
     game_id: int = Path(gt=0),
     linked_account_id: int = Query(gt=0),
-    user: AppUser = Depends(
-        require_user
-    ),
+    user: AppUser = Depends(require_user),
 ) -> LatestPrivateIntelResponse:
     with SessionLocal() as session:
         owned_account_id = session.execute(
@@ -94,6 +90,12 @@ async def refresh_private_intel(
             detail="Linked Planets.nu account not found",
         )
 
+    cached = _latest_or_none(
+        user_id=user.id,
+        game_id=game_id,
+        linked_account_id=linked_account_id,
+    )
+
     try:
         # Refresh canonical game/player state first so a newly selected game
         # can immediately accept its first private observation.
@@ -102,6 +104,23 @@ async def refresh_private_intel(
             linked_account_id=linked_account_id,
             game_id=game_id,
         )
+    except PrivateSyncTransportError as exc:
+        if cached is not None:
+            return LatestPrivateIntelResponse(**cached)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+    except httpx.TransportError as exc:
+        if cached is not None:
+            return LatestPrivateIntelResponse(**cached)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "Planets.nu public synchronization transport failed "
+                f"({type(exc).__name__})"
+            ),
+        ) from exc
     except PrivateSyncError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -113,7 +132,7 @@ async def refresh_private_intel(
             detail="Planets.nu synchronization failed",
         ) from exc
 
-    result = get_latest_private_intel(
+    result = _latest_or_none(
         user_id=user.id,
         game_id=game_id,
         linked_account_id=linked_account_id,
@@ -125,9 +144,7 @@ async def refresh_private_intel(
             detail="Private intelligence refresh produced no snapshot",
         )
 
-    return LatestPrivateIntelResponse(
-        **result
-    )
+    return LatestPrivateIntelResponse(**result)
 
 
 @router.get(
@@ -137,9 +154,7 @@ async def refresh_private_intel(
 def combined_private_intel(
     game_id: int = Path(gt=0),
     linked_account_id: int = Query(gt=0),
-    user: AppUser = Depends(
-        require_user
-    ),
+    user: AppUser = Depends(require_user),
 ) -> CombinedPrivateIntelResponse:
     result = get_combined_private_intel(
         user_id=user.id,
@@ -150,12 +165,7 @@ def combined_private_intel(
     if result is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=(
-                "Private intelligence snapshot "
-                "not found"
-            ),
+            detail="Private intelligence snapshot not found",
         )
 
-    return CombinedPrivateIntelResponse(
-        **result
-    )
+    return CombinedPrivateIntelResponse(**result)
