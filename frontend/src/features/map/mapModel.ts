@@ -2,10 +2,16 @@ import type {
     LatestPrivateIntelResponse,
     PlanetObservationResponse,
     ShipObservationResponse,
+    StarbaseObservationResponse,
 } from "../../types/api";
 
 export type PlanetLabelMode = "none" | "id" | "name";
 export type ShipRole = "freighter" | "torpedo" | "carrier" | "warship";
+
+export type SelectedEntity =
+    | { kind: "planet"; value: PlanetObservationResponse }
+    | { kind: "ship"; value: ShipObservationResponse }
+    | { kind: "starbase"; value: StarbaseObservationResponse };
 
 export interface MapBounds {
     minX: number;
@@ -19,7 +25,20 @@ export interface PlanetLink {
     to: PlanetObservationResponse;
 }
 
+export interface ShipVisualPosition {
+    ship: ShipObservationResponse;
+    anchorX: number;
+    anchorY: number;
+    x: number;
+    y: number;
+    planetId: number | null;
+    clusterSize: number;
+    clusterIndex: number;
+}
+
 export const PLANET_LINK_RANGE = 81;
+export const PLANET_RADIUS = 7;
+export const PLANET_ORBIT_RADIUS = 18;
 
 export const SHIP_ROLE_LABEL: Record<ShipRole, string> = {
     freighter: "Freighter",
@@ -29,6 +48,10 @@ export const SHIP_ROLE_LABEL: Record<ShipRole, string> = {
 };
 
 const COMMON_DEEP_SPACE_FREIGHTER_HULL_IDS = new Set([15, 16, 17]);
+
+function coordinateKey(x: number, y: number): string {
+    return `${x}:${y}`;
+}
 
 function payloadNumber(
     ship: ShipObservationResponse,
@@ -158,4 +181,124 @@ export function planetLinks(
     }
 
     return links;
+}
+
+export function starbaseByPlanetId(
+    starbases: StarbaseObservationResponse[],
+): Map<number, StarbaseObservationResponse> {
+    const result = new Map<number, StarbaseObservationResponse>();
+    for (const starbase of starbases) {
+        if (starbase.planet_id !== null) {
+            result.set(starbase.planet_id, starbase);
+        }
+    }
+    return result;
+}
+
+export function shipsAtPlanet(
+    ships: ShipObservationResponse[],
+    planet: PlanetObservationResponse,
+): ShipObservationResponse[] {
+    if (planet.x === null || planet.y === null) {
+        return [];
+    }
+    return ships.filter(
+        (ship) => ship.x === planet.x && ship.y === planet.y,
+    );
+}
+
+function clusteredOffset(
+    index: number,
+    size: number,
+    baseRadius: number,
+    firstRingCapacity: number,
+    alwaysOffset = false,
+): { x: number; y: number } {
+    if (size <= 1 && !alwaysOffset) {
+        return { x: 0, y: 0 };
+    }
+
+    let remainingIndex = index;
+    let ring = 0;
+    let capacity = firstRingCapacity;
+
+    while (remainingIndex >= capacity) {
+        remainingIndex -= capacity;
+        ring += 1;
+        capacity = firstRingCapacity + ring * 4;
+    }
+
+    const radius = baseRadius + ring * 10;
+    const countOnRing = Math.min(capacity, size - (index - remainingIndex));
+    const angle = -Math.PI / 2 + (Math.PI * 2 * remainingIndex) / Math.max(countOnRing, 1);
+
+    return {
+        x: Math.cos(angle) * radius,
+        y: Math.sin(angle) * radius,
+    };
+}
+
+export function shipVisualPositions(
+    intel: LatestPrivateIntelResponse,
+    bounds: MapBounds,
+): ShipVisualPosition[] {
+    const planetAt = new Map<string, PlanetObservationResponse>();
+    for (const planet of intel.planets) {
+        if (planet.x !== null && planet.y !== null) {
+            planetAt.set(coordinateKey(planet.x, planet.y), planet);
+        }
+    }
+
+    const groups = new Map<string, ShipObservationResponse[]>();
+    for (const ship of intel.ships) {
+        if (ship.x === null || ship.y === null) {
+            continue;
+        }
+        const key = coordinateKey(ship.x, ship.y);
+        const group = groups.get(key) ?? [];
+        group.push(ship);
+        groups.set(key, group);
+    }
+
+    const result: ShipVisualPosition[] = [];
+
+    for (const [key, ships] of groups) {
+        const first = ships[0];
+        if (first.x === null || first.y === null) {
+            continue;
+        }
+
+        const anchorX = first.x;
+        const anchorY = renderY(first.y, bounds);
+        const planet = planetAt.get(key) ?? null;
+
+        ships.forEach((ship, index) => {
+            let offset = { x: 0, y: 0 };
+
+            if (planet !== null) {
+                offset = clusteredOffset(
+                    index,
+                    ships.length,
+                    PLANET_ORBIT_RADIUS,
+                    8,
+                    true,
+                );
+            } else if (ships.length > 1) {
+                offset = clusteredOffset(index, ships.length, 10, 6);
+            }
+
+            result.push({
+                ship,
+                anchorX,
+                anchorY,
+                x: anchorX + offset.x,
+                y: anchorY + offset.y,
+                planetId: planet?.planet_id ?? null,
+                clusterSize: ships.length,
+                clusterIndex: index,
+            });
+        });
+    }
+
+    return result;
 }

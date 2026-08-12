@@ -39,14 +39,14 @@
 
 .intel-map-layout {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 290px;
-    min-height: 620px;
+    grid-template-columns: minmax(0, 1fr) minmax(350px, 410px);
+    min-height: 680px;
 }
 
 .intel-map-stage-wrap {
     position: relative;
     min-width: 0;
-    min-height: 620px;
+    min-height: 680px;
     border-right: 1px solid #1b2431;
     background: #060a10;
 }
@@ -123,6 +123,17 @@
     background: #60a5fa;
 }
 
+.legend-starbase {
+    border: 2px solid #f3c969;
+    background: #60a5fa;
+}
+
+.legend-orbit {
+    border: 1px solid #9aabc1;
+    border-radius: 50%;
+    background: transparent;
+}
+
 .legend-freighter {
     border: 1px solid #d9e0e9;
     background: #60a5fa;
@@ -143,62 +154,330 @@
     transform: rotate(45deg);
 }
 
-.legend-starbase {
-    border: 2px solid #f3c969;
-    transform: rotate(45deg);
-}
-
 .intel-map-details {
     display: flex;
     flex-direction: column;
-    gap: 18px;
+    gap: 14px;
     min-width: 0;
-    padding: 20px;
+    max-height: 680px;
+    padding: 18px;
+    overflow-y: auto;
     background: #0c121c;
+    scrollbar-color: #26354a #0c121c;
+    scrollbar-width: thin;
 }
 
 .intel-map-details h3 {
-    margin: 0 0 14px;
+    margin: 0 0 10px;
     color: #eef4ff;
-    font-size: 1.1rem;
+    font-size: 1.16rem;
+    line-height: 1.25;
 }
 
 .intel-entity-kind {
     display: block;
     margin-bottom: 4px;
     color: #6f86a5;
-    font-size: 0.73rem;
+    font-size: 0.72rem;
     font-weight: 700;
     letter-spacing: 0.08em;
     text-transform: uppercase;
 }
 
-.intel-entity-details dl {
+.intel-detail-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 12px;
+}
+
+.intel-detail-badge {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+    padding: 3px 7px;
+    border: 1px solid #2b3a4f;
+    border-radius: 999px;
+    background: #111a27;
+    color: #9fb0c7;
+    font: inherit;
+    font-size: 0.7rem;
+}
+
+.intel-detail-badge-gold {
+    border-color: #65532a;
+    background: #211c10;
+    color: #e2c36b;
+}
+
+.intel-detail-badge-button {
+    cursor: pointer;
+}
+
+.intel-detail-badge-button:hover {
+    border-color: #4c6586;
+    color: #d9e5f5;
+}
+
+.intel-fact-list {
     display: flex;
     flex-direction: column;
     gap: 0;
     margin: 0;
 }
 
-.intel-entity-details dl > div {
+.intel-fact-list-summary {
+    margin-bottom: 10px;
+}
+
+.intel-fact-row {
     display: grid;
-    grid-template-columns: 88px minmax(0, 1fr);
+    grid-template-columns: 105px minmax(0, 1fr);
     gap: 10px;
-    padding: 8px 0;
+    padding: 7px 0;
     border-bottom: 1px solid #192332;
 }
 
-.intel-entity-details dt {
-    color: #718096;
-    font-size: 0.78rem;
+.intel-fact-row:last-child {
+    border-bottom: 0;
 }
 
-.intel-entity-details dd {
+.intel-fact-row dt {
+    color: #718096;
+    font-size: 0.77rem;
+}
+
+.intel-fact-row dd {
     min-width: 0;
     margin: 0;
     color: #dbe5f3;
-    font-size: 0.82rem;
+    font-size: 0.81rem;
     overflow-wrap: anywhere;
+}
+
+.intel-detail-section {
+    border-top: 1px solid #1b2635;
+}
+
+.intel-detail-section > summary {
+    position: relative;
+    padding: 10px 18px 9px 0;
+    color: #a9bbd1;
+    font-size: 0.76rem;
+    font-weight: 750;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+}
+
+.intel-detail-section > summary::-webkit-details-marker {
+    display: none;
+}
+
+.intel-detail-section > summary::after {
+    position: absolute;
+    top: 10px;
+    right: 2px;
+    content: "+";
+    color: #60738e;
+    font-size: 1rem;
+    line-height: 1;
+}
+
+.intel-detail-section[open] > summary::after {
+    content: "−";
+}
+
+.intel-detail-section-body {
+    padding: 0 0 10px;
+}
+
+.intel-resource-summary,
+.intel-cargo-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.intel-resource-summary > div,
+.intel-cargo-grid > div {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    padding: 8px 9px;
+    border: 1px solid #1d2a3b;
+    border-radius: 6px;
+    background: #0a1019;
+}
+
+.intel-resource-summary span,
+.intel-cargo-grid span {
+    color: #718096;
+    font-size: 0.68rem;
+}
+
+.intel-resource-summary strong,
+.intel-cargo-grid strong {
+    color: #dbe6f4;
+    font-size: 0.82rem;
+}
+
+.intel-mineral-table-wrap {
+    overflow-x: auto;
+}
+
+.intel-mineral-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.7rem;
+}
+
+.intel-mineral-table th,
+.intel-mineral-table td {
+    padding: 6px 5px;
+    border-bottom: 1px solid #192332;
+    text-align: right;
+    white-space: nowrap;
+}
+
+.intel-mineral-table thead th {
+    color: #657791;
+    font-size: 0.62rem;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.intel-mineral-table thead th:first-child,
+.intel-mineral-table tbody th {
+    text-align: left;
+}
+
+.intel-mineral-table tbody th {
+    color: #9aacbf;
+    font-weight: 600;
+}
+
+.intel-mineral-table tbody td {
+    color: #d4deea;
+}
+
+.intel-colony-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+}
+
+.intel-colony-card {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 9px 10px;
+    border: 1px solid #1e2b3c;
+    border-radius: 6px;
+    background: #0a1019;
+}
+
+.intel-colony-card > span {
+    color: #718096;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+}
+
+.intel-colony-card > strong {
+    color: #e0e8f2;
+    font-size: 0.84rem;
+}
+
+.intel-colony-card > small {
+    color: #8fa0b5;
+    font-size: 0.72rem;
+    line-height: 1.35;
+}
+
+.intel-no-facts {
+    margin: 0;
+    color: #738399;
+    font-size: 0.78rem;
+    line-height: 1.45;
+}
+
+.intel-orbit-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.intel-orbit-item {
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr);
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 7px 8px;
+    border: 1px solid #1e2b3c;
+    border-radius: 6px;
+    background: #0a1019;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.intel-orbit-item:hover {
+    border-color: #38506f;
+    background: #0f1723;
+}
+
+.intel-orbit-item > span:last-child {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.intel-orbit-item strong {
+    color: #dce7f4;
+    font-size: 0.78rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.intel-orbit-item small {
+    color: #718198;
+    font-size: 0.67rem;
+}
+
+.intel-orbit-symbol {
+    display: block;
+    width: 10px;
+    height: 10px;
+    justify-self: center;
+    background: #60a5fa;
+}
+
+.intel-orbit-symbol-base {
+    border: 2px solid #f3c969;
+    background: transparent;
+}
+
+.intel-orbit-symbol-freighter {
+    border: 1px solid #d9e0e9;
+}
+
+.intel-orbit-symbol-torpedo {
+    clip-path: polygon(50% 0, 100% 100%, 0 100%);
+}
+
+.intel-orbit-symbol-carrier {
+    clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
+}
+
+.intel-orbit-symbol-warship {
+    transform: rotate(45deg) scale(0.8);
 }
 
 .intel-map-empty-selection {
@@ -225,7 +504,7 @@
     padding-top: 16px;
     border-top: 1px solid #1b2635;
     color: #77879d;
-    font-size: 0.74rem;
+    font-size: 0.72rem;
     line-height: 1.45;
 }
 
@@ -246,6 +525,12 @@
     color: #d88787;
 }
 
+@media (max-width: 1120px) {
+    .intel-map-layout {
+        grid-template-columns: minmax(0, 1fr) 350px;
+    }
+}
+
 @media (max-width: 980px) {
     .intel-map-header {
         align-items: flex-start;
@@ -260,12 +545,13 @@
     }
 
     .intel-map-stage-wrap {
-        min-height: 520px;
+        min-height: 540px;
         border-right: 0;
         border-bottom: 1px solid #1b2431;
     }
 
     .intel-map-details {
+        max-height: none;
         min-height: 240px;
     }
 }
@@ -287,7 +573,7 @@
     }
 
     .intel-map-stage-wrap {
-        min-height: 430px;
+        min-height: 440px;
     }
 
     .intel-map-legend {
@@ -300,5 +586,10 @@
         right: 10px;
         left: 10px;
         text-align: center;
+    }
+
+    .intel-resource-summary,
+    .intel-cargo-grid {
+        grid-template-columns: 1fr;
     }
 }
