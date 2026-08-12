@@ -138,7 +138,6 @@ export function drawHistoricalShipTracks({
                     fill: point.gap_from_previous ? 0xffcf7d : 0xcbd8e8,
                     fontFamily: "Inter, Arial, sans-serif",
                     fontSize: 9,
-                    alpha: labelAlpha,
                     stroke: {
                         color: 0x060a10,
                         width: 3,
