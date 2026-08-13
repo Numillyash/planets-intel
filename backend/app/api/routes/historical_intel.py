@@ -2,10 +2,12 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 
 from app.api.dependencies.auth import require_user
 from app.models.user import AppUser
+from app.schemas.combat_state import CombatStateResponse, CombatStateUpsertRequest
 from app.schemas.combined_intel import CombinedPrivateIntelResponse
 from app.schemas.private_intel import LatestPrivateIntelResponse
+from app.services.combat_event_enrichment import enrich_combat_events
 from app.services.combat_events import get_combat_events
-from app.services.event_results import apply_structured_host_evidence
+from app.services.combat_state import upsert_combat_state
 from app.services.historical_intel import (
     backfill_historical_turn,
     get_combined_private_intel_turn,
@@ -134,13 +136,43 @@ def historical_combat_events(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Combat-event context not found",
         )
-    return apply_structured_host_evidence(
+    return enrich_combat_events(
         user_id=user.id,
         game_id=game_id,
         linked_account_id=linked_account_id,
         turn=turn,
         result=result,
     )
+
+
+@router.put(
+    "/games/{game_id}/private-intel/history/combat-events/{turn}/{vcr_id}/ships/{ship_id}/post-combat-state",
+    response_model=CombatStateResponse,
+)
+def save_post_combat_state(
+    payload: CombatStateUpsertRequest,
+    game_id: int = Path(gt=0),
+    turn: int = Path(gt=0),
+    vcr_id: int = Path(gt=0),
+    ship_id: int = Path(gt=0),
+    user: AppUser = Depends(require_user),
+) -> CombatStateResponse:
+    result = upsert_combat_state(
+        user_id=user.id,
+        game_id=game_id,
+        turn=turn,
+        vcr_id=vcr_id,
+        ship_id=ship_id,
+        post_combat_torpedoes=payload.post_combat_torpedoes,
+        post_combat_fighters=payload.post_combat_fighters,
+        note=payload.note,
+    )
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Accessible VCR ship not found",
+        )
+    return CombatStateResponse(**result)
 
 
 @router.get(
