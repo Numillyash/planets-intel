@@ -5,9 +5,9 @@ from app.models.user import AppUser
 from app.schemas.combat_state import CombatStateResponse, CombatStateUpsertRequest
 from app.schemas.combined_intel import CombinedPrivateIntelResponse
 from app.schemas.private_intel import LatestPrivateIntelResponse
+from app.services.combat_event_enrichment import enrich_combat_events
 from app.services.combat_events import get_combat_events
 from app.services.combat_state import upsert_combat_state
-from app.services.event_results import apply_structured_host_evidence
 from app.services.historical_intel import (
     backfill_historical_turn,
     get_combined_private_intel_turn,
@@ -136,7 +136,7 @@ def historical_combat_events(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Combat-event context not found",
         )
-    return apply_structured_host_evidence(
+    return enrich_combat_events(
         user_id=user.id,
         game_id=game_id,
         linked_account_id=linked_account_id,
