@@ -2,12 +2,14 @@ import { useEffect, useState } from "react";
 
 import { getShipLoadoutInference } from "../../api/threat";
 import type {
+    BuildEventCandidate,
     RankedLoadoutCandidate,
     ShipLoadoutInference,
 } from "../../types/loadout";
 import { FactRow } from "./DetailPrimitives";
 
-function signed(value: number): string {
+function signed(value: number | null): string {
+    if (value === null) return "—";
     return `${value >= 0 ? "+" : ""}${value.toLocaleString()}`;
 }
 
@@ -15,6 +17,10 @@ function gradeColor(grade: RankedLoadoutCandidate["evidence_grade"]): string {
     if (grade === "strong") return "#82e6b1";
     if (grade === "moderate") return "#ffd978";
     return "#9db1ca";
+}
+
+function buildEventLabel(event: BuildEventCandidate): string {
+    return `T${event.turn}: ${signed(event.warship_delta)} warships · ${signed(event.military_delta)} military`;
 }
 
 export function LoadoutInference({
@@ -61,6 +67,8 @@ export function LoadoutInference({
 
     const ledger = result.military_ledger;
     const candidates = result.ranked_candidates ?? [];
+    const buildEvents = ledger?.candidate_build_events ?? [];
+    const engineConstraint = result.engine_constraint;
 
     return (
         <div style={{ marginTop: 10 }}>
@@ -69,26 +77,47 @@ export function LoadoutInference({
                 <FactRow label="Fuel tank" value={result.subject.fuel_capacity !== null ? `${result.subject.fuel_capacity} kt` : "—"} />
                 <FactRow label="Cargo capacity" value={result.subject.cargo_capacity !== null ? `${result.subject.cargo_capacity} kt` : "—"} />
                 <FactRow label="First observed" value={`T${result.subject.first_observed_turn}`} />
+                <FactRow label="Observed warp" value={result.subject.observed_warp ?? "—"} />
+                {engineConstraint?.kind === "hard_minimum_tech" && (
+                    <FactRow label="Engine constraint" value={`Tech ${engineConstraint.min_engine_tech}+`} />
+                )}
                 {ledger !== undefined && <FactRow label="Public fleet" value={`${ledger.warships ?? "?"} warships${ledger.warship_delta !== null ? ` (${signed(ledger.warship_delta)})` : ""} · ${ledger.freighters ?? "?"} freighters${ledger.freighter_delta !== null ? ` (${signed(ledger.freighter_delta)})` : ""}`} />}
                 {ledger !== undefined && <FactRow label="Visible fleet" value={`${ledger.visible_warships} warships · ${ledger.visible_noncombat_ships} non-combat`} />}
-                {ledger?.candidate_build_military_delta !== null && ledger?.candidate_build_military_delta !== undefined && (
-                    <FactRow label={`Score Δ at T${ledger.candidate_build_turn}`} value={`${signed(ledger.candidate_build_military_delta)} · warships ${ledger.candidate_build_warship_delta !== null ? signed(ledger.candidate_build_warship_delta) : "?"}`} />
-                )}
             </dl>
 
-            {ledger?.conditional_build_link && (
+            {engineConstraint !== undefined && (
                 <p className="intel-no-facts" style={{ marginTop: 7 }}>
-                    Historical correlation is active for T{ledger.candidate_build_turn}: the public warship count changed by exactly +1. This is supporting evidence, not a factual identity claim.
+                    {engineConstraint.detail}
                 </p>
             )}
 
-            <div className="intel-orbit-list" style={{ marginTop: 7 }}>
-                {candidates.slice(0, 6).map((candidate, index) => (
-                    <div className="intel-orbit-item" key={`${candidate.engine_id}:${candidate.beam_id}:${candidate.torpedo_id}`} style={{ cursor: "default", alignItems: "flex-start" }}>
+            <strong style={{ display: "block", fontSize: 11, marginTop: 10 }}>Candidate construction events</strong>
+            {buildEvents.length === 0 ? (
+                <p className="intel-no-facts" style={{ marginTop: 5 }}>No positive public warship-growth event is stored before the first factual sighting.</p>
+            ) : (
+                <div className="intel-orbit-list" style={{ marginTop: 5 }}>
+                    {buildEvents.map((event) => (
+                        <div className="intel-orbit-item" key={event.turn} style={{ cursor: "default", alignItems: "flex-start" }}>
+                            <span className="intel-orbit-symbol legend-orbit" style={{ marginTop: 3 }} />
+                            <span style={{ minWidth: 0 }}>
+                                <strong>{buildEventLabel(event)}</strong>
+                                <small>freighters {signed(event.freighter_delta)} · planets {signed(event.planet_delta)} · bases {signed(event.starbase_delta)} · inventory {signed(event.inventory_delta)}</small>
+                            </span>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            <div className="intel-orbit-list" style={{ marginTop: 10 }}>
+                {candidates.slice(0, 8).map((candidate, index) => (
+                    <div className="intel-orbit-item" key={`${candidate.engine_id}:${candidate.beam_id}:${candidate.torpedo_id}:${candidate.build_turn}`} style={{ cursor: "default", alignItems: "flex-start" }}>
                         <span className="intel-orbit-symbol legend-orbit" style={{ marginTop: 3 }} />
                         <span style={{ minWidth: 0 }}>
                             <strong>#{index + 1} · {candidate.beam_name ?? "?"} · {candidate.torpedo_name ?? "?"}</strong>
-                            <small>{candidate.engine_name ?? "engine ?"}{candidate.build_military_score !== null ? ` · base score ${candidate.build_military_score.toLocaleString()}` : ""}{candidate.military_delta_residual !== null ? ` · residual ${signed(candidate.military_delta_residual)}` : ""}</small>
+                            <small>{candidate.engine_name ?? "engine ?"}{candidate.build_military_score !== null ? ` · base score ${candidate.build_military_score.toLocaleString()}` : ""}</small>
+                            {candidate.build_turn !== null && (
+                                <small>T{candidate.build_turn} hypothesis · public ΔMilitary {candidate.build_military_delta !== null ? signed(candidate.build_military_delta) : "?"}{candidate.military_delta_residual !== null ? ` · residual ${signed(candidate.military_delta_residual)}` : ""}</small>
+                            )}
                             <small>component mass {candidate.weapon_mass ?? "?"} kt{candidate.max_fuel_if_no_cargo_or_ammo !== null ? ` · fuel ceiling ${candidate.max_fuel_if_no_cargo_or_ammo} kt` : ""}{candidate.max_fuel_fill_ratio !== null ? ` (${Math.round(candidate.max_fuel_fill_ratio * 100)}%)` : ""}</small>
                             <small style={{ color: gradeColor(candidate.evidence_grade) }}>{candidate.evidence_grade} evidence · score {candidate.evidence_points}</small>
                         </span>
@@ -97,10 +126,13 @@ export function LoadoutInference({
             </div>
 
             <p className="intel-no-facts" style={{ marginTop: 7 }}>
-                Fuel is a soft prior, not an observed value. The ceiling assumes zero hidden cargo and zero loaded ammunition. Residual score can include ammunition, minefields, fixed defenses and unrelated fleet changes.
+                Every positive public warship-growth event before the first factual sighting is evaluated independently. A matching turn is inference, not proof that this exact ship was constructed then.
             </p>
             <p className="intel-no-facts" style={{ marginTop: 4 }}>
-                First observation is not proof of origin; fog of war can reveal an older object for the first time.
+                {engineConstraint?.unlimited_fuel
+                    ? "Fuel-fill ranking is disabled for this Unlimited Fuel ruleset."
+                    : "Fuel is a soft prior, not an observed value. The ceiling assumes zero hidden cargo and zero loaded ammunition."}
+                {" "}Military residual can include ammunition, minefields, defenses, losses and unrelated fleet changes.
             </p>
         </div>
     );
