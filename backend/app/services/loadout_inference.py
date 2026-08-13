@@ -29,6 +29,23 @@ def _integer(record: dict[str, Any] | None, *keys: str) -> int | None:
     return None
 
 
+def _setting_bool(settings: dict[str, Any], *keys: str) -> bool:
+    folded = {str(key).casefold(): value for key, value in settings.items()}
+    for key in keys:
+        value = folded.get(key.casefold())
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, int):
+            return value != 0
+        if isinstance(value, str):
+            normalized = value.strip().casefold()
+            if normalized in {"1", "true", "yes", "on"}:
+                return True
+            if normalized in {"0", "false", "no", "off", ""}:
+                return False
+    return False
+
+
 def _name(record: dict[str, Any] | None, fallback: str) -> str:
     if record is not None:
         value = record.get("name")
@@ -107,11 +124,9 @@ def _latest_vcr_equipment(
     return candidates[-1]
 
 
-def _score_history(
-    *, game_id: int, slot_id: int, through_turn: int,
-) -> tuple[ScoreObservation | None, ScoreObservation | None]:
+def _score_rows(*, game_id: int, slot_id: int, through_turn: int) -> list[ScoreObservation]:
     with SessionLocal() as session:
-        rows = list(
+        return list(
             session.execute(
                 select(ScoreObservation)
                 .where(
@@ -122,9 +137,40 @@ def _score_history(
                 .order_by(ScoreObservation.turn)
             ).scalars().all()
         )
-    if not rows:
-        return None, None
-    return rows[-1], rows[-2] if len(rows) >= 2 else None
+
+
+def _score_delta(current: ScoreObservation, previous: ScoreObservation | None, field: str) -> int | None:
+    if previous is None:
+        return None
+    return int(getattr(current, field)) - int(getattr(previous, field))
+
+
+def _build_events(score_rows: list[ScoreObservation], through_turn: int) -> list[dict[str, int]]:
+    result: list[dict[str, int]] = []
+    previous: ScoreObservation | None = None
+    for row in score_rows:
+        if row.turn > through_turn:
+            break
+        warship_delta = _score_delta(row, previous, "capital_ships")
+        military_delta = _score_delta(row, previous, "military_score")
+        freighter_delta = _score_delta(row, previous, "freighters")
+        planet_delta = _score_delta(row, previous, "planets")
+        starbase_delta = _score_delta(row, previous, "starbases")
+        inventory_delta = _score_delta(row, previous, "inventory_score")
+        if warship_delta is not None and warship_delta > 0 and military_delta is not None:
+            result.append(
+                {
+                    "turn": row.turn,
+                    "warship_delta": warship_delta,
+                    "military_delta": military_delta,
+                    "freighter_delta": freighter_delta or 0,
+                    "planet_delta": planet_delta or 0,
+                    "starbase_delta": starbase_delta or 0,
+                    "inventory_delta": inventory_delta or 0,
+                }
+            )
+        previous = row
+    return result
 
 
 def _fuel_prior_points(fill_ratio: float | None) -> int:
@@ -150,6 +196,8 @@ def _military_fit_points(residual: int | None) -> int:
         return -25
     if residual < 0:
         return -5
+    if residual <= 25:
+        return 58
     if residual <= 100:
         return 50
     if residual <= 300:
@@ -169,6 +217,19 @@ def _evidence_grade(points: int, uses_military_delta: bool) -> str:
     if points >= 45:
         return "moderate"
     return "weak"
+
+
+def _best_build_fit(build_events: list[dict[str, int]], build_score: int | None) -> tuple[dict[str, int] | None, int | None, int]:
+    if build_score is None or not build_events:
+        return None, None, 0
+    scored: list[tuple[int, int, dict[str, int], int]] = []
+    for event in build_events:
+        residual = event["military_delta"] - build_score
+        fit_points = _military_fit_points(residual)
+        scored.append((fit_points, -abs(residual), event, residual))
+    scored.sort(key=lambda item: (item[0], item[1], item[2]["turn"]), reverse=True)
+    best = scored[0]
+    return best[2], best[3], best[0]
 
 
 def get_ship_loadout_inference(
@@ -249,6 +310,18 @@ def get_ship_loadout_inference(
     engine_count = _integer(hull, "engines") or 0
     beam_slots = _integer(hull, "beams") or 0
     tube_slots = _integer(hull, "launchers", "tubes") or 0
+    observed_warp = subject.warp if isinstance(subject.warp, int) and subject.warp > 0 else _integer(payload, "warp")
+
+    settings = catalog.settings if isinstance(catalog.settings, dict) else {}
+    unlimited_fuel = _setting_bool(
+        settings,
+        "unlimited_fuel",
+        "unlimitedfuel",
+        "unlimitedFuel",
+        "no_fuel",
+        "nofuel",
+    )
+    engine_min_tech = observed_warp if unlimited_fuel and observed_warp is not None else None
 
     observed_turns = sorted({_effective_turn(obs, batch) for obs, batch in rows})
     first_observed_turn = observed_turns[0] if observed_turns else turn
@@ -256,50 +329,14 @@ def get_ship_loadout_inference(
     revealed_beam = vcr.get("beam_id") if vcr is not None else None
     revealed_torpedo = vcr.get("torpedo_id") if vcr is not None else None
 
-    current_score, previous_score = _score_history(
-        game_id=game_id,
-        slot_id=subject.owner_id,
-        through_turn=turn,
-    )
-    military_delta = (
-        current_score.military_score - previous_score.military_score
-        if current_score is not None and previous_score is not None else None
-    )
-    warship_delta = (
-        current_score.capital_ships - previous_score.capital_ships
-        if current_score is not None and previous_score is not None else None
-    )
-    freighter_delta = (
-        current_score.freighters - previous_score.freighters
-        if current_score is not None and previous_score is not None else None
-    )
+    score_rows = _score_rows(game_id=game_id, slot_id=subject.owner_id, through_turn=turn)
+    current_score = score_rows[-1] if score_rows else None
+    previous_score = score_rows[-2] if len(score_rows) >= 2 else None
+    military_delta = _score_delta(current_score, previous_score, "military_score") if current_score is not None else None
+    warship_delta = _score_delta(current_score, previous_score, "capital_ships") if current_score is not None else None
+    freighter_delta = _score_delta(current_score, previous_score, "freighters") if current_score is not None else None
 
-    first_score, first_previous_score = _score_history(
-        game_id=game_id,
-        slot_id=subject.owner_id,
-        through_turn=first_observed_turn,
-    )
-    first_score_exact = first_score is not None and first_score.turn == first_observed_turn
-    candidate_military_delta = (
-        first_score.military_score - first_previous_score.military_score
-        if first_score_exact and first_previous_score is not None
-        else None
-    )
-    candidate_warship_delta = (
-        first_score.capital_ships - first_previous_score.capital_ships
-        if first_score_exact and first_previous_score is not None
-        else None
-    )
-    candidate_freighter_delta = (
-        first_score.freighters - first_previous_score.freighters
-        if first_score_exact and first_previous_score is not None
-        else None
-    )
-    conditional_build_link = bool(
-        candidate_warship_delta == 1
-        and candidate_military_delta is not None
-        and candidate_military_delta > 0
-    )
+    candidate_build_events = _build_events(score_rows, first_observed_turn)
 
     owner_latest: dict[int, tuple[ShipObservation, PrivateObservationBatch]] = {}
     for candidate, batch in current_rows:
@@ -332,6 +369,9 @@ def get_ship_loadout_inference(
     torpedo_items = list(sorted(torpedos.items())) if tube_slots > 0 else [(None, None)]
 
     for engine_id, engine in engine_items:
+        engine_tech = _integer(engine, "techlevel", "tech") if engine is not None else None
+        if engine_min_tech is not None and engine_tech is not None and engine_tech < engine_min_tech:
+            continue
         engine_score = _component_score(engine)
         for beam_id, beam in beam_items:
             if isinstance(revealed_beam, int) and revealed_beam > 0 and beam_id != revealed_beam:
@@ -373,16 +413,11 @@ def get_ship_loadout_inference(
                     if tube_score is not None:
                         build_score += tube_slots * tube_score
 
-                residual = (
-                    candidate_military_delta - build_score
-                    if conditional_build_link
-                    and candidate_military_delta is not None
-                    and build_score is not None
-                    else None
-                )
-                points = _fuel_prior_points(fill_ratio)
-                if conditional_build_link:
-                    points += _military_fit_points(residual)
+                best_event, residual, military_points = _best_build_fit(candidate_build_events, build_score)
+                points = 0 if unlimited_fuel else _fuel_prior_points(fill_ratio)
+                points += military_points
+                if engine_min_tech is not None:
+                    points += 20
                 if vcr is not None:
                     points += 35
 
@@ -390,7 +425,7 @@ def get_ship_loadout_inference(
                     {
                         "engine_id": engine_id,
                         "engine_name": _name(engine, "No engine") if engine is not None else None,
-                        "engine_tech": _integer(engine, "techlevel", "tech") if engine is not None else None,
+                        "engine_tech": engine_tech,
                         "beam_id": beam_id,
                         "beam_name": _name(beam, "No beams") if beam is not None else None,
                         "beam_tech": _integer(beam, "techlevel", "tech") if beam is not None else None,
@@ -402,17 +437,21 @@ def get_ship_loadout_inference(
                         "max_fuel_fill_ratio": round(fill_ratio, 4) if fill_ratio is not None else None,
                         "full_tank_shortfall": full_tank_shortfall,
                         "build_military_score": build_score,
+                        "build_turn": best_event["turn"] if best_event is not None else None,
+                        "build_military_delta": best_event["military_delta"] if best_event is not None else None,
+                        "build_warship_delta": best_event["warship_delta"] if best_event is not None else None,
                         "military_delta_residual": residual,
                         "evidence_points": points,
-                        "evidence_grade": _evidence_grade(points, conditional_build_link),
+                        "evidence_grade": _evidence_grade(points, best_event is not None),
                     }
                 )
 
     candidates.sort(
         key=lambda item: (
             item["evidence_points"],
-            item["max_fuel_fill_ratio"] if item["max_fuel_fill_ratio"] is not None else -1,
             -(abs(item["military_delta_residual"]) if item["military_delta_residual"] is not None else 10**9),
+            item["build_turn"] if item["build_turn"] is not None else -1,
+            item["max_fuel_fill_ratio"] if item["max_fuel_fill_ratio"] is not None else -1,
         ),
         reverse=True,
     )
@@ -435,6 +474,18 @@ def get_ship_loadout_inference(
             "beam_slots": beam_slots,
             "tube_slots": tube_slots,
             "first_observed_turn": first_observed_turn,
+            "observed_warp": observed_warp,
+        },
+        "engine_constraint": {
+            "kind": "hard_minimum_tech" if engine_min_tech is not None else "none",
+            "unlimited_fuel": unlimited_fuel,
+            "observed_warp": observed_warp,
+            "min_engine_tech": engine_min_tech,
+            "detail": (
+                f"Unlimited Fuel ruleset: observed Warp {observed_warp} excludes engines below tech {engine_min_tech}."
+                if engine_min_tech is not None
+                else "No hard engine-tech constraint is inferred from observed warp for this ruleset."
+            ),
         },
         "military_ledger": {
             "current_turn": current_score.turn if current_score is not None else None,
@@ -446,25 +497,19 @@ def get_ship_loadout_inference(
             "freighter_delta": freighter_delta,
             "visible_warships": visible_warships,
             "visible_noncombat_ships": visible_noncombat,
-            "candidate_build_turn": first_observed_turn,
-            "candidate_build_military_delta": candidate_military_delta,
-            "candidate_build_warship_delta": candidate_warship_delta,
-            "candidate_build_freighter_delta": candidate_freighter_delta,
-            "conditional_build_link": conditional_build_link,
+            "candidate_build_events": candidate_build_events,
         },
         "vcr_reveal": vcr,
         "assumptions": {
-            "near_full_departure_fuel": "soft_prior",
-            "selected_ship_is_new_build": "conditional" if conditional_build_link else "not_established",
-            "military_residual": "Residual may include loaded ammunition, defenses, minefields, and other fleet changes.",
-            "first_seen_caveat": "First factual observation is not proof of construction; fog of war can reveal an older ship for the first time.",
+            "near_full_departure_fuel": "disabled_for_unlimited_fuel" if unlimited_fuel else "soft_prior",
+            "selected_ship_is_new_build": "not_established",
+            "military_residual": "Residual may include loaded ammunition, defenses, minefields, losses and other fleet changes.",
+            "first_seen_caveat": "First factual observation is not proof of construction; every earlier net fleet-growth event remains a candidate until additional evidence excludes it.",
             "historical_score_link": (
-                f"Candidate score delta is taken from T{first_observed_turn}, the first factual sighting turn."
-                if conditional_build_link
-                else "No unique +1 public warship delta is established on the first factual sighting turn."
+                f"{len(candidate_build_events)} public fleet-growth event(s) at or before first factual sighting T{first_observed_turn} are evaluated independently."
             ),
         },
-        "ranked_candidates": candidates[:12],
+        "ranked_candidates": candidates[:16],
         "provenance": {
             "analysis_kind": "read_time_inference",
             "facts_unchanged": True,
