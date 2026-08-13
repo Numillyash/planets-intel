@@ -11,6 +11,7 @@ from app.services.historical_intel import (
 )
 from app.services.historical_status import historical_intel_status
 from app.services.historical_tracks import get_historical_ship_tracks
+from app.services.loadout_inference import get_ship_loadout_inference
 from app.services.private_intel import get_private_intel_turn
 from app.services.threat_analysis import get_ship_threat_analysis
 
@@ -154,6 +155,31 @@ def ship_threat_analysis(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Threat-analysis context not found",
+        )
+    return result
+
+
+@router.get(
+    "/games/{game_id}/private-intel/analysis/loadout/{ship_id}",
+)
+def ship_loadout_inference(
+    game_id: int = Path(gt=0),
+    ship_id: int = Path(gt=0),
+    linked_account_id: int = Query(gt=0),
+    turn: int = Query(gt=0),
+    user: AppUser = Depends(require_user),
+) -> dict[str, object]:
+    result = get_ship_loadout_inference(
+        user_id=user.id,
+        game_id=game_id,
+        linked_account_id=linked_account_id,
+        turn=turn,
+        ship_id=ship_id,
+    )
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Loadout-inference context not found",
         )
     return result
 
