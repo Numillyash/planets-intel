@@ -1,3 +1,4 @@
+import type { ShipLoadoutInference } from "../types/loadout";
 import type { ShipThreatAnalysis } from "../types/threat";
 
 
@@ -34,4 +35,27 @@ export async function getShipThreatAnalysis(
         );
     }
     return response.json() as Promise<ShipThreatAnalysis>;
+}
+
+
+export async function getShipLoadoutInference(
+    gameId: number,
+    linkedAccountId: number,
+    turn: number,
+    shipId: number,
+): Promise<ShipLoadoutInference> {
+    const response = await fetch(
+        `/api/games/${gameId}/private-intel/analysis/loadout/${shipId}`
+        + `?linked_account_id=${linkedAccountId}&turn=${turn}`,
+        {
+            credentials: "same-origin",
+            headers: { Accept: "application/json" },
+        },
+    );
+    if (!response.ok) {
+        throw new Error(
+            `Loadout inference failed: ${await parseErrorMessage(response)}`,
+        );
+    }
+    return response.json() as Promise<ShipLoadoutInference>;
 }
