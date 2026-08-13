@@ -3,6 +3,7 @@ from typing import Any
 from app.services.combat_replay_state import latest_ship_replay_state
 from app.services.combat_state import latest_ship_combat_state
 from app.services.threat_analysis import get_ship_threat_analysis
+from app.services.vcr_threat_subject import get_vcr_only_ship_threat_analysis
 
 
 def _analyst_payload(state: Any) -> dict[str, Any] | None:
@@ -38,6 +39,14 @@ def get_ship_threat_analysis_with_post_state(
         turn=turn,
         ship_id=ship_id,
     )
+    if result is None:
+        result = get_vcr_only_ship_threat_analysis(
+            user_id=user_id,
+            game_id=game_id,
+            linked_account_id=linked_account_id,
+            turn=turn,
+            ship_id=ship_id,
+        )
     if result is None or result.get("status") != "ok":
         return result
 
