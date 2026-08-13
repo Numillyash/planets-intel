@@ -2,18 +2,29 @@
 
 ## Purpose
 
-Planets.nu Intel Client is a read-only intelligence and analytics layer for
-Planets.nu.
+Planets.nu Intel Client is an intelligence, analytics and future operational
+client for Planets.nu.
+
+The current production stage is primarily read-only. The target product should
+support a complete turn workflow while keeping intelligence layered on top of
+the ordinary game state rather than replacing it.
 
 The system stores not only the current visible state, but also historical
-observations and analytical conclusions derived from public statistics and
-player-visible information.
+observations, deterministic derived combat state, analytical conclusions, and
+later user-authored order drafts.
 
-## Core rule
+## Core rules
 
-Observed facts and inferred information are separate concepts.
+Observed facts, deterministic derived state, inferred information and user
+orders are separate concepts.
 
 An inference MUST NOT overwrite or masquerade as an observation.
+
+A replay-derived value MUST retain the factual VCR and algorithm used to derive
+it.
+
+A user order draft MUST NOT mutate the stored upstream observation that it was
+based on.
 
 ## Layers
 
@@ -28,9 +39,11 @@ Responsibilities:
 - communication with Planets.nu API;
 - parsing upstream responses;
 - transport errors;
-- upstream API compatibility.
+- upstream API compatibility;
+- future write/order transport.
 
-It must not contain intelligence logic.
+It must not contain intelligence logic. Future write endpoints must remain
+behind the backend; the browser must not talk directly to Planets.nu.
 
 ### 2. Canonical database
 
@@ -69,13 +82,27 @@ Examples:
     Planet 184 starbase = true at turn 47
     Ship 231 hull = Gorbie at turn 52
 
-### 4. Inferences
+### 4. Deterministic derived state
+
+Derived state is computed from factual inputs by a deterministic algorithm and
+must preserve both the inputs and algorithm identity.
+
+Examples:
+
+    VCR #2 start torpedoes = 5
+    deterministic NuHost replay => post-combat torpedoes = 0
+
+Derived state does not become a `ShipObservation` merely because it is highly
+reliable.
+
+### 5. Inferences
 
 Location:
 
     backend/app/intel/inference/
 
-An inference represents a conclusion derived from observations or statistics.
+An inference represents a conclusion derived from observations, deterministic
+state or statistics.
 
 Examples:
 
@@ -90,7 +117,7 @@ Every inference must retain:
 - confidence;
 - creation turn.
 
-### 5. Statistics
+### 6. Statistics
 
 Location:
 
@@ -109,26 +136,66 @@ Initial metrics include:
 - inventory score;
 - priority points.
 
-### 6. Solvers
+### 7. Solvers
 
 Location:
 
     backend/app/intel/solvers/
 
-Future analytical components:
+Analytical components include or will include:
 
 - military-score delta solver;
 - probable ship construction;
 - fleet composition constraints;
 - economic activity estimation.
 
-### 7. API
+### 8. Orders / command state
+
+Future operational mode introduces a separate command domain.
+
+Required concepts:
+
+    OrderDraft
+    OrderValidation
+    OrderPlan
+    SubmissionReceipt
+    Reconciliation
+
+Draft orders represent user intent. They must remain separate from observations
+and from inferred recommendations.
+
+A write sequence should conceptually be:
+
+    upstream observed state
+            |
+            v
+       local OrderDraft
+            |
+            v
+      OrderValidation
+            |
+            v
+         OrderPlan
+            |
+            v
+    Planets.nu write adapter
+            |
+            v
+     SubmissionReceipt
+            |
+            v
+      reload / reconcile
+
+Only an explicit user action may submit a draft upstream.
+
+### 9. API
 
 Location:
 
     backend/app/api/
 
-Provides application data to the frontend.
+Provides application data and, in future operational mode, validated command
+operations to the frontend.
 
 The frontend must not communicate directly with Planets.nu.
 
@@ -149,6 +216,25 @@ Major feature modules:
     players
     intel
     statistics
+    combat
+    orders (future)
+
+### UI model
+
+The long-term UI should follow the same mental model as the normal Planets.nu
+client:
+
+- map as the primary workspace;
+- object selection opens one persistent context panel;
+- planet and ship information is split into coherent tabs;
+- ordinary game state is presented first;
+- intelligence, history, combat evidence and inference are additional overlays;
+- floating diagnostic panels should be reduced as the operational shell
+  replaces the current development-oriented layout.
+
+The design does not require a pixel-for-pixel copy of the upstream client; it
+should preserve the familiar workflow and information hierarchy while adding
+our intelligence layer.
 
 ## Deployment
 
@@ -180,44 +266,13 @@ PostgreSQL remains inside the Docker network and is not exposed publicly.
 
 ## Development phases
 
-### MVP 0.1
+The detailed product sequence is maintained in `ROADMAP.md`.
 
-Public read-only mode:
+High-level milestones:
 
-- load game by ID;
-- Planets.nu loadinfo;
-- Planets.nu loadscores;
-- canonical game/player data;
-- public score history;
-- map;
-- statistics UI.
-
-### MVP 0.2
-
-Private player data:
-
-- API key;
-- loadturn;
-- own objects;
-- visible enemy intelligence.
-
-### MVP 0.3
-
-Historical intelligence:
-
-- observations;
-- provenance;
-- intel age;
-- historical planet/ship state.
-
-### MVP 0.4
-
-Multi-user intelligence aggregation.
-
-### MVP 0.5
-
-Inference Engine.
-
-### MVP 0.6
-
-Military-score and fleet composition solver.
+- MVP 0.1–0.6: public/private data, history, aggregation, inference and solvers;
+- MVP 0.7: combat intelligence and deterministic replay;
+- MVP 0.8: Planets.nu-style operational UI shell;
+- MVP 0.9: local turn planning and order drafts;
+- MVP 1.0: full turn execution through Planets Intel;
+- MVP 1.1: intelligence-assisted operations.
