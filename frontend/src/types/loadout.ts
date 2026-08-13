@@ -1,3 +1,13 @@
+export interface BuildEventCandidate {
+    turn: number;
+    warship_delta: number;
+    military_delta: number;
+    freighter_delta: number;
+    planet_delta: number;
+    starbase_delta: number;
+    inventory_delta: number;
+}
+
 export interface RankedLoadoutCandidate {
     engine_id: number | null;
     engine_name: string | null;
@@ -13,6 +23,9 @@ export interface RankedLoadoutCandidate {
     max_fuel_fill_ratio: number | null;
     full_tank_shortfall: number | null;
     build_military_score: number | null;
+    build_turn: number | null;
+    build_military_delta: number | null;
+    build_warship_delta: number | null;
     military_delta_residual: number | null;
     evidence_points: number;
     evidence_grade: "strong" | "moderate" | "weak";
@@ -37,6 +50,14 @@ export interface ShipLoadoutInference {
         beam_slots: number;
         tube_slots: number;
         first_observed_turn: number;
+        observed_warp: number | null;
+    };
+    engine_constraint?: {
+        kind: "hard_minimum_tech" | "none";
+        unlimited_fuel: boolean;
+        observed_warp: number | null;
+        min_engine_tech: number | null;
+        detail: string;
     };
     military_ledger?: {
         current_turn: number | null;
@@ -48,11 +69,7 @@ export interface ShipLoadoutInference {
         freighter_delta: number | null;
         visible_warships: number;
         visible_noncombat_ships: number;
-        candidate_build_turn: number;
-        candidate_build_military_delta: number | null;
-        candidate_build_warship_delta: number | null;
-        candidate_build_freighter_delta: number | null;
-        conditional_build_link: boolean;
+        candidate_build_events: BuildEventCandidate[];
     };
     vcr_reveal?: {
         vcr_id: number;
@@ -64,8 +81,8 @@ export interface ShipLoadoutInference {
         launcher_count: number | null;
     } | null;
     assumptions?: {
-        near_full_departure_fuel: "soft_prior";
-        selected_ship_is_new_build: "conditional" | "not_established";
+        near_full_departure_fuel: "soft_prior" | "disabled_for_unlimited_fuel";
+        selected_ship_is_new_build: "not_established";
         military_residual: string;
         first_seen_caveat: string;
         historical_score_link?: string;
