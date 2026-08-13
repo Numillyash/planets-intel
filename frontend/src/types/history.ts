@@ -43,6 +43,11 @@ export interface HistoricalBackfillTurnResponse {
 
 export type HistoricalShipEvidence = "scan" | "combat";
 
+export type HistoricalCombatOutcome =
+    | "unknown"
+    | "survived_to_later_combat"
+    | "defeated";
+
 export interface HistoricalShipTrackPoint {
     turn: number;
     snapshot_turn: number;
@@ -53,12 +58,15 @@ export interface HistoricalShipTrackPoint {
     gap_from_previous: boolean;
     evidence: HistoricalShipEvidence;
     combat_vcr_id: number | null;
+    combat_outcome: HistoricalCombatOutcome | null;
+    has_direct_scan: boolean;
 }
 
 export interface HistoricalShipTrack {
     ship_id: number;
     name: string | null;
     owner_id: number | null;
+    hull_id: number | null;
     first_turn: number;
     last_turn: number;
     points: HistoricalShipTrackPoint[];

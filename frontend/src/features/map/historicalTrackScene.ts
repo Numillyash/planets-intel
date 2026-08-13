@@ -1,5 +1,6 @@
 import { Container, Graphics, Text } from "pixi.js";
 import type {
+    HistoricalCombatOutcome,
     HistoricalShipTrack,
     HistoricalShipTrackPoint,
 } from "../../types/history";
@@ -28,6 +29,17 @@ function fadedAlpha(
     );
     const alpha = baseAlpha * Math.pow(retainedPerTurn, age);
     return Math.min(Math.max(alpha, minimumAlpha), 1);
+}
+
+function combatOutcomeLabel(outcome: HistoricalCombatOutcome | null): string {
+    switch (outcome) {
+        case "defeated":
+            return "defeated in combat";
+        case "survived_to_later_combat":
+            return "survived to later combat";
+        default:
+            return "combat confirmed";
+    }
 }
 
 function drawTrackPoint({
@@ -59,10 +71,11 @@ function drawTrackPoint({
     );
 
     if (isCombat) {
+        const defeated = point.combat_outcome === "defeated";
         const marker = new Graphics()
             .circle(0, 0, selectedTrack ? 5.2 : 4.4)
             .stroke({
-                color,
+                color: defeated ? 0xff6b6b : color,
                 width: selectedTrack ? 1.8 : 1.25,
                 alpha,
             })
@@ -71,7 +84,7 @@ function drawTrackPoint({
             .moveTo(3.2, -3.2)
             .lineTo(-3.2, 3.2)
             .stroke({
-                color: 0xffd4d4,
+                color: defeated ? 0xff7777 : 0xffd4d4,
                 width: selectedTrack ? 1.5 : 1.1,
                 alpha: Math.min(alpha + 0.12, 1),
             });
@@ -108,18 +121,20 @@ function drawTrackPoint({
         0.18,
     );
     const suffix = point.evidence === "combat"
-        ? ` · combat${point.combat_vcr_id !== null ? ` #${point.combat_vcr_id}` : ""}`
+        ? ` · ${combatOutcomeLabel(point.combat_outcome)}${point.combat_vcr_id !== null ? ` #${point.combat_vcr_id}` : ""}`
         : point.gap_from_previous
             ? " · reacquired"
             : "";
     const label = new Text({
         text: `T${point.turn}${suffix}`,
         style: {
-            fill: point.evidence === "combat"
-                ? 0xffd1d1
-                : point.gap_from_previous
-                    ? 0xffcf7d
-                    : 0xcbd8e8,
+            fill: point.combat_outcome === "defeated"
+                ? 0xff9d9d
+                : point.evidence === "combat"
+                    ? 0xffd1d1
+                    : point.gap_from_previous
+                        ? 0xffcf7d
+                        : 0xcbd8e8,
             fontFamily: "Inter, Arial, sans-serif",
             fontSize: 9,
             stroke: { color: 0x060a10, width: 3 },
@@ -230,7 +245,7 @@ export function drawCurrentCombatContacts({
         const point = track.points.find(
             (item) => item.turn === throughTurn && item.evidence === "combat",
         );
-        if (point === undefined) continue;
+        if (point === undefined || point.has_direct_scan) continue;
 
         const key = `${point.x}:${point.y}`;
         const group = grouped.get(key) ?? [];
@@ -247,58 +262,68 @@ export function drawCurrentCombatContacts({
             const count = group.length;
             const angle = -Math.PI / 2
                 + (Math.PI * 2 * index) / Math.max(count, 1);
-            const offsetRadius = count > 1 ? 13 : 11;
+            const offsetRadius = count > 1 ? 14 : 11;
             const x = centerX + Math.cos(angle) * offsetRadius;
             const y = centerY + Math.sin(angle) * offsetRadius;
             const color = trackColor(track.owner_id);
+            const defeated = point.combat_outcome === "defeated";
 
             const connector = new Graphics()
                 .moveTo(centerX, centerY)
                 .lineTo(x, y)
                 .stroke({
-                    color: 0xffc4c4,
+                    color: defeated ? 0xff7777 : 0xffc4c4,
                     width: 0.75,
-                    alpha: 0.66,
+                    alpha: defeated ? 0.5 : 0.66,
                 });
             world.addChild(connector);
 
-            const marker = new Graphics()
-                .moveTo(0, -4.8)
-                .lineTo(4.8, 0)
-                .lineTo(0, 4.8)
-                .lineTo(-4.8, 0)
-                .closePath()
-                .fill({ color, alpha: 0.96 })
-                .stroke({
-                    color: 0xffffff,
-                    width: 1.1,
-                    alpha: 0.94,
-                })
-                .moveTo(-3, -3)
-                .lineTo(3, 3)
-                .moveTo(3, -3)
-                .lineTo(-3, 3)
-                .stroke({
-                    color: 0xffb5b5,
-                    width: 1,
-                    alpha: 0.95,
-                });
+            const marker = defeated
+                ? new Graphics()
+                    .circle(0, 0, 5.1)
+                    .stroke({ color: 0xff6b6b, width: 1.4, alpha: 0.96 })
+                    .moveTo(-3.4, -3.4)
+                    .lineTo(3.4, 3.4)
+                    .moveTo(3.4, -3.4)
+                    .lineTo(-3.4, 3.4)
+                    .stroke({ color: 0xffa0a0, width: 1.35, alpha: 0.98 })
+                : new Graphics()
+                    .moveTo(0, -5.1)
+                    .lineTo(5.1, 0)
+                    .lineTo(0, 5.1)
+                    .lineTo(-5.1, 0)
+                    .closePath()
+                    .fill({ color, alpha: 0.96 })
+                    .stroke({ color: 0xffffff, width: 1.1, alpha: 0.94 });
+
             marker.position.set(x, y);
+            marker.eventMode = "static";
+            marker.cursor = "help";
             world.addChild(marker);
 
+            const outcome = combatOutcomeLabel(point.combat_outcome);
             const name = track.name ?? `Ship #${track.ship_id}`;
             const label = new Text({
-                text: `${name} · combat T${throughTurn}`,
+                text: `${name}\n${outcome} · T${throughTurn}${point.combat_vcr_id !== null ? ` · VCR #${point.combat_vcr_id}` : ""}`,
                 style: {
-                    fill: 0xffd7d7,
+                    fill: defeated ? 0xffb1b1 : 0xffd7d7,
                     fontFamily: "Inter, Arial, sans-serif",
-                    fontSize: 8.5,
+                    fontSize: 9,
+                    lineHeight: 12,
                     stroke: { color: 0x060a10, width: 3 },
                 },
                 resolution: 2,
             });
-            label.position.set(x + 6, y - 11);
+            label.visible = false;
+            label.position.set(x + 7, y - 15);
             world.addChild(label);
+
+            marker.on("pointerover", () => {
+                label.visible = true;
+            });
+            marker.on("pointerout", () => {
+                label.visible = false;
+            });
         });
     }
 }
