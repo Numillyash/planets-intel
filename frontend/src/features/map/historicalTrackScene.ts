@@ -1,7 +1,6 @@
 import { Container, Graphics, Text } from "pixi.js";
 import type {
     HistoricalCombatEvent,
-    HistoricalCombatEventSide,
     HistoricalCombatOutcome,
     HistoricalShipTrack,
     HistoricalShipTrackPoint,
@@ -215,59 +214,8 @@ export function drawHistoricalShipTracks({
     }
 }
 
-function combatEventKey(event: HistoricalCombatEvent): string {
+export function combatEventKey(event: HistoricalCombatEvent): string {
     return `${event.turn}:${event.vcr_id}`;
-}
-
-function sideName(side: HistoricalCombatEventSide): string {
-    if (side.name !== null && side.name.trim()) return side.name;
-    if (side.object_id !== null) {
-        return side.object_kind === "ship"
-            ? `Ship #${side.object_id}`
-            : `Planet #${side.object_id}`;
-    }
-    return side.object_kind === "ship" ? "Unknown ship" : "Unknown planet";
-}
-
-function eventKindLabel(event: HistoricalCombatEvent): string {
-    const shipCount = event.sides.filter(
-        (side) => side.object_kind === "ship",
-    ).length;
-    if (shipCount === 2) return "ship combat";
-    if (shipCount === 1) return "planet combat";
-    return "combat";
-}
-
-function eventTooltip(event: HistoricalCombatEvent): string {
-    const lines = [
-        `VCR #${event.vcr_id} · T${event.turn} · ${eventKindLabel(event)}`,
-    ];
-
-    if (event.sequence_count > 1) {
-        lines.push(
-            `Combat ${event.sequence_index}/${event.sequence_count} at this position`,
-        );
-    }
-
-    for (const side of event.sides) {
-        const suffix = side.object_kind === "ship"
-            ? ` — ${combatOutcomeLabel(side.sequence_status)}`
-            : side.has_starbase
-                ? " — planet + starbase"
-                : " — planet";
-        lines.push(`${sideName(side)}${suffix}`);
-    }
-
-    if (event.sides.some(
-        (side) =>
-            side.object_kind === "ship" &&
-            side.sequence_status !== null &&
-            side.sequence_status !== "unknown",
-    )) {
-        lines.push("Sequence analysis; factual event data remains unchanged");
-    }
-
-    return lines.join("\n");
 }
 
 export function drawCurrentCombatContacts({
@@ -275,11 +223,15 @@ export function drawCurrentCombatContacts({
     tracks,
     bounds,
     throughTurn,
+    selectedEventKey,
+    onSelectEvent,
 }: {
     world: Container;
     tracks: HistoricalShipTrack[];
     bounds: MapBounds;
     throughTurn: number;
+    selectedEventKey: string | null;
+    onSelectEvent: (event: HistoricalCombatEvent) => void;
 }) {
     const events = new Map<string, HistoricalCombatEvent>();
 
@@ -326,58 +278,39 @@ export function drawCurrentCombatContacts({
                 (side) => side.sequence_status === "defeated",
             );
             const markerColor = hasDefeated ? 0xff8a73 : 0xffcc73;
+            const isSelected = selectedEventKey === combatEventKey(event);
 
             const connector = new Graphics()
                 .moveTo(centerX, centerY)
                 .lineTo(x, y)
                 .stroke({
                     color: markerColor,
-                    width: 0.8,
-                    alpha: 0.58,
+                    width: isSelected ? 1.2 : 0.8,
+                    alpha: isSelected ? 0.82 : 0.58,
                 });
             world.addChild(connector);
 
             const marker = new Graphics()
-                .circle(0, 0, 5.3)
+                .circle(0, 0, isSelected ? 6.2 : 5.3)
                 .fill({ color: 0x111722, alpha: 0.96 })
-                .stroke({ color: markerColor, width: 1.7, alpha: 0.98 })
+                .stroke({
+                    color: isSelected ? 0xffffff : markerColor,
+                    width: isSelected ? 2.3 : 1.7,
+                    alpha: 0.98,
+                })
                 .moveTo(-3.2, 0)
                 .lineTo(3.2, 0)
                 .moveTo(0, -3.2)
                 .lineTo(0, 3.2)
-                .stroke({ color: 0xffffff, width: 0.9, alpha: 0.86 });
+                .stroke({ color: markerColor, width: 1.15, alpha: 0.96 });
             marker.position.set(x, y);
             marker.eventMode = "static";
             marker.cursor = "pointer";
-            world.addChild(marker);
-
-            const label = new Text({
-                text: eventTooltip(event),
-                style: {
-                    fill: 0xffe3d1,
-                    fontFamily: "Inter, Arial, sans-serif",
-                    fontSize: 9,
-                    lineHeight: 12,
-                    stroke: { color: 0x060a10, width: 3 },
-                },
-                resolution: 2,
-            });
-            label.visible = false;
-            label.position.set(x + 8, y - 18);
-            world.addChild(label);
-
-            let pinned = false;
-            marker.on("pointerover", () => {
-                label.visible = true;
-            });
-            marker.on("pointerout", () => {
-                if (!pinned) label.visible = false;
-            });
             marker.on("pointertap", (pointerEvent) => {
                 pointerEvent.stopPropagation();
-                pinned = !pinned;
-                label.visible = pinned;
+                onSelectEvent(event);
             });
+            world.addChild(marker);
         });
     }
 }

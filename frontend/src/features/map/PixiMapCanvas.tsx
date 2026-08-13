@@ -7,7 +7,12 @@ import {
 } from "react";
 import { Application, Container, Graphics, Text } from "pixi.js";
 import { getHistoricalShipTracks } from "../../api/history";
-import type { HistoricalShipTrack } from "../../types/history";
+import type {
+    HistoricalCombatEvent,
+    HistoricalCombatEventSide,
+    HistoricalCombatOutcome,
+    HistoricalShipTrack,
+} from "../../types/history";
 import {
     isCombinedPrivateIntel,
     type PrivateIntelMapResponse,
@@ -28,11 +33,43 @@ import {
 } from "./navigationAnalysis";
 import { drawMapScene } from "./mapScene";
 import {
+    combatEventKey,
     drawCurrentCombatContacts,
     drawHistoricalShipTracks,
     type ShipTrackMode,
 } from "./historicalTrackScene";
 import { drawMinefields } from "./minefieldScene";
+
+
+function combatOutcomeLabel(outcome: HistoricalCombatOutcome | null): string {
+    switch (outcome) {
+        case "defeated":
+            return "Defeated in this combat";
+        case "survived_to_later_combat":
+            return "Survived to a later combat at this position";
+        default:
+            return "Final result not proven by VCR sequence";
+    }
+}
+
+
+function combatSideName(side: HistoricalCombatEventSide): string {
+    if (side.name !== null && side.name.trim()) return side.name;
+    if (side.object_id !== null) {
+        return side.object_kind === "ship"
+            ? `Ship #${side.object_id}`
+            : `Planet #${side.object_id}`;
+    }
+    return side.object_kind === "ship" ? "Unknown ship" : "Unknown planet";
+}
+
+
+function combatEventKind(event: HistoricalCombatEvent): string {
+    const ships = event.sides.filter((side) => side.object_kind === "ship").length;
+    if (ships === 2) return "Ship combat";
+    if (ships === 1) return "Planet combat";
+    return "Combat";
+}
 
 
 export function PixiMapCanvas({
@@ -64,6 +101,8 @@ export function PixiMapCanvas({
     const [trackLookbackTurns, setTrackLookbackTurns] =
         useState<number | null>(5);
     const [trackFadePercent, setTrackFadePercent] = useState(20);
+    const [selectedCombatEvent, setSelectedCombatEvent] =
+        useState<HistoricalCombatEvent | null>(null);
 
     const bounds = useMemo(
         () => observedBounds(intel),
@@ -93,6 +132,10 @@ export function PixiMapCanvas({
     boundsRef.current = bounds;
 
     useEffect(() => {
+        setSelectedCombatEvent(null);
+    }, [intel.game_id, intel.turn]);
+
+    useEffect(() => {
         let cancelled = false;
 
         async function loadTracks() {
@@ -117,6 +160,19 @@ export function PixiMapCanvas({
             cancelled = true;
         };
     }, [intel.game_id, intel.turn, linkedAccountId]);
+
+    useEffect(() => {
+        if (selectedCombatEvent === null) return;
+        const selectedKey = combatEventKey(selectedCombatEvent);
+        const stillPresent = historicalTracks.some((track) =>
+            track.points.some(
+                (point) =>
+                    point.combat_event !== null &&
+                    combatEventKey(point.combat_event) === selectedKey,
+            ),
+        );
+        if (!stillPresent) setSelectedCombatEvent(null);
+    }, [historicalTracks, selectedCombatEvent]);
 
     useEffect(() => {
         const host = hostRef.current;
@@ -426,6 +482,10 @@ export function PixiMapCanvas({
             tracks: historicalTracks,
             bounds,
             throughTurn: intel.turn,
+            selectedEventKey: selectedCombatEvent === null
+                ? null
+                : combatEventKey(selectedCombatEvent),
+            onSelectEvent: setSelectedCombatEvent,
         });
 
         if (hoverLayerRef.current !== null) hoverLayerRef.current.visible = false;
@@ -445,15 +505,132 @@ export function PixiMapCanvas({
         links,
         onSelect,
         selected,
+        selectedCombatEvent,
         shipPositions,
         trackFadePercent,
         trackLookbackTurns,
         trackMode,
     ]);
 
+    const combatHasDerivedSequence = selectedCombatEvent?.sides.some(
+        (side) =>
+            side.object_kind === "ship" &&
+            side.sequence_status !== null &&
+            side.sequence_status !== "unknown",
+    ) ?? false;
+
     return (
         <>
             <div className="intel-map-canvas-host" ref={hostRef} />
+
+            {selectedCombatEvent !== null && (
+                <div
+                    style={{
+                        position: "absolute",
+                        zIndex: 5,
+                        right: 12,
+                        bottom: 12,
+                        width: "min(370px, calc(100% - 24px))",
+                        padding: "12px 13px",
+                        border: "1px solid rgba(255, 204, 115, 0.55)",
+                        borderRadius: 9,
+                        background: "rgba(8, 13, 21, 0.96)",
+                        boxShadow: "0 10px 28px rgba(0, 0, 0, 0.38)",
+                        backdropFilter: "blur(6px)",
+                    }}
+                >
+                    <div
+                        style={{
+                            display: "flex",
+                            alignItems: "flex-start",
+                            justifyContent: "space-between",
+                            gap: 12,
+                        }}
+                    >
+                        <div>
+                            <div className="eyebrow">Combat event</div>
+                            <strong>
+                                VCR #{selectedCombatEvent.vcr_id} · T{selectedCombatEvent.turn}
+                            </strong>
+                            <div style={{ color: "#91a9c8", marginTop: 3, fontSize: 12 }}>
+                                {combatEventKind(selectedCombatEvent)}
+                                {selectedCombatEvent.sequence_count > 1
+                                    ? ` · ${selectedCombatEvent.sequence_index}/${selectedCombatEvent.sequence_count} at this position`
+                                    : ""}
+                                {selectedCombatEvent.x !== null && selectedCombatEvent.y !== null
+                                    ? ` · ${selectedCombatEvent.x}, ${selectedCombatEvent.y}`
+                                    : ""}
+                            </div>
+                        </div>
+                        <button
+                            className="secondary-button"
+                            onClick={() => setSelectedCombatEvent(null)}
+                            style={{ padding: "4px 8px" }}
+                            type="button"
+                        >
+                            Close
+                        </button>
+                    </div>
+
+                    <div
+                        style={{
+                            display: "grid",
+                            gap: 8,
+                            marginTop: 11,
+                        }}
+                    >
+                        {selectedCombatEvent.sides.map((side) => (
+                            <div
+                                key={side.side}
+                                style={{
+                                    padding: "8px 9px",
+                                    border: "1px solid rgba(57, 71, 93, 0.72)",
+                                    borderRadius: 7,
+                                    background: "rgba(13, 20, 31, 0.86)",
+                                }}
+                            >
+                                <strong>{combatSideName(side)}</strong>
+                                <div style={{ color: "#91a9c8", fontSize: 12, marginTop: 3 }}>
+                                    {side.object_kind === "ship"
+                                        ? `Ship${side.object_id !== null ? ` #${side.object_id}` : ""}${side.hull_id !== null ? ` · hull #${side.hull_id}` : ""}`
+                                        : `${side.has_starbase ? "Planet + starbase" : "Planet"}${side.object_id !== null ? ` #${side.object_id}` : ""}`}
+                                    {side.owner_id !== null ? ` · owner slot ${side.owner_id}` : ""}
+                                </div>
+                                {side.object_kind === "ship" && (
+                                    <div
+                                        style={{
+                                            marginTop: 4,
+                                            fontSize: 12,
+                                            color: side.sequence_status === "defeated"
+                                                ? "#ff9999"
+                                                : side.sequence_status === "survived_to_later_combat"
+                                                    ? "#82e6b1"
+                                                    : "#c8d4e4",
+                                        }}
+                                    >
+                                        {combatOutcomeLabel(side.sequence_status)}
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+
+                    {combatHasDerivedSequence && (
+                        <div
+                            style={{
+                                color: "#91a9c8",
+                                fontSize: 11,
+                                lineHeight: 1.45,
+                                marginTop: 9,
+                            }}
+                        >
+                            Sequence status is derived only from later VCRs on the same turn
+                            at the same coordinates. Stored factual combat observations are unchanged.
+                        </div>
+                    )}
+                </div>
+            )}
+
             <div
                 style={{
                     position: "absolute",
