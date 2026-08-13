@@ -218,6 +218,91 @@ export function combatEventKey(event: HistoricalCombatEvent): string {
     return `${event.turn}:${event.vcr_id}`;
 }
 
+interface VcrOnlyContact {
+    track: HistoricalShipTrack;
+    point: HistoricalShipTrackPoint;
+    event: HistoricalCombatEvent;
+}
+
+function drawVcrOnlyShipContacts({
+    world,
+    contacts,
+    bounds,
+    selectedEventKey,
+    onSelectEvent,
+}: {
+    world: Container;
+    contacts: VcrOnlyContact[];
+    bounds: MapBounds;
+    selectedEventKey: string | null;
+    onSelectEvent: (event: HistoricalCombatEvent) => void;
+}) {
+    const grouped = new Map<string, VcrOnlyContact[]>();
+    for (const contact of contacts) {
+        const key = `${contact.point.x}:${contact.point.y}`;
+        const group = grouped.get(key) ?? [];
+        group.push(contact);
+        grouped.set(key, group);
+    }
+
+    for (const group of grouped.values()) {
+        group.sort((left, right) => left.track.ship_id - right.track.ship_id);
+
+        group.forEach((contact, index) => {
+            const centerX = contact.point.x;
+            const centerY = renderY(contact.point.y, bounds);
+            const count = group.length;
+            const angle = Math.PI / 2
+                + (Math.PI * 2 * index) / Math.max(count, 1);
+            const radius = count > 1 ? 25 : 22;
+            const x = centerX + Math.cos(angle) * radius;
+            const y = centerY + Math.sin(angle) * radius;
+            const color = trackColor(contact.track.owner_id);
+            const confirmedSurvivor =
+                contact.point.combat_outcome === "survived_to_later_combat";
+            const evidenceColor = confirmedSurvivor ? 0x82e6b1 : 0xffcc73;
+            const isSelected = selectedEventKey === combatEventKey(contact.event);
+
+            const connector = new Graphics()
+                .moveTo(centerX, centerY)
+                .lineTo(x, y)
+                .stroke({
+                    color: evidenceColor,
+                    width: isSelected ? 1.2 : 0.8,
+                    alpha: isSelected ? 0.72 : 0.42,
+                });
+            world.addChild(connector);
+
+            const marker = new Graphics()
+                .moveTo(0, -5)
+                .lineTo(5, 0)
+                .lineTo(0, 5)
+                .lineTo(-5, 0)
+                .closePath()
+                .fill({ color, alpha: 0.42 })
+                .stroke({
+                    color,
+                    width: 1.6,
+                    alpha: 0.98,
+                })
+                .circle(0, 0, isSelected ? 8.2 : 7.1)
+                .stroke({
+                    color: isSelected ? 0xffffff : evidenceColor,
+                    width: isSelected ? 2.1 : 1.35,
+                    alpha: 0.96,
+                });
+            marker.position.set(x, y);
+            marker.eventMode = "static";
+            marker.cursor = "pointer";
+            marker.on("pointertap", (pointerEvent) => {
+                pointerEvent.stopPropagation();
+                onSelectEvent(contact.event);
+            });
+            world.addChild(marker);
+        });
+    }
+}
+
 export function drawCurrentCombatContacts({
     world,
     tracks,
@@ -234,6 +319,7 @@ export function drawCurrentCombatContacts({
     onSelectEvent: (event: HistoricalCombatEvent) => void;
 }) {
     const events = new Map<string, HistoricalCombatEvent>();
+    const vcrOnlyContacts = new Map<string, VcrOnlyContact>();
 
     for (const track of tracks) {
         for (const point of track.points) {
@@ -246,8 +332,27 @@ export function drawCurrentCombatContacts({
                 continue;
             }
             events.set(combatEventKey(event), event);
+
+            // A current-turn VCR is factual positional evidence even when the
+            // surviving ship is not present in rst.ships. Surface that contact
+            // explicitly, but do not promote a sequence-proven defeated ship
+            // into a current contact.
+            if (!point.has_direct_scan && point.combat_outcome !== "defeated") {
+                vcrOnlyContacts.set(
+                    `${track.ship_id}:${point.turn}:${point.combat_vcr_id ?? event.vcr_id}`,
+                    { track, point, event },
+                );
+            }
         }
     }
+
+    drawVcrOnlyShipContacts({
+        world,
+        contacts: [...vcrOnlyContacts.values()],
+        bounds,
+        selectedEventKey,
+        onSelectEvent,
+    });
 
     const grouped = new Map<string, HistoricalCombatEvent[]>();
     for (const event of events.values()) {
