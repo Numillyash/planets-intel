@@ -8,6 +8,7 @@ import {
 import { Application, Container, Graphics, Text } from "pixi.js";
 import { getHistoricalShipTracks } from "../../api/history";
 import type {
+    CombatEventSummary,
     HistoricalCombatEvent,
     HistoricalCombatEventSide,
     HistoricalCombatOutcome,
@@ -31,6 +32,7 @@ import {
     ionStormAtPoint,
     radiationAtPoint,
 } from "./navigationAnalysis";
+import { CombatEventPanel } from "./CombatEventPanel";
 import { drawMapScene } from "./mapScene";
 import {
     combatEventKey,
@@ -519,9 +521,38 @@ export function PixiMapCanvas({
             side.sequence_status !== "unknown",
     ) ?? false;
 
+    const focusCombatEvent = (event: CombatEventSummary) => {
+        const app = appRef.current;
+        const world = worldRef.current;
+        const currentBounds = boundsRef.current;
+        if (
+            app === null ||
+            world === null ||
+            currentBounds === null ||
+            event.x === null ||
+            event.y === null
+        ) {
+            return;
+        }
+
+        const scale = Math.max(world.scale.x, 0.0001);
+        const targetY = renderY(event.y, currentBounds);
+        world.position.set(
+            app.screen.width / 2 - event.x * scale,
+            app.screen.height / 2 - targetY * scale,
+        );
+    };
+
     return (
         <>
             <div className="intel-map-canvas-host" ref={hostRef} />
+
+            <CombatEventPanel
+                gameId={intel.game_id}
+                linkedAccountId={linkedAccountId}
+                onFocus={focusCombatEvent}
+                turn={intel.turn}
+            />
 
             {selectedCombatEvent !== null && (
                 <div

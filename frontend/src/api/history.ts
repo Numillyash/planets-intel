@@ -1,6 +1,7 @@
 import type { LatestPrivateIntelResponse } from "../types/api";
 import type { CombinedPrivateIntelResponse } from "../types/intel";
 import type {
+    CombatEventsResponse,
     HistoricalBackfillTurnResponse,
     HistoricalIntelStatus,
     HistoricalShipTracksResponse,
@@ -91,6 +92,27 @@ export async function getHistoricalShipTracks(
         );
     }
     return response.json() as Promise<HistoricalShipTracksResponse>;
+}
+
+export async function getHistoricalCombatEvents(
+    gameId: number,
+    linkedAccountId: number,
+    turn: number,
+): Promise<CombatEventsResponse> {
+    const response = await fetch(
+        `/api/games/${gameId}/private-intel/history/combat-events`
+        + `?linked_account_id=${linkedAccountId}&turn=${turn}`,
+        {
+            credentials: "same-origin",
+            headers: { Accept: "application/json" },
+        },
+    );
+    if (!response.ok) {
+        throw new Error(
+            `Combat events failed: ${await parseErrorMessage(response)}`,
+        );
+    }
+    return response.json() as Promise<CombatEventsResponse>;
 }
 
 export async function backfillHistoricalTurn(

@@ -71,6 +71,53 @@ export interface HistoricalCombatEvent {
     sides: [HistoricalCombatEventSide, HistoricalCombatEventSide];
 }
 
+export interface CombatEventSource {
+    linked_account_id: number;
+    planets_username: string;
+    batch_ids: number[];
+}
+
+export type CombatEventResultStatus =
+    | "unknown"
+    | "survived_post_host"
+    | "survived_to_later_combat"
+    | "defeated"
+    | "planet_held_post_host"
+    | "planet_owner_changed_post_host";
+
+export interface CombatEventSideSummary {
+    side: "left" | "right";
+    object_kind: "ship" | "planet";
+    object_id: number | null;
+    owner_id: number | null;
+    name: string | null;
+    hull_id: number | null;
+    has_starbase: boolean | null;
+    sequence_status: HistoricalCombatOutcome | null;
+    result_status: CombatEventResultStatus;
+    result_basis: string | null;
+    result_sources: CombatEventSource[];
+    post_host_owner_id: number | null;
+}
+
+export interface CombatEventSummary {
+    vcr_id: number;
+    turn: number;
+    battle_type: number | null;
+    x: number | null;
+    y: number | null;
+    sequence_index: number;
+    sequence_count: number;
+    sources: CombatEventSource[];
+    sides: [CombatEventSideSummary, CombatEventSideSummary];
+}
+
+export interface CombatEventsResponse {
+    game_id: number;
+    turn: number;
+    events: CombatEventSummary[];
+}
+
 export interface HistoricalShipTrackPoint {
     turn: number;
     snapshot_turn: number;
