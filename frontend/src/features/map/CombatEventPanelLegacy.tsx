@@ -94,7 +94,7 @@ function equipmentSummary(equipment: CombatEquipmentEvidence): string[] {
         );
     }
     if (equipment.torpedoes !== null) {
-        rows.push(`Torpedoes in VCR state: ${equipment.torpedoes}`);
+        rows.push(`Combat-start torpedoes: ${equipment.torpedoes}`);
     }
     if (equipment.fighters !== null) {
         rows.push(`Fighters in VCR state: ${equipment.fighters}`);
@@ -373,7 +373,7 @@ export function CombatEventPanel({
                                     >
                                         {resultLabel(side.result_status, side)}
                                     </div>
-                                    {equipmentRows.length > 0 && (
+                                    {equipment !== null && equipmentRows.length > 0 && (
                                         <div
                                             style={{
                                                 marginTop: 7,

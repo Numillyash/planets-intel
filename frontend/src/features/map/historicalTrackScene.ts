@@ -243,7 +243,7 @@ function drawVcrOnlyShipContacts({
             const count = group.length;
             const angle = Math.PI / 2
                 + (Math.PI * 2 * index) / Math.max(count, 1);
-            const radius = count > 1 ? 28 : 24;
+            const radius = count > 1 ? 50 : 46;
             const x = centerX + Math.cos(angle) * radius;
             const y = centerY + Math.sin(angle) * radius;
             const color = trackColor(contact.track.owner_id);
@@ -297,7 +297,7 @@ function drawVcrOnlyShipContacts({
                 },
                 resolution: 2,
             });
-            label.position.set(x + 8, y - 13);
+            label.position.set(x + 10, y - 15);
             world.addChild(label);
         });
     }
@@ -374,7 +374,7 @@ export function drawCurrentCombatContacts({
             const count = group.length;
             const angle = -Math.PI / 2
                 + (Math.PI * 2 * index) / Math.max(count, 1);
-            const offsetRadius = count > 1 ? 15 : 11;
+            const offsetRadius = count > 1 ? 34 : 30;
             const x = centerX + Math.cos(angle) * offsetRadius;
             const y = centerY + Math.sin(angle) * offsetRadius;
             const hasDefeated = event.sides.some(
