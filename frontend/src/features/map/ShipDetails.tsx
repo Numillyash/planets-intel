@@ -89,6 +89,9 @@ export function ShipDetails({
     const linkedAccountId = isCombinedPrivateIntel(intel)
         ? intel.primary_observer.linked_account_id
         : intel.observer.linked_account_id;
+    const primarySlotId = isCombinedPrivateIntel(intel)
+        ? intel.primary_observer.player_slot_id
+        : intel.observer.player_slot_id;
 
     return (
         <div className="intel-entity-details">
@@ -133,12 +136,14 @@ export function ShipDetails({
                 turn={intel.turn}
             />
 
-            <LoadoutInference
-                gameId={intel.game_id}
-                linkedAccountId={linkedAccountId}
-                shipId={ship.ship_id}
-                turn={intel.turn}
-            />
+            {ship.owner_id !== primarySlotId && (
+                <LoadoutInference
+                    gameId={intel.game_id}
+                    linkedAccountId={linkedAccountId}
+                    shipId={ship.ship_id}
+                    turn={intel.turn}
+                />
+            )}
 
             {hasArmament && (
                 <DetailSection title="Armament">
