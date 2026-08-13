@@ -1,7 +1,8 @@
 import type { PlayerInfo } from "../../types/api";
-import type {
-    MapShipObservation,
-    PrivateIntelMapResponse,
+import {
+    isCombinedPrivateIntel,
+    type MapShipObservation,
+    type PrivateIntelMapResponse,
 } from "../../types/intel";
 import { SHIP_ROLE_LABEL, shipRole, type SelectedEntity } from "./mapModel";
 import {
@@ -19,6 +20,7 @@ import {
     shipFacts,
 } from "./observationView";
 import { DetailSection, FactRow, playerName } from "./DetailPrimitives";
+import { ThreatAnalysis } from "./ThreatAnalysis";
 
 
 export function ShipDetails({
@@ -83,6 +85,9 @@ export function ShipDetails({
         ionHazard.stormClass >= 4 &&
         (shipMass === null || shipMass <= 4000)
     );
+    const linkedAccountId = isCombinedPrivateIntel(intel)
+        ? intel.primary_observer.linked_account_id
+        : intel.observer.linked_account_id;
 
     return (
         <div className="intel-entity-details">
@@ -113,11 +118,19 @@ export function ShipDetails({
                     <FactRow label="Friendly code" value={facts.friendlyCode ?? "—"} />
                     <FactRow label="Hull" value={facts.hullName ?? `Hull #${ship.hull_id ?? "—"}`} />
                     <FactRow label="Engine" value={facts.engineName ?? (facts.engineId !== null ? `Engine #${facts.engineId}` : "—")} />
+                    <FactRow label="Mass" value={shipMass !== null ? `${Math.round(shipMass)} kt` : "—"} />
                     <FactRow label="Damage" value={formatPercent(facts.damage)} />
                     <FactRow label="Crew" value={formatInteger(facts.crew)} />
                     <FactRow label="Info turn" value={ship.info_turn ?? "—"} />
                 </dl>
             </DetailSection>
+
+            <ThreatAnalysis
+                gameId={intel.game_id}
+                linkedAccountId={linkedAccountId}
+                shipId={ship.ship_id}
+                turn={intel.turn}
+            />
 
             {hasArmament && (
                 <DetailSection title="Armament">

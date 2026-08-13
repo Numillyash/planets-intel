@@ -12,6 +12,7 @@ from app.services.historical_intel import (
 from app.services.historical_status import historical_intel_status
 from app.services.historical_tracks import get_historical_ship_tracks
 from app.services.private_intel import get_private_intel_turn
+from app.services.threat_analysis import get_ship_threat_analysis
 
 
 router = APIRouter()
@@ -128,6 +129,31 @@ def historical_combat_events(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Combat-event context not found",
+        )
+    return result
+
+
+@router.get(
+    "/games/{game_id}/private-intel/analysis/ship-threat/{ship_id}",
+)
+def ship_threat_analysis(
+    game_id: int = Path(gt=0),
+    ship_id: int = Path(gt=0),
+    linked_account_id: int = Query(gt=0),
+    turn: int = Query(gt=0),
+    user: AppUser = Depends(require_user),
+) -> dict[str, object]:
+    result = get_ship_threat_analysis(
+        user_id=user.id,
+        game_id=game_id,
+        linked_account_id=linked_account_id,
+        turn=turn,
+        ship_id=ship_id,
+    )
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Threat-analysis context not found",
         )
     return result
 

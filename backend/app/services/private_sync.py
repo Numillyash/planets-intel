@@ -14,6 +14,7 @@ from app.models.game import Game
 from app.models.game_player_slot import GamePlayerSlot
 from app.models.planets_account import PlanetsAccount
 from app.planetsnu.client import PlanetsNuClient
+from app.services.game_rule_catalog import persist_game_rule_catalog
 
 
 class PrivateSyncError(RuntimeError):
@@ -211,6 +212,13 @@ async def sync_private_game(
 
         account.last_verified_at = datetime.now(timezone.utc)
         account.last_error = None
+
+        persist_game_rule_catalog(
+            session,
+            game_id=game_id,
+            turn=returned_turn,
+            rst=rst,
+        )
 
         result = persist_private_turn(
             session,
