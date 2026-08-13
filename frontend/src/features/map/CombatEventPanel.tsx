@@ -4,6 +4,7 @@ import { CombatEventPanel as VcrPanel } from "./CombatEventPanelLegacy";
 import { HostEventPanel } from "./HostEventPanel";
 import { MapEventBridge } from "./MapEventBridge";
 import { PlayerActivityPanel } from "./PlayerActivityPanel";
+import "./operational-shell-v2.css";
 
 type DashboardTab = "combat" | "host" | "activity";
 
@@ -17,15 +18,9 @@ export function CombatEventPanel(props: Parameters<typeof VcrPanel>[0]) {
             setDashboardOpen(true);
         };
 
-        window.addEventListener(
-            "dashboard-event-select",
-            openCombatEvidence,
-        );
+        window.addEventListener("dashboard-event-select", openCombatEvidence);
         return () => {
-            window.removeEventListener(
-                "dashboard-event-select",
-                openCombatEvidence,
-            );
+            window.removeEventListener("dashboard-event-select", openCombatEvidence);
         };
     }, []);
 
@@ -50,10 +45,7 @@ export function CombatEventPanel(props: Parameters<typeof VcrPanel>[0]) {
 
             <div
                 aria-hidden={!dashboardOpen}
-                className={
-                    "operational-dashboard-overlay"
-                    + (dashboardOpen ? " is-open" : "")
-                }
+                className={`operational-dashboard-overlay${dashboardOpen ? " is-open" : ""}`}
             >
                 <header className="operational-dashboard-header">
                     <div>
@@ -98,18 +90,12 @@ export function CombatEventPanel(props: Parameters<typeof VcrPanel>[0]) {
 
                 <div className="operational-dashboard-content">
                     <section
-                        className={
-                            "operational-dashboard-pane"
-                            + (activeTab === "combat" ? " is-active" : "")
-                        }
+                        className={`operational-dashboard-pane${activeTab === "combat" ? " is-active" : ""}`}
                     >
                         <VcrPanel {...props} />
                     </section>
                     <section
-                        className={
-                            "operational-dashboard-pane"
-                            + (activeTab === "host" ? " is-active" : "")
-                        }
+                        className={`operational-dashboard-pane${activeTab === "host" ? " is-active" : ""}`}
                     >
                         <HostEventPanel
                             gameId={props.gameId}
@@ -118,10 +104,7 @@ export function CombatEventPanel(props: Parameters<typeof VcrPanel>[0]) {
                         />
                     </section>
                     <section
-                        className={
-                            "operational-dashboard-pane"
-                            + (activeTab === "activity" ? " is-active" : "")
-                        }
+                        className={`operational-dashboard-pane${activeTab === "activity" ? " is-active" : ""}`}
                     >
                         <PlayerActivityPanel
                             gameId={props.gameId}
