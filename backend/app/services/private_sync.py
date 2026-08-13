@@ -15,6 +15,7 @@ from app.models.game_player_slot import GamePlayerSlot
 from app.models.planets_account import PlanetsAccount
 from app.planetsnu.client import PlanetsNuClient
 from app.services.game_rule_catalog import persist_game_rule_catalog
+from app.services.private_auxiliary import persist_private_auxiliary_observations
 
 
 class PrivateSyncError(RuntimeError):
@@ -227,6 +228,14 @@ async def sync_private_game(
             payload=payload,
         )
 
+        auxiliary = persist_private_auxiliary_observations(
+            session,
+            game_id=game_id,
+            turn=returned_turn,
+            batch_id=int(result["batch_id"]),
+            rst=rst,
+        )
+
         session.commit()
 
     return {
@@ -235,4 +244,5 @@ async def sync_private_game(
         "planets_username": planets_username,
         "requested_turn": turn,
         **result,
+        **auxiliary,
     }

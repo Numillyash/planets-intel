@@ -60,6 +60,46 @@ def _safe_rule_list(rst: dict[str, Any], name: str) -> list[dict[str, Any]]:
     return result
 
 
+def persist_public_game_settings(
+    session: Session,
+    *,
+    game_id: int,
+    turn: int,
+    settings_raw: dict[str, Any],
+) -> None:
+    """Persist canonical public settings from loadinfo.
+
+    Public loadinfo is authoritative for game-mode switches such as
+    unlimitedfuel. Private loadturn catalogs populate component collections
+    but must not overwrite these public settings with a reduced RST variant.
+    """
+
+    settings = _sanitize(settings_raw)
+    if not isinstance(settings, dict):
+        settings = {}
+
+    table = GameRuleCatalog.__table__
+    stmt = pg_insert(table).values(
+        game_id=game_id,
+        observed_turn=turn,
+        settings=settings,
+        hulls=[],
+        beams=[],
+        torpedos=[],
+        engines=[],
+        races=[],
+        advantages=[],
+    )
+    stmt = stmt.on_conflict_do_update(
+        index_elements=[table.c.game_id],
+        set_={
+            "observed_turn": stmt.excluded.observed_turn,
+            "settings": stmt.excluded.settings,
+        },
+    )
+    session.execute(stmt)
+
+
 def persist_game_rule_catalog(
     session: Session,
     *,
@@ -86,7 +126,7 @@ def persist_game_rule_catalog(
         index_elements=[table.c.game_id],
         set_={
             "observed_turn": stmt.excluded.observed_turn,
-            "settings": stmt.excluded.settings,
+            # Preserve canonical public loadinfo settings when the row exists.
             "hulls": stmt.excluded.hulls,
             "beams": stmt.excluded.beams,
             "torpedos": stmt.excluded.torpedos,

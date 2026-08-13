@@ -11,7 +11,9 @@ from app.services.historical_intel import (
 )
 from app.services.historical_status import historical_intel_status
 from app.services.historical_tracks import get_historical_ship_tracks
+from app.services.host_events import get_accessible_host_events
 from app.services.loadout_inference import get_ship_loadout_inference
+from app.services.player_activity import get_player_activity_analysis
 from app.services.private_intel import get_private_intel_turn
 from app.services.threat_analysis import get_ship_threat_analysis
 
@@ -132,6 +134,43 @@ def historical_combat_events(
             detail="Combat-event context not found",
         )
     return result
+
+
+@router.get(
+    "/games/{game_id}/private-intel/history/host-events",
+)
+def historical_host_events(
+    game_id: int = Path(gt=0),
+    linked_account_id: int = Query(gt=0),
+    turn: int = Query(gt=0),
+    user: AppUser = Depends(require_user),
+) -> dict[str, object]:
+    result = get_accessible_host_events(
+        user_id=user.id,
+        game_id=game_id,
+        linked_account_id=linked_account_id,
+        turn=turn,
+    )
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Host-event context not found",
+        )
+    return result
+
+
+@router.get(
+    "/games/{game_id}/activity",
+)
+def player_activity_analysis(
+    game_id: int = Path(gt=0),
+    through_turn: int | None = Query(default=None, gt=0),
+    _user: AppUser = Depends(require_user),
+) -> dict[str, object]:
+    return get_player_activity_analysis(
+        game_id=game_id,
+        through_turn=through_turn,
+    )
 
 
 @router.get(
