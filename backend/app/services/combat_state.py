@@ -1,6 +1,6 @@
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.db.session import SessionLocal
@@ -13,7 +13,11 @@ from app.services.intel_access import accessible_intel_accounts
 def _vcr_contains_ship(payload: dict[str, Any], ship_id: int) -> bool:
     for side_name in ("left", "right"):
         side = payload.get(side_name)
-        if isinstance(side, dict) and side.get("objectid") == ship_id and side.get("hullid") not in (None, 0):
+        if (
+            isinstance(side, dict)
+            and side.get("objectid") == ship_id
+            and side.get("hullid") not in (None, 0)
+        ):
             return True
     return False
 
@@ -74,7 +78,7 @@ def upsert_combat_state(
                 "post_combat_torpedoes": stmt.excluded.post_combat_torpedoes,
                 "post_combat_fighters": stmt.excluded.post_combat_fighters,
                 "note": stmt.excluded.note,
-                "updated_at": __import__("sqlalchemy").func.now(),
+                "updated_at": func.now(),
             },
         ).returning(table)
         row = session.execute(stmt).mappings().one()
