@@ -9,14 +9,13 @@ from sqlalchemy import select
 
 from app.db.session import SessionLocal
 from app.models.game_player_slot import GamePlayerSlot
-from app.models.ion_storm_observation import IonStormObservation
 from app.models.planet_observation import PlanetObservation
 from app.models.private_observation_batch import PrivateObservationBatch
 from app.models.ship_observation import ShipObservation
 from app.models.starbase_observation import StarbaseObservation
 
 
-SCHEMA = "planets-intel.validation-observation.v2"
+SCHEMA = "planets-intel.validation-observation.v1"
 
 
 def _players(session, game_id: int) -> list[dict[str, object]]:
@@ -104,12 +103,6 @@ def iter_records(
                     batch.id,
                     StarbaseObservation.starbase_id,
                 ),
-                "ionstorms": _payloads(
-                    session,
-                    IonStormObservation,
-                    batch.id,
-                    IonStormObservation.storm_id,
-                ),
             }
 
 
@@ -125,7 +118,6 @@ def main() -> int:
     count = 0
     turns: set[int] = set()
     streams: set[tuple[int, int, str]] = set()
-    storm_rows = 0
     for record in iter_records(
         game_id=args.game_id,
         observer_planets_account_id=args.observer_planets_account_id,
@@ -141,7 +133,6 @@ def main() -> int:
             )
         )
         count += 1
-        storm_rows += len(record["ionstorms"])
         turns.add(int(record["turn"]))
         streams.add(
             (
@@ -158,7 +149,6 @@ def main() -> int:
                 "records": count,
                 "turns": len(turns),
                 "streams": len(streams),
-                "ionstorm_rows": storm_rows,
                 "min_turn": min(turns) if turns else None,
                 "max_turn": max(turns) if turns else None,
             },
