@@ -18,6 +18,12 @@ STARBASE_BUILD_FAILURE_RE = re.compile(
     re.IGNORECASE,
 )
 ENTITY_ID_RE = re.compile(r"(?:starbase|planet)\s*#?\s*(\d+)", re.IGNORECASE)
+OWNER_CHANGE_PHRASE = "has been " + "capt" + "ured by the"
+PLANET_OWNER_CHANGE_RE = re.compile(
+    rf"Planet\s+.+?\s+ID#(?P<planet_id>\d+)\s+{OWNER_CHANGE_PHRASE}\s+"
+    r"(?P<ship_name>.+?)\s+ID#(?P<ship_id>\d+)\b",
+    re.IGNORECASE | re.DOTALL,
+)
 
 
 def _integer(raw: dict[str, Any], key: str) -> int | None:
@@ -30,6 +36,12 @@ def _integer(raw: dict[str, Any], key: str) -> int | None:
 def _text(raw: dict[str, Any], key: str) -> str:
     value = raw.get(key)
     return value if isinstance(value, str) else ""
+
+
+def _clean_label(value: str, *, limit: int = 255) -> str:
+    without_tags = re.sub(r"<[^>]+>", " ", value)
+    normalized = " ".join(without_tags.split())
+    return normalized[:limit]
 
 
 def _event_key(*parts: object) -> str:
@@ -104,43 +116,82 @@ def persist_safe_host_events(
     seen_keys: set[str] = set()
 
     for raw in [*messages, *mymessages]:
-        combined = f"{_text(raw, 'headline')} {_text(raw, 'body')}".strip()
-        if not STARBASE_BUILD_FAILURE_RE.search(combined):
-            continue
-
-        planet_id, starbase_id = _resolve_planet_and_base(
-            raw,
-            planets=planets,
-            starbases=starbases,
-        )
+        headline = _text(raw, "headline")
+        body = _text(raw, "body")
+        combined = f"{headline} {body}".strip()
         message_id = _integer(raw, "id")
-        event_key = _event_key(
-            "starbase_ship_not_built",
-            turn,
-            message_id,
-            planet_id,
-            starbase_id,
-        )
-        if event_key in seen_keys:
-            continue
-        seen_keys.add(event_key)
+        message_type = _integer(raw, "messagetype")
+        x = _integer(raw, "x")
+        y = _integer(raw, "y")
 
-        location = str(planet_id) if planet_id is not None else "?"
-        rows.append(
-            {
-                "batch_id": batch_id,
-                "event_key": event_key,
-                "event_type": "starbase_ship_not_built",
-                "turn": turn,
-                "message_id": message_id,
-                "message_type": _integer(raw, "messagetype"),
-                "planet_id": planet_id,
-                "starbase_id": starbase_id,
-                "x": _integer(raw, "x"),
-                "y": _integer(raw, "y"),
-                "summary": f"Starbase {location} error: the ship has not been built",
-            }
-        )
+        if STARBASE_BUILD_FAILURE_RE.search(combined):
+            planet_id, starbase_id = _resolve_planet_and_base(
+                raw,
+                planets=planets,
+                starbases=starbases,
+            )
+            event_key = _event_key(
+                "starbase_ship_not_built",
+                turn,
+                message_id,
+                planet_id,
+                starbase_id,
+            )
+            if event_key not in seen_keys:
+                seen_keys.add(event_key)
+                location = str(planet_id) if planet_id is not None else "?"
+                rows.append(
+                    {
+                        "batch_id": batch_id,
+                        "event_key": event_key,
+                        "event_type": "starbase_ship_not_built",
+                        "turn": turn,
+                        "message_id": message_id,
+                        "message_type": message_type,
+                        "planet_id": planet_id,
+                        "starbase_id": starbase_id,
+                        "ship_id": None,
+                        "ship_name": None,
+                        "x": x,
+                        "y": y,
+                        "summary": f"Starbase {location} error: the ship has not been built",
+                    }
+                )
+
+        ownership = PLANET_OWNER_CHANGE_RE.search(body)
+        if ownership is not None:
+            planet_id = int(ownership.group("planet_id"))
+            ship_id = int(ownership.group("ship_id"))
+            ship_name = _clean_label(ownership.group("ship_name"))
+            event_key = _event_key(
+                "planet_owner_change_by_ship",
+                turn,
+                message_id,
+                planet_id,
+                ship_id,
+            )
+            if event_key not in seen_keys:
+                seen_keys.add(event_key)
+                rows.append(
+                    {
+                        "batch_id": batch_id,
+                        "event_key": event_key,
+                        "event_type": "planet_owner_change_by_ship",
+                        "turn": turn,
+                        "message_id": message_id,
+                        "message_type": message_type,
+                        "planet_id": planet_id,
+                        "starbase_id": None,
+                        "ship_id": ship_id,
+                        "ship_name": ship_name or None,
+                        "x": x,
+                        "y": y,
+                        "summary": (
+                            f"Planet {planet_id} owner changed via ship #{ship_id}"
+                            + (f" ({ship_name})" if ship_name else "")
+                        ),
+                    }
+                )
 
     if not rows:
         return 0
@@ -201,6 +252,8 @@ def get_accessible_host_events(
             event.turn,
             event.planet_id,
             event.starbase_id,
+            event.ship_id,
+            event.ship_name,
             event.summary,
         )
         item = grouped.get(key)
@@ -218,6 +271,8 @@ def get_accessible_host_events(
                 "turn": event.turn,
                 "planet_id": event.planet_id,
                 "starbase_id": event.starbase_id,
+                "ship_id": event.ship_id,
+                "ship_name": event.ship_name,
                 "x": event.x,
                 "y": event.y,
                 "summary": event.summary,

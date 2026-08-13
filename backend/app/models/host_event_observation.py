@@ -14,6 +14,7 @@ class HostEventObservation(Base):
     __table_args__ = (
         Index("ix_host_event_observations_turn_type", "turn", "event_type"),
         Index("ix_host_event_observations_planet", "planet_id"),
+        Index("ix_host_event_observations_ship", "ship_id"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
@@ -29,6 +30,8 @@ class HostEventObservation(Base):
     message_type: Mapped[int | None] = mapped_column(Integer, nullable=True)
     planet_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     starbase_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    ship_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    ship_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     x: Mapped[int | None] = mapped_column(Integer, nullable=True)
     y: Mapped[int | None] = mapped_column(Integer, nullable=True)
     summary: Mapped[str] = mapped_column(String(512), nullable=False)
