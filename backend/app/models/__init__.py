@@ -1,5 +1,6 @@
 from app.models.game import Game
 from app.models.game_player_slot import GamePlayerSlot
+from app.models.ion_storm_observation import IonStormObservation
 from app.models.planet_observation import PlanetObservation
 from app.models.planets_account import PlanetsAccount
 from app.models.private_observation_batch import PrivateObservationBatch
@@ -15,6 +16,7 @@ __all__ = [
     "AppUser",
     "Game",
     "GamePlayerSlot",
+    "IonStormObservation",
     "PlanetObservation",
     "PlanetsAccount",
     "PrivateObservationBatch",
