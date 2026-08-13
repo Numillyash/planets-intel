@@ -20,6 +20,7 @@ import {
     shipFacts,
 } from "./observationView";
 import { DetailSection, FactRow, playerName } from "./DetailPrimitives";
+import { LoadoutInference } from "./LoadoutInference";
 import { ThreatAnalysis } from "./ThreatAnalysis";
 
 
@@ -126,6 +127,13 @@ export function ShipDetails({
             </DetailSection>
 
             <ThreatAnalysis
+                gameId={intel.game_id}
+                linkedAccountId={linkedAccountId}
+                shipId={ship.ship_id}
+                turn={intel.turn}
+            />
+
+            <LoadoutInference
                 gameId={intel.game_id}
                 linkedAccountId={linkedAccountId}
                 shipId={ship.ship_id}
