@@ -1,4 +1,3 @@
-from collections import defaultdict
 from typing import Any
 
 from sqlalchemy import select
@@ -274,11 +273,32 @@ def get_ship_loadout_inference(
         current_score.freighters - previous_score.freighters
         if current_score is not None and previous_score is not None else None
     )
+
+    first_score, first_previous_score = _score_history(
+        game_id=game_id,
+        slot_id=subject.owner_id,
+        through_turn=first_observed_turn,
+    )
+    first_score_exact = first_score is not None and first_score.turn == first_observed_turn
+    candidate_military_delta = (
+        first_score.military_score - first_previous_score.military_score
+        if first_score_exact and first_previous_score is not None
+        else None
+    )
+    candidate_warship_delta = (
+        first_score.capital_ships - first_previous_score.capital_ships
+        if first_score_exact and first_previous_score is not None
+        else None
+    )
+    candidate_freighter_delta = (
+        first_score.freighters - first_previous_score.freighters
+        if first_score_exact and first_previous_score is not None
+        else None
+    )
     conditional_build_link = bool(
-        first_observed_turn == turn
-        and warship_delta == 1
-        and military_delta is not None
-        and military_delta > 0
+        candidate_warship_delta == 1
+        and candidate_military_delta is not None
+        and candidate_military_delta > 0
     )
 
     owner_latest: dict[int, tuple[ShipObservation, PrivateObservationBatch]] = {}
@@ -354,8 +374,10 @@ def get_ship_loadout_inference(
                         build_score += tube_slots * tube_score
 
                 residual = (
-                    military_delta - build_score
-                    if conditional_build_link and military_delta is not None and build_score is not None
+                    candidate_military_delta - build_score
+                    if conditional_build_link
+                    and candidate_military_delta is not None
+                    and build_score is not None
                     else None
                 )
                 points = _fuel_prior_points(fill_ratio)
@@ -424,6 +446,10 @@ def get_ship_loadout_inference(
             "freighter_delta": freighter_delta,
             "visible_warships": visible_warships,
             "visible_noncombat_ships": visible_noncombat,
+            "candidate_build_turn": first_observed_turn,
+            "candidate_build_military_delta": candidate_military_delta,
+            "candidate_build_warship_delta": candidate_warship_delta,
+            "candidate_build_freighter_delta": candidate_freighter_delta,
             "conditional_build_link": conditional_build_link,
         },
         "vcr_reveal": vcr,
@@ -432,6 +458,11 @@ def get_ship_loadout_inference(
             "selected_ship_is_new_build": "conditional" if conditional_build_link else "not_established",
             "military_residual": "Residual may include loaded ammunition, defenses, minefields, and other fleet changes.",
             "first_seen_caveat": "First factual observation is not proof of construction; fog of war can reveal an older ship for the first time.",
+            "historical_score_link": (
+                f"Candidate score delta is taken from T{first_observed_turn}, the first factual sighting turn."
+                if conditional_build_link
+                else "No unique +1 public warship delta is established on the first factual sighting turn."
+            ),
         },
         "ranked_candidates": candidates[:12],
         "provenance": {
