@@ -6,7 +6,12 @@ import type {
     HistoricalShipTrackPoint,
 } from "../../types/history";
 import { raceVisual } from "../../lib/races";
-import { renderY, type MapBounds, type SelectedEntity } from "./mapModel";
+import {
+    PLANET_ORBIT_RADIUS,
+    renderY,
+    type MapBounds,
+    type SelectedEntity,
+} from "./mapModel";
 
 export type ShipTrackMode = "off" | "selected" | "all";
 
@@ -243,14 +248,38 @@ function drawVcrOnlyShipContacts({
             const count = group.length;
             const angle = Math.PI / 2
                 + (Math.PI * 2 * index) / Math.max(count, 1);
-            const radius = count > 1 ? 50 : 46;
+            const anchoredAtPlanet =
+                contact.point.post_host_confirmed &&
+                contact.point.post_host_planet_id !== null;
+
+            const radius = anchoredAtPlanet
+                ? PLANET_ORBIT_RADIUS
+                : count > 1
+                    ? 50
+                    : 46;
+
             const x = centerX + Math.cos(angle) * radius;
             const y = centerY + Math.sin(angle) * radius;
             const color = trackColor(contact.track.owner_id);
             const confirmedBySequence =
                 contact.point.combat_outcome === "survived_to_later_combat";
-            const evidenceColor = confirmedBySequence ? 0x82e6b1 : 0xffcc73;
+            const evidenceColor =
+                anchoredAtPlanet || confirmedBySequence
+                    ? 0x82e6b1
+                    : 0xffcc73;
             const isSelected = selectedEventKey === combatEventKey(contact.event);
+
+            if (anchoredAtPlanet && index === 0) {
+                const orbitRing = new Graphics()
+                    .circle(0, 0, PLANET_ORBIT_RADIUS)
+                    .stroke({
+                        color: evidenceColor,
+                        width: 1,
+                        alpha: 0.48,
+                    });
+                orbitRing.position.set(centerX, centerY);
+                world.addChild(orbitRing);
+            }
 
             const connector = new Graphics()
                 .moveTo(centerX, centerY)
@@ -309,6 +338,7 @@ export function drawCurrentCombatContacts({
     bounds,
     throughTurn,
     selectedEventKey,
+    visibleShipIds,
     onSelectEvent,
 }: {
     world: Container;
@@ -316,6 +346,7 @@ export function drawCurrentCombatContacts({
     bounds: MapBounds;
     throughTurn: number;
     selectedEventKey: string | null;
+    visibleShipIds: ReadonlySet<number>;
     onSelectEvent: (event: HistoricalCombatEvent) => void;
 }) {
     void onSelectEvent;
@@ -335,7 +366,10 @@ export function drawCurrentCombatContacts({
             }
 
             events.set(combatEventKey(event), event);
-            if (!point.has_direct_scan && point.combat_outcome !== "defeated") {
+            if (
+                !visibleShipIds.has(track.ship_id) &&
+                point.combat_outcome !== "defeated"
+            ) {
                 vcrOnlyContacts.set(
                     `${track.ship_id}:${point.turn}:${point.combat_vcr_id ?? event.vcr_id}`,
                     { track, point, event },

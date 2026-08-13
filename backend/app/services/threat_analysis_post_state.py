@@ -58,4 +58,17 @@ def get_ship_threat_analysis_with_post_state(
         if state is not None
         else None
     )
+
+    defense = result.get("defense")
+    if (
+        state is not None
+        and state.post_combat_torpedoes == 0
+        and isinstance(defense, dict)
+        and isinstance(defense.get("reasons"), list)
+    ):
+        defense["reasons"].append(
+            "Latest confirmed post-combat torpedo ammo is 0; "
+            "tubes are currently empty unless the ship rearms."
+        )
+
     return result

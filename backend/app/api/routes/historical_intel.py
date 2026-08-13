@@ -18,7 +18,7 @@ from app.services.host_events import get_accessible_host_events
 from app.services.loadout_inference import get_ship_loadout_inference
 from app.services.player_activity import get_player_activity_analysis
 from app.services.private_intel import get_private_intel_turn
-from app.services.threat_analysis import get_ship_threat_analysis
+from app.services.threat_analysis_post_state import get_ship_threat_analysis_with_post_state
 
 
 router = APIRouter()
@@ -222,7 +222,7 @@ def ship_threat_analysis(
     turn: int = Query(gt=0),
     user: AppUser = Depends(require_user),
 ) -> dict[str, object]:
-    result = get_ship_threat_analysis(
+    result = get_ship_threat_analysis_with_post_state(
         user_id=user.id,
         game_id=game_id,
         linked_account_id=linked_account_id,

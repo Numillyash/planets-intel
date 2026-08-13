@@ -194,6 +194,18 @@ export function ThreatAnalysis({
                                 <small>
                                     factual equipment leak: {vcr.beam_count ?? "?"} beams · {vcr.launcher_count ?? "?"} tubes
                                 </small>
+                                {(vcr.combat_start_torpedoes ?? vcr.torpedoes) !== null && (
+                                    <small>
+                                        combat-start torpedoes: {vcr.combat_start_torpedoes ?? vcr.torpedoes}
+                                    </small>
+                                )}
+                                {vcr.post_combat_torpedoes !== null &&
+                                    vcr.post_combat_torpedoes !== undefined && (
+                                    <small style={{ color: "#82e6b1" }}>
+                                        post-combat torpedoes: {vcr.post_combat_torpedoes}
+                                        {" · current confirmed tactical state"}
+                                    </small>
+                                )}
                             </span>
                         </div>
                     </div>

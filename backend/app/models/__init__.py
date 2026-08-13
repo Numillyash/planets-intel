@@ -1,4 +1,5 @@
 from app.models.combat_observation import CombatObservation
+from app.models.combat_state_observation import CombatStateObservation
 from app.models.dashboard_intel_share import DashboardIntelShare
 from app.models.game import Game
 from app.models.game_player_slot import GamePlayerSlot
@@ -20,6 +21,7 @@ __all__ = [
     "AppSession",
     "AppUser",
     "CombatObservation",
+    "CombatStateObservation",
     "DashboardIntelShare",
     "Game",
     "GamePlayerSlot",

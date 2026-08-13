@@ -484,6 +484,9 @@ export function PixiMapCanvas({
             tracks: historicalTracks,
             bounds,
             throughTurn: intel.turn,
+            visibleShipIds: new Set(
+                shipPositions.map((position) => position.ship.ship_id),
+            ),
             selectedEventKey: selectedCombatEvent === null
                 ? null
                 : combatEventKey(selectedCombatEvent),

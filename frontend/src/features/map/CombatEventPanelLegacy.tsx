@@ -16,6 +16,11 @@ interface CombatEquipmentEvidence {
     launcher_count: number | null;
     torpedoes: number | null;
     fighters: number | null;
+    combat_start_torpedoes?: number | null;
+    combat_start_fighters?: number | null;
+    post_combat_torpedoes?: number | null;
+    post_combat_fighters?: number | null;
+    post_combat_source?: string | null;
     damage: number | null;
     crew: number | null;
     mass: number | null;
@@ -93,11 +98,35 @@ function equipmentSummary(equipment: CombatEquipmentEvidence): string[] {
             `Tubes: ${equipment.launcher_count ?? "?"} × ${equipment.torpedo_name ?? (equipment.torpedo_id !== null ? `Torpedo #${equipment.torpedo_id}` : "unknown")}`,
         );
     }
-    if (equipment.torpedoes !== null) {
-        rows.push(`Combat-start torpedoes: ${equipment.torpedoes}`);
+    const combatStartTorpedoes =
+        equipment.combat_start_torpedoes ?? equipment.torpedoes;
+
+    if (combatStartTorpedoes !== null) {
+        rows.push(`Combat-start torpedoes: ${combatStartTorpedoes}`);
     }
-    if (equipment.fighters !== null) {
-        rows.push(`Fighters in VCR state: ${equipment.fighters}`);
+
+    if (
+        equipment.post_combat_torpedoes !== null &&
+        equipment.post_combat_torpedoes !== undefined
+    ) {
+        rows.push(
+            `Post-combat torpedoes: ${equipment.post_combat_torpedoes}`,
+        );
+    }
+    const combatStartFighters =
+        equipment.combat_start_fighters ?? equipment.fighters;
+
+    if (combatStartFighters !== null) {
+        rows.push(`Combat-start fighters: ${combatStartFighters}`);
+    }
+
+    if (
+        equipment.post_combat_fighters !== null &&
+        equipment.post_combat_fighters !== undefined
+    ) {
+        rows.push(
+            `Post-combat fighters: ${equipment.post_combat_fighters}`,
+        );
     }
     return rows;
 }
@@ -419,9 +448,10 @@ export function CombatEventPanel({
                             marginTop: 9,
                         }}
                     >
-                        Equipment shown above comes directly from the stored VCR payload.
-                        Host-survival labels are derived from structured Fleet Command ownership
-                        reports. No value is written back into ShipObservation.
+                        Equipment and combat-start ammo come directly from the stored VCR.
+                        Post-combat ammo is a separate analyst-confirmed observation from the
+                        reviewed VCR. Host-survival labels come from structured Fleet Command
+                        reports. No value is written back into ShipObservation or raw VCR data.
                     </div>
                 </div>
             )}

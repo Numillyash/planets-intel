@@ -589,10 +589,6 @@ export function drawMapScene({
     }
 
     for (const position of shipPositions) {
-        if (position.planetId !== null) {
-            continue;
-        }
-
         const role = shipRole(position.ship);
         const isSelected = (
             selected?.kind === "ship" &&
@@ -627,5 +623,27 @@ export function drawMapScene({
             });
         });
         world.addChild(marker);
+
+        if (position.planetId !== null) {
+            const shipLabel = new Text({
+                text: `#${position.ship.ship_id}`,
+                style: {
+                    fill: 0xeaf3ff,
+                    fontFamily: "Inter, Arial, sans-serif",
+                    fontSize: 9,
+                    fontWeight: "600",
+                    stroke: {
+                        color: 0x060a10,
+                        width: 3,
+                    },
+                },
+                resolution: 2,
+            });
+            shipLabel.position.set(
+                position.x + 6,
+                position.y - 11,
+            );
+            world.addChild(shipLabel);
+        }
     }
 }

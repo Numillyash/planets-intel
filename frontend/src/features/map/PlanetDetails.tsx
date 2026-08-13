@@ -1,8 +1,15 @@
+import { useEffect, useState } from "react";
+import { getHistoricalShipTracks } from "../../api/history";
 import type { PlayerInfo } from "../../types/api";
-import type {
-    MapPlanetObservation,
-    PrivateIntelMapResponse,
+import {
+    isCombinedPrivateIntel,
+    type MapPlanetObservation,
+    type PrivateIntelMapResponse,
 } from "../../types/intel";
+import type {
+    HistoricalShipTrack,
+    HistoricalShipTrackPoint,
+} from "../../types/history";
 import type { SelectedEntity } from "./mapModel";
 import { SHIP_ROLE_LABEL, shipRole, shipsAtPlanet } from "./mapModel";
 import { formatInteger, formatPercent, formatTemperature, planetFacts } from "./observationView";
@@ -24,6 +31,84 @@ export function PlanetDetails({
         (item) => item.planet_id === planet.planet_id,
     ) ?? null;
     const orbitShips = shipsAtPlanet(intel.ships, planet);
+
+    const linkedAccountId = isCombinedPrivateIntel(intel)
+        ? intel.primary_observer.linked_account_id
+        : intel.observer.linked_account_id;
+
+    const directShipIds = new Set(
+        orbitShips.map((ship) => ship.ship_id),
+    );
+    const directShipKey = [...directShipIds]
+        .sort((left, right) => left - right)
+        .join(",");
+
+    const [combatOrbitContacts, setCombatOrbitContacts] = useState<
+        Array<{
+            track: HistoricalShipTrack;
+            point: HistoricalShipTrackPoint;
+        }>
+    >([]);
+
+    useEffect(() => {
+        let active = true;
+
+        void getHistoricalShipTracks(
+            intel.game_id,
+            linkedAccountId,
+            intel.turn,
+        )
+            .then((data) => {
+                if (!active) return;
+
+                const contacts: Array<{
+                    track: HistoricalShipTrack;
+                    point: HistoricalShipTrackPoint;
+                }> = [];
+
+                for (const track of data.tracks) {
+                    // A normal current ShipObservation already has its own
+                    // orbit entry. Do not duplicate it.
+                    if (directShipIds.has(track.ship_id)) {
+                        continue;
+                    }
+
+                    const point = track.points.find(
+                        (item) =>
+                            item.turn === intel.turn &&
+                            item.post_host_confirmed &&
+                            item.post_host_planet_id === planet.planet_id,
+                    );
+
+                    if (point !== undefined) {
+                        contacts.push({ track, point });
+                    }
+                }
+
+                contacts.sort(
+                    (left, right) =>
+                        left.track.ship_id - right.track.ship_id,
+                );
+
+                setCombatOrbitContacts(contacts);
+            })
+            .catch(() => {
+                if (active) {
+                    setCombatOrbitContacts([]);
+                }
+            });
+
+        return () => {
+            active = false;
+        };
+    }, [
+        directShipKey,
+        intel.game_id,
+        intel.turn,
+        linkedAccountId,
+        planet.planet_id,
+    ]);
+
     const hasResources = [
         facts.supplies,
         facts.megacredits,
@@ -67,7 +152,17 @@ export function PlanetDetails({
                 )}
                 {orbitShips.length > 0 && (
                     <span className="intel-detail-badge">
-                        {orbitShips.length} ship{orbitShips.length === 1 ? "" : "s"} in orbit
+                        {orbitShips.length} directly observed ship
+                        {orbitShips.length === 1 ? "" : "s"} in orbit
+                    </span>
+                )}
+                {combatOrbitContacts.length > 0 && (
+                    <span
+                        className="intel-detail-badge intel-detail-badge-gold"
+                        title="Ship presence is confirmed by VCR and post-host Fleet Command evidence"
+                    >
+                        {combatOrbitContacts.length} combat-confirmed ship
+                        {combatOrbitContacts.length === 1 ? "" : "s"} in orbit
                     </span>
                 )}
             </div>
@@ -84,6 +179,111 @@ export function PlanetDetails({
                 } />
                 <FactRow label="Temperature" value={formatTemperature(facts.temperature)} />
             </dl>
+
+            {(starbase !== null ||
+                orbitShips.length > 0 ||
+                combatOrbitContacts.length > 0) && (
+                <DetailSection title="Ships in orbit">
+                    <div className="intel-orbit-list">
+                        {starbase !== null && (
+                            <button
+                                className="intel-orbit-item"
+                                onClick={() =>
+                                    onSelect({
+                                        kind: "starbase",
+                                        value: starbase,
+                                    })
+                                }
+                                type="button"
+                            >
+                                <span className="intel-orbit-symbol intel-orbit-symbol-base" />
+                                <span>
+                                    <strong>
+                                        Starbase #{starbase.starbase_id}
+                                    </strong>
+                                    <small>
+                                        Open factual starbase observation
+                                    </small>
+                                </span>
+                            </button>
+                        )}
+
+                        {orbitShips.map((ship) => (
+                            <button
+                                className="intel-orbit-item"
+                                key={`scan:${ship.ship_id}`}
+                                onClick={() =>
+                                    onSelect({
+                                        kind: "ship",
+                                        value: ship,
+                                    })
+                                }
+                                type="button"
+                            >
+                                <span
+                                    className={
+                                        `intel-orbit-symbol intel-orbit-symbol-${shipRole(ship)}`
+                                    }
+                                />
+                                <span>
+                                    <strong>
+                                        {ship.name ?? `Ship ${ship.ship_id}`}
+                                    </strong>
+                                    <small>
+                                        {SHIP_ROLE_LABEL[shipRole(ship)]}
+                                        {" · "}ID {ship.ship_id}
+                                        {" · "}direct observation
+                                    </small>
+                                </span>
+                            </button>
+                        ))}
+
+                        {combatOrbitContacts.map(({ track, point }) => (
+                            <button
+                                className="intel-orbit-item"
+                                key={`combat:${track.ship_id}:${point.turn}`}
+                                onClick={() => {
+                                    const event = point.combat_event;
+                                    if (event === null) return;
+
+                                    window.dispatchEvent(
+                                        new CustomEvent(
+                                            "dashboard-event-select",
+                                            {
+                                                detail: {
+                                                    turn: event.turn,
+                                                    vcrId: event.vcr_id,
+                                                },
+                                            },
+                                        ),
+                                    );
+                                }}
+                                type="button"
+                                title="Open VCR / combat evidence"
+                            >
+                                <span
+                                    className="intel-orbit-symbol"
+                                    style={{
+                                        background: "#244f3a",
+                                        borderColor: "#82e6b1",
+                                    }}
+                                />
+                                <span>
+                                    <strong>
+                                        {track.name ?? `Ship ${track.ship_id}`}
+                                        {" · "}#{track.ship_id}
+                                    </strong>
+                                    <small style={{ color: "#82e6b1" }}>
+                                        Combat-confirmed in orbit after host
+                                        {" · "}Fleet Command
+                                        {" · "}T{point.turn}
+                                    </small>
+                                </span>
+                            </button>
+                        ))}
+                    </div>
+                </DetailSection>
+            )}
 
             <DetailSection title="Buildings">
                 <dl className="intel-fact-list">
@@ -138,24 +338,6 @@ export function PlanetDetails({
                 )}
             </DetailSection>
 
-            {(starbase !== null || orbitShips.length > 0) && (
-                <DetailSection title="Orbit">
-                    <div className="intel-orbit-list">
-                        {starbase !== null && (
-                            <button className="intel-orbit-item" onClick={() => onSelect({ kind: "starbase", value: starbase })} type="button">
-                                <span className="intel-orbit-symbol intel-orbit-symbol-base" />
-                                <span><strong>Starbase #{starbase.starbase_id}</strong><small>Open factual starbase observation</small></span>
-                            </button>
-                        )}
-                        {orbitShips.map((ship) => (
-                            <button className="intel-orbit-item" key={ship.ship_id} onClick={() => onSelect({ kind: "ship", value: ship })} type="button">
-                                <span className={`intel-orbit-symbol intel-orbit-symbol-${shipRole(ship)}`} />
-                                <span><strong>{ship.name ?? `Ship ${ship.ship_id}`}</strong><small>{SHIP_ROLE_LABEL[shipRole(ship)]} · ID {ship.ship_id}</small></span>
-                            </button>
-                        ))}
-                    </div>
-                </DetailSection>
-            )}
         </div>
     );
 }

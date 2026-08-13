@@ -130,6 +130,9 @@ export interface HistoricalShipTrackPoint {
     combat_vcr_id: number | null;
     combat_outcome: HistoricalCombatOutcome | null;
     combat_event: HistoricalCombatEvent | null;
+    post_host_confirmed: boolean;
+    post_host_planet_id: number | null;
+    post_host_basis: string | null;
     has_direct_scan: boolean;
 }
 

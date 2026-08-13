@@ -30,6 +30,13 @@ export interface ThreatVcrReveal {
     launcher_count: number | null;
     torpedoes: number | null;
     fighters: number | null;
+    combat_start_torpedoes?: number | null;
+    combat_start_fighters?: number | null;
+    post_combat_torpedoes?: number | null;
+    post_combat_fighters?: number | null;
+    post_combat_turn?: number | null;
+    post_combat_vcr_id?: number | null;
+    post_combat_source?: string | null;
     crew: number | null;
     damage: number | null;
     mass: number | null;

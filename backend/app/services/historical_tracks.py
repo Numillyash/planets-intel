@@ -5,6 +5,7 @@ from sqlalchemy import select
 
 from app.db.session import SessionLocal
 from app.models.combat_observation import CombatObservation
+from app.models.host_event_observation import HostEventObservation
 from app.models.planets_account import PlanetsAccount
 from app.models.private_observation_batch import PrivateObservationBatch
 from app.models.ship_observation import ShipObservation
@@ -118,8 +119,82 @@ def get_historical_ship_tracks(
             )
         ).all()
 
+        host_rows = session.execute(
+            select(
+                HostEventObservation,
+                PrivateObservationBatch,
+                PlanetsAccount,
+            )
+            .join(
+                PrivateObservationBatch,
+                PrivateObservationBatch.id == HostEventObservation.batch_id,
+            )
+            .join(
+                PlanetsAccount,
+                PlanetsAccount.id
+                == PrivateObservationBatch.observer_planets_account_id,
+            )
+            .where(
+                PrivateObservationBatch.game_id == game_id,
+                PrivateObservationBatch.turn <= through_turn,
+                PrivateObservationBatch.observer_planets_account_id.in_(
+                    accessible_ids
+                ),
+                HostEventObservation.turn <= through_turn,
+                HostEventObservation.event_type
+                == "planet_owner_change_by_ship",
+                HostEventObservation.ship_id.is_not(None),
+                HostEventObservation.planet_id.is_not(None),
+                HostEventObservation.x.is_not(None),
+                HostEventObservation.y.is_not(None),
+            )
+            .order_by(
+                HostEventObservation.turn,
+                HostEventObservation.ship_id,
+                PrivateObservationBatch.observed_at,
+                PrivateObservationBatch.id,
+            )
+        ).all()
+
     candidates: dict[tuple[int, int], list[dict[str, Any]]] = defaultdict(list)
     metadata_candidates: dict[int, list[dict[str, Any]]] = defaultdict(list)
+
+    # Fleet Command capture reports are post-host factual evidence:
+    # the named ship survived its planet combat and is at that planet's
+    # coordinates after the combat phase.
+    post_host_anchors: dict[tuple[int, int], dict[str, Any]] = {}
+
+    for host, batch, account in host_rows:
+        if (
+            host.ship_id is None
+            or host.planet_id is None
+            or host.x is None
+            or host.y is None
+        ):
+            continue
+
+        key = (int(host.ship_id), int(host.turn))
+
+        anchor = {
+            "planet_id": int(host.planet_id),
+            "x": int(host.x),
+            "y": int(host.y),
+            "linked_account_id": account.id,
+            "observer_name": account.planets_username,
+            "sort_key": (
+                batch.turn,
+                batch.observed_at,
+                batch.id,
+                host.id,
+            ),
+        }
+
+        previous = post_host_anchors.get(key)
+        if (
+            previous is None
+            or anchor["sort_key"] > previous["sort_key"]
+        ):
+            post_host_anchors[key] = anchor
 
     for ship, batch, account in scan_rows:
         observation_turn = (
@@ -305,6 +380,15 @@ def get_historical_ship_tracks(
         if object_id is None or combat.x is None or combat.y is None:
             return
 
+        post_host = post_host_anchors.get(
+            (int(object_id), int(combat.battle_turn))
+        )
+        post_host_matches = (
+            post_host is not None
+            and post_host["x"] == combat.x
+            and post_host["y"] == combat.y
+        )
+
         candidate = {
             "ship_id": object_id,
             "turn": combat.battle_turn,
@@ -324,6 +408,17 @@ def get_historical_ship_tracks(
             ),
             "combat_event": combat_event_meta.get(
                 (combat.battle_turn, combat.vcr_id)
+            ),
+            "post_host_confirmed": post_host_matches,
+            "post_host_planet_id": (
+                post_host["planet_id"]
+                if post_host_matches and post_host is not None
+                else None
+            ),
+            "post_host_basis": (
+                "structured_planet_ownership_report"
+                if post_host_matches
+                else None
             ),
             "phase_priority": 1,
             "sort_key": (
@@ -378,6 +473,13 @@ def get_historical_ship_tracks(
                 "combat_vcr_id": selected["combat_vcr_id"],
                 "combat_outcome": selected["combat_outcome"],
                 "combat_event": selected["combat_event"],
+                "post_host_confirmed": bool(
+                    selected.get("post_host_confirmed", False)
+                ),
+                "post_host_planet_id": selected.get(
+                    "post_host_planet_id"
+                ),
+                "post_host_basis": selected.get("post_host_basis"),
                 "has_direct_scan": any(
                     entry["evidence"] == "scan"
                     for entry in entries
