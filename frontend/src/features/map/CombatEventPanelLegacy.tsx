@@ -7,6 +7,23 @@ import type {
     CombatEventSummary,
 } from "../../types/history";
 
+interface CombatEquipmentEvidence {
+    beam_id: number | null;
+    beam_name: string | null;
+    beam_count: number | null;
+    torpedo_id: number | null;
+    torpedo_name: string | null;
+    launcher_count: number | null;
+    torpedoes: number | null;
+    fighters: number | null;
+    damage: number | null;
+    crew: number | null;
+    mass: number | null;
+}
+
+type EnrichedCombatSide = CombatEventSideSummary & {
+    combat_equipment?: CombatEquipmentEvidence | null;
+};
 
 function sideName(side: CombatEventSideSummary): string {
     if (side.name !== null && side.name.trim()) return side.name;
@@ -17,7 +34,6 @@ function sideName(side: CombatEventSideSummary): string {
     }
     return side.object_kind === "ship" ? "Unknown ship" : "Unknown planet";
 }
-
 
 function resultLabel(
     status: CombatEventResultStatus,
@@ -39,7 +55,6 @@ function resultLabel(
     }
 }
 
-
 function resultColor(status: CombatEventResultStatus): string {
     switch (status) {
         case "survived_post_host":
@@ -55,21 +70,37 @@ function resultColor(status: CombatEventResultStatus): string {
     }
 }
 
-
 function eventKind(event: CombatEventSummary): string {
-    const shipCount = event.sides.filter(
-        (side) => side.object_kind === "ship",
-    ).length;
+    const shipCount = event.sides.filter((side) => side.object_kind === "ship").length;
     if (shipCount === 2) return "Ship combat";
     if (shipCount === 1) return "Planet combat";
     return "Combat";
 }
 
-
 function eventTitle(event: CombatEventSummary): string {
     return `${sideName(event.sides[0])} vs ${sideName(event.sides[1])}`;
 }
 
+function equipmentSummary(equipment: CombatEquipmentEvidence): string[] {
+    const rows: string[] = [];
+    if (equipment.beam_count !== null || equipment.beam_name !== null) {
+        rows.push(
+            `Beams: ${equipment.beam_count ?? "?"} × ${equipment.beam_name ?? (equipment.beam_id !== null ? `Beam #${equipment.beam_id}` : "unknown")}`,
+        );
+    }
+    if (equipment.launcher_count !== null || equipment.torpedo_name !== null) {
+        rows.push(
+            `Tubes: ${equipment.launcher_count ?? "?"} × ${equipment.torpedo_name ?? (equipment.torpedo_id !== null ? `Torpedo #${equipment.torpedo_id}` : "unknown")}`,
+        );
+    }
+    if (equipment.torpedoes !== null) {
+        rows.push(`Torpedoes in VCR state: ${equipment.torpedoes}`);
+    }
+    if (equipment.fighters !== null) {
+        rows.push(`Fighters in VCR state: ${equipment.fighters}`);
+    }
+    return rows;
+}
 
 export function CombatEventPanel({
     gameId,
@@ -83,8 +114,7 @@ export function CombatEventPanel({
     onFocus: (event: CombatEventSummary) => void;
 }) {
     const [events, setEvents] = useState<CombatEventSummary[]>([]);
-    const [selectedEvent, setSelectedEvent] =
-        useState<CombatEventSummary | null>(null);
+    const [selectedEvent, setSelectedEvent] = useState<CombatEventSummary | null>(null);
     const [listOpen, setListOpen] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -260,8 +290,8 @@ export function CombatEventPanel({
                         zIndex: 6,
                         right: 12,
                         bottom: 12,
-                        width: "min(410px, calc(100% - 24px))",
-                        maxHeight: "58%",
+                        width: "min(430px, calc(100% - 24px))",
+                        maxHeight: "64%",
                         overflowY: "auto",
                         padding: "12px 13px",
                         border: "1px solid rgba(255, 204, 115, 0.55)",
@@ -310,41 +340,75 @@ export function CombatEventPanel({
                     </div>
 
                     <div style={{ display: "grid", gap: 8, marginTop: 11 }}>
-                        {selectedEvent.sides.map((side) => (
-                            <div
-                                key={side.side}
-                                style={{
-                                    padding: "8px 9px",
-                                    border: "1px solid rgba(57, 71, 93, 0.72)",
-                                    borderRadius: 7,
-                                    background: "rgba(13, 20, 31, 0.86)",
-                                }}
-                            >
-                                <strong>{sideName(side)}</strong>
-                                <div style={{ color: "#91a9c8", fontSize: 12, marginTop: 3 }}>
-                                    {side.object_kind === "ship"
-                                        ? `Ship${side.object_id !== null ? ` #${side.object_id}` : ""}${side.hull_id !== null ? ` · hull #${side.hull_id}` : ""}`
-                                        : `${side.has_starbase ? "Planet + starbase" : "Planet"}${side.object_id !== null ? ` #${side.object_id}` : ""}`}
-                                    {side.owner_id !== null ? ` · VCR owner slot ${side.owner_id}` : ""}
-                                </div>
+                        {selectedEvent.sides.map((rawSide) => {
+                            const side = rawSide as EnrichedCombatSide;
+                            const equipment = side.combat_equipment ?? null;
+                            const equipmentRows = equipment !== null
+                                ? equipmentSummary(equipment)
+                                : [];
+
+                            return (
                                 <div
+                                    key={side.side}
                                     style={{
-                                        marginTop: 5,
-                                        fontSize: 12,
-                                        color: resultColor(side.result_status),
+                                        padding: "8px 9px",
+                                        border: "1px solid rgba(57, 71, 93, 0.72)",
+                                        borderRadius: 7,
+                                        background: "rgba(13, 20, 31, 0.86)",
                                     }}
                                 >
-                                    {resultLabel(side.result_status, side)}
-                                </div>
-                                {side.result_sources.length > 0 && (
-                                    <div style={{ color: "#91a9c8", fontSize: 10, marginTop: 3 }}>
-                                        Result evidence: {side.result_sources
-                                            .map((source) => source.planets_username)
-                                            .join(", ")}
+                                    <strong>{sideName(side)}</strong>
+                                    <div style={{ color: "#91a9c8", fontSize: 12, marginTop: 3 }}>
+                                        {side.object_kind === "ship"
+                                            ? `Ship${side.object_id !== null ? ` #${side.object_id}` : ""}${side.hull_id !== null ? ` · hull #${side.hull_id}` : ""}`
+                                            : `${side.has_starbase ? "Planet + starbase" : "Planet"}${side.object_id !== null ? ` #${side.object_id}` : ""}`}
+                                        {side.owner_id !== null ? ` · VCR owner slot ${side.owner_id}` : ""}
                                     </div>
-                                )}
-                            </div>
-                        ))}
+                                    <div
+                                        style={{
+                                            marginTop: 5,
+                                            fontSize: 12,
+                                            color: resultColor(side.result_status),
+                                        }}
+                                    >
+                                        {resultLabel(side.result_status, side)}
+                                    </div>
+                                    {equipmentRows.length > 0 && (
+                                        <div
+                                            style={{
+                                                marginTop: 7,
+                                                paddingTop: 6,
+                                                borderTop: "1px solid rgba(57, 71, 93, 0.58)",
+                                                color: "#d8e5f5",
+                                                fontSize: 11,
+                                                lineHeight: 1.55,
+                                            }}
+                                        >
+                                            <strong style={{ display: "block", color: "#9ec8ff", marginBottom: 2 }}>
+                                                VCR equipment · factual
+                                            </strong>
+                                            {equipmentRows.map((row) => (
+                                                <div key={row}>{row}</div>
+                                            ))}
+                                            {(equipment.damage !== null || equipment.crew !== null || equipment.mass !== null) && (
+                                                <div style={{ color: "#91a9c8", marginTop: 3 }}>
+                                                    {equipment.mass !== null ? `Mass ${equipment.mass} kt` : ""}
+                                                    {equipment.damage !== null ? `${equipment.mass !== null ? " · " : ""}damage ${equipment.damage}%` : ""}
+                                                    {equipment.crew !== null ? `${equipment.mass !== null || equipment.damage !== null ? " · " : ""}crew ${equipment.crew}` : ""}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                    {side.result_sources.length > 0 && (
+                                        <div style={{ color: "#91a9c8", fontSize: 10, marginTop: 4 }}>
+                                            Result evidence: {side.result_sources
+                                                .map((source) => source.planets_username)
+                                                .join(", ")}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
                     </div>
 
                     <div
@@ -355,9 +419,9 @@ export function CombatEventPanel({
                             marginTop: 9,
                         }}
                     >
-                        VCR data are factual observations. Result labels are derived at read time
-                        from later VCRs at the same position and exact-turn post-host observations;
-                        no inferred result is written back into factual intel.
+                        Equipment shown above comes directly from the stored VCR payload.
+                        Host-survival labels are derived from structured Fleet Command ownership
+                        reports. No value is written back into ShipObservation.
                     </div>
                 </div>
             )}
