@@ -48,6 +48,10 @@ export interface ShipLoadoutInference {
         freighter_delta: number | null;
         visible_warships: number;
         visible_noncombat_ships: number;
+        candidate_build_turn: number;
+        candidate_build_military_delta: number | null;
+        candidate_build_warship_delta: number | null;
+        candidate_build_freighter_delta: number | null;
         conditional_build_link: boolean;
     };
     vcr_reveal?: {
@@ -64,6 +68,7 @@ export interface ShipLoadoutInference {
         selected_ship_is_new_build: "conditional" | "not_established";
         military_residual: string;
         first_seen_caveat: string;
+        historical_score_link?: string;
     };
     ranked_candidates?: RankedLoadoutCandidate[];
     provenance?: {
