@@ -1,0 +1,324 @@
+/* MVP 0.8 — Planets-style operational entity interface */
+
+.intel-map-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(420px, 470px);
+    min-height: 720px;
+}
+
+.intel-map-stage-wrap {
+    min-height: 720px;
+}
+
+.intel-map-details {
+    gap: 0;
+    max-height: 720px;
+    padding: 0;
+}
+
+.intel-map-details > .eyebrow,
+.intel-map-details > .intel-provenance-note {
+    display: none;
+}
+
+.operational-entity-panel {
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
+    background: linear-gradient(180deg, rgba(17, 25, 38, 0.98), rgba(10, 16, 25, 0.98));
+}
+
+.operational-entity-header {
+    padding: 16px 18px 14px;
+    border-bottom: 1px solid #243247;
+    background: linear-gradient(180deg, rgba(28, 41, 59, 0.96), rgba(14, 22, 34, 0.96));
+}
+
+.operational-entity-title-row {
+    display: grid;
+    grid-template-columns: 52px minmax(0, 1fr);
+    align-items: center;
+    gap: 12px;
+}
+
+.operational-entity-title-row h3 {
+    margin: 2px 0 3px;
+    color: #f2f6fc;
+    font-size: 1.18rem;
+}
+
+.operational-entity-title-row p {
+    margin: 0;
+    color: #8799b0;
+    font-size: 0.72rem;
+    line-height: 1.4;
+}
+
+.operational-entity-kind {
+    color: #7895b8;
+    font-size: 0.64rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+.operational-entity-icon {
+    position: relative;
+    display: block;
+    width: 44px;
+    height: 44px;
+    flex: 0 0 auto;
+}
+
+.operational-entity-icon-planet {
+    border: 1px solid #79a9d3;
+    border-radius: 50%;
+    background: radial-gradient(circle at 32% 27%, #dceeff 0 6%, #83b9e3 7% 19%, #426f98 38%, #213b59 69%, #101b2a 100%);
+    box-shadow: 0 0 0 3px rgba(90, 143, 190, 0.08), 0 0 16px rgba(87, 151, 208, 0.22);
+}
+
+.operational-entity-icon-planet::after {
+    position: absolute;
+    inset: 8px 5px 11px 12px;
+    border-top: 2px solid rgba(212, 234, 250, 0.22);
+    border-radius: 50%;
+    content: "";
+    transform: rotate(-20deg);
+}
+
+.operational-entity-tabs {
+    display: flex;
+    flex: 0 0 auto;
+    overflow-x: auto;
+    border-bottom: 1px solid #243247;
+    background: #0b121c;
+    scrollbar-width: thin;
+}
+
+.operational-entity-tab {
+    position: relative;
+    flex: 0 0 auto;
+    min-height: 40px;
+    padding: 0 12px;
+    border: 0;
+    border-right: 1px solid #1d2939;
+    background: transparent;
+    color: #7f91a9;
+    font: inherit;
+    font-size: 0.72rem;
+    font-weight: 650;
+    cursor: pointer;
+}
+
+.operational-entity-tab:hover {
+    background: #111c2a;
+    color: #c9d7e8;
+}
+
+.operational-entity-tab.is-active {
+    background: linear-gradient(180deg, rgba(40, 65, 93, 0.45), rgba(18, 31, 47, 0.65));
+    color: #e6edf7;
+}
+
+.operational-entity-tab.is-active::after {
+    position: absolute;
+    right: 8px;
+    bottom: 0;
+    left: 8px;
+    height: 2px;
+    background: #76a8d6;
+    content: "";
+}
+
+.operational-entity-content {
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: 16px 18px 22px;
+    overflow-y: auto;
+}
+
+.operational-tab-section {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.operational-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.operational-summary-grid > div {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 9px 10px;
+    border: 1px solid #1e2d40;
+    border-radius: 6px;
+    background: #09111b;
+}
+
+.operational-summary-grid span {
+    color: #70849d;
+    font-size: 0.64rem;
+    text-transform: uppercase;
+}
+
+.operational-summary-grid strong {
+    color: #e2ebf6;
+    font-size: 0.9rem;
+}
+
+.operational-section-heading {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    padding-bottom: 7px;
+    border-bottom: 1px solid #1e2b3b;
+}
+
+.operational-section-heading span {
+    color: #8298b2;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.operational-section-heading strong {
+    color: #dce8f5;
+}
+
+.operational-intel-callout {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 11px;
+    border: 1px solid #34516f;
+    border-radius: 6px;
+    background: rgba(27, 52, 75, 0.35);
+}
+
+.operational-intel-callout strong {
+    color: #afd1ee;
+    font-size: 0.78rem;
+}
+
+.operational-intel-callout span {
+    color: #8ea7be;
+    font-size: 0.72rem;
+    line-height: 1.45;
+}
+
+.operational-evidence-symbol {
+    border-color: #82e6b1 !important;
+    background: #244f3a !important;
+}
+
+.operational-evidence-item small {
+    color: #82e6b1 !important;
+}
+
+.operational-timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.operational-timeline-item {
+    display: grid;
+    grid-template-columns: 38px minmax(0, 1fr);
+    gap: 2px 9px;
+    width: 100%;
+    padding: 9px 10px;
+    border: 1px solid #1f2d3e;
+    border-radius: 6px;
+    background: #09111b;
+    color: inherit;
+    text-align: left;
+    font: inherit;
+}
+
+button.operational-timeline-item {
+    cursor: pointer;
+}
+
+button.operational-timeline-item:hover {
+    border-color: #38516f;
+    background: #0d1825;
+}
+
+.operational-timeline-item > span {
+    grid-row: 1 / span 2;
+    color: #7fa8cf;
+    font-size: 0.72rem;
+    font-weight: 800;
+}
+
+.operational-timeline-item strong {
+    color: #dbe6f3;
+    font-size: 0.76rem;
+}
+
+.operational-timeline-item small {
+    color: #8293a8;
+    font-size: 0.68rem;
+}
+
+.operational-timeline-item.is-current {
+    border-color: #34516f;
+}
+
+.operational-roadmap-note {
+    margin-top: 8px;
+    padding-top: 9px;
+    border-top: 1px solid #1d2938;
+}
+
+.operational-empty-selection {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 360px;
+    padding: 30px;
+    color: #7f90a6;
+    text-align: center;
+}
+
+.operational-empty-selection strong {
+    margin-top: 10px;
+    color: #cbd8e7;
+}
+
+.operational-empty-selection p {
+    max-width: 280px;
+    margin: 7px 0 0;
+    font-size: 0.76rem;
+    line-height: 1.5;
+}
+
+.operational-empty-icon {
+    color: #52759a;
+    font-size: 2.5rem;
+}
+
+@media (max-width: 1050px) {
+    .intel-map-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .intel-map-stage-wrap {
+        min-height: 620px;
+        border-right: 0;
+        border-bottom: 1px solid #1b2431;
+    }
+
+    .intel-map-details {
+        max-height: none;
+        min-height: 480px;
+    }
+}

@@ -1,16 +1,23 @@
+import { useEffect, useState } from "react";
+
 import type { PlayerInfo } from "../../types/api";
 import {
     isCombinedPrivateIntel,
     type IntelEntityProvenance,
     type PrivateIntelMapResponse,
 } from "../../types/intel";
-import type { SelectedEntity } from "./mapModel";
 import { DetailSection, playerName } from "./DetailPrimitives";
-import { PlanetDetails } from "./PlanetDetails";
+import { EntityIcon } from "./EntityIcon";
+import type { SelectedEntity } from "./mapModel";
+import {
+    OperationalPlanetPanel,
+    type PlanetOperationalTab,
+} from "./OperationalPlanetPanel";
 import { PlayerTurnStatistics } from "./PlayerTurnStatistics";
 import { ShipDetails } from "./ShipDetails";
 import { StarbaseDetails } from "./StarbaseDetails";
 import { StellarFeatureDetails } from "./StellarFeatureDetails";
+import "./operational-ui.css";
 
 function EntityProvenance({
     selected,
@@ -73,6 +80,95 @@ function EntityProvenance({
     );
 }
 
+const PLANET_TABS: Array<{
+    id: PlanetOperationalTab;
+    label: string;
+}> = [
+    { id: "planet", label: "Planet" },
+    { id: "economy", label: "Economy" },
+    { id: "ships", label: "Ships" },
+    { id: "intel", label: "Intel" },
+    { id: "history", label: "History" },
+    { id: "combat", label: "Combat" },
+];
+
+function PlanetOperationalDetails({
+    selected,
+    intel,
+    players,
+    onSelect,
+}: {
+    selected: Extract<SelectedEntity, { kind: "planet" }>;
+    intel: PrivateIntelMapResponse;
+    players: PlayerInfo[];
+    onSelect: (entity: SelectedEntity) => void;
+}) {
+    const [activeTab, setActiveTab] =
+        useState<PlanetOperationalTab>("planet");
+    const planet = selected.value;
+
+    useEffect(() => {
+        setActiveTab("planet");
+    }, [planet.planet_id]);
+
+    const position =
+        planet.x !== null && planet.y !== null
+            ? `${planet.x}, ${planet.y}`
+            : "position unknown";
+
+    return (
+        <div className="operational-entity-panel">
+            <header className="operational-entity-header">
+                <div className="operational-entity-title-row">
+                    <EntityIcon selected={selected} />
+                    <div>
+                        <span className="operational-entity-kind">Planet</span>
+                        <h3>{planet.name ?? `Planet ${planet.planet_id}`}</h3>
+                        <p>
+                            Planet #{planet.planet_id}
+                            {" · "}{playerName(planet.owner_id, players)}
+                            {" · "}{position}
+                        </p>
+                    </div>
+                </div>
+            </header>
+
+            <nav
+                className="operational-entity-tabs"
+                aria-label="Planet interface tabs"
+            >
+                {PLANET_TABS.map((tab) => (
+                    <button
+                        className={
+                            "operational-entity-tab"
+                            + (activeTab === tab.id ? " is-active" : "")
+                        }
+                        key={tab.id}
+                        onClick={() => setActiveTab(tab.id)}
+                        type="button"
+                    >
+                        {tab.label}
+                    </button>
+                ))}
+            </nav>
+
+            <div className="operational-entity-content">
+                <OperationalPlanetPanel
+                    intel={intel}
+                    onSelect={onSelect}
+                    planet={planet}
+                    players={players}
+                    tab={activeTab}
+                />
+
+                {activeTab === "intel" && (
+                    <EntityProvenance intel={intel} selected={selected} />
+                )}
+            </div>
+        </div>
+    );
+}
+
 export function EntityDetails({
     selected,
     intel,
@@ -86,29 +182,31 @@ export function EntityDetails({
 }) {
     if (selected === null) {
         return (
-            <div className="intel-map-empty-selection">
+            <div className="operational-empty-selection">
+                <span className="operational-empty-icon">◉</span>
                 <strong>Select an entity</strong>
                 <p>
-                    Click a planet, deep-space ship, minefield, nebula,
-                    star cluster, or ion storm. Ships in orbit are listed
-                    inside the selected planet's Orbit section.
+                    Select a planet or ship on the map. The operational panel
+                    keeps game-state data and intelligence evidence in separate tabs.
                 </p>
             </div>
         );
     }
 
-    let details;
-
     if (selected.kind === "planet") {
-        details = (
-            <PlanetDetails
+        return (
+            <PlanetOperationalDetails
                 intel={intel}
                 onSelect={onSelect}
-                planet={selected.value}
                 players={players}
+                selected={selected}
             />
         );
-    } else if (selected.kind === "ship") {
+    }
+
+    let details;
+
+    if (selected.kind === "ship") {
         const ownerId = selected.value.owner_id;
         details = (
             <>
@@ -150,10 +248,7 @@ export function EntityDetails({
     return (
         <>
             {details}
-            <EntityProvenance
-                intel={intel}
-                selected={selected}
-            />
+            <EntityProvenance intel={intel} selected={selected} />
         </>
     );
 }
