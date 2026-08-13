@@ -5,8 +5,9 @@ import {
     type PrivateIntelMapResponse,
 } from "../../types/intel";
 import type { SelectedEntity } from "./mapModel";
-import { DetailSection } from "./DetailPrimitives";
+import { DetailSection, playerName } from "./DetailPrimitives";
 import { PlanetDetails } from "./PlanetDetails";
+import { PlayerTurnStatistics } from "./PlayerTurnStatistics";
 import { ShipDetails } from "./ShipDetails";
 import { StarbaseDetails } from "./StarbaseDetails";
 import { StellarFeatureDetails } from "./StellarFeatureDetails";
@@ -108,13 +109,24 @@ export function EntityDetails({
             />
         );
     } else if (selected.kind === "ship") {
+        const ownerId = selected.value.owner_id;
         details = (
-            <ShipDetails
-                intel={intel}
-                onSelect={onSelect}
-                players={players}
-                ship={selected.value}
-            />
+            <>
+                <ShipDetails
+                    intel={intel}
+                    onSelect={onSelect}
+                    players={players}
+                    ship={selected.value}
+                />
+                {ownerId !== null && ownerId > 0 && (
+                    <PlayerTurnStatistics
+                        gameId={intel.game_id}
+                        label={playerName(ownerId, players)}
+                        slotId={ownerId}
+                        toTurn={intel.turn}
+                    />
+                )}
+            </>
         );
     } else if (selected.kind === "starbase") {
         details = (
