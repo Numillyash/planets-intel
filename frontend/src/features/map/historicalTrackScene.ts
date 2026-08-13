@@ -1,5 +1,7 @@
 import { Container, Graphics, Text } from "pixi.js";
 import type {
+    HistoricalCombatEvent,
+    HistoricalCombatEventSide,
     HistoricalCombatOutcome,
     HistoricalShipTrack,
     HistoricalShipTrackPoint,
@@ -34,11 +36,11 @@ function fadedAlpha(
 function combatOutcomeLabel(outcome: HistoricalCombatOutcome | null): string {
     switch (outcome) {
         case "defeated":
-            return "defeated in combat";
+            return "defeated";
         case "survived_to_later_combat":
             return "survived to later combat";
         default:
-            return "combat confirmed";
+            return "final result unknown";
     }
 }
 
@@ -63,30 +65,21 @@ function drawTrackPoint({
     const y = renderY(point.y, bounds);
     const isCombat = point.evidence === "combat";
     const alpha = fadedAlpha(
-        selectedTrack ? 0.98 : isCombat ? 0.82 : 0.45,
+        selectedTrack ? 0.98 : isCombat ? 0.64 : 0.45,
         point.turn,
         throughTurn,
         fadePerTurn,
-        selectedTrack ? 0.1 : isCombat ? 0.16 : 0.03,
+        selectedTrack ? 0.1 : isCombat ? 0.12 : 0.03,
     );
 
     if (isCombat) {
         const defeated = point.combat_outcome === "defeated";
         const marker = new Graphics()
-            .circle(0, 0, selectedTrack ? 5.2 : 4.4)
+            .circle(0, 0, selectedTrack ? 4.6 : 2.7)
             .stroke({
                 color: defeated ? 0xff6b6b : color,
-                width: selectedTrack ? 1.8 : 1.25,
+                width: selectedTrack ? 1.6 : 0.9,
                 alpha,
-            })
-            .moveTo(-3.2, -3.2)
-            .lineTo(3.2, 3.2)
-            .moveTo(3.2, -3.2)
-            .lineTo(-3.2, 3.2)
-            .stroke({
-                color: defeated ? 0xff7777 : 0xffd4d4,
-                width: selectedTrack ? 1.5 : 1.1,
-                alpha: Math.min(alpha + 0.12, 1),
             });
         marker.position.set(x, y);
         world.addChild(marker);
@@ -121,7 +114,7 @@ function drawTrackPoint({
         0.18,
     );
     const suffix = point.evidence === "combat"
-        ? ` · ${combatOutcomeLabel(point.combat_outcome)}${point.combat_vcr_id !== null ? ` #${point.combat_vcr_id}` : ""}`
+        ? ` · combat · ${combatOutcomeLabel(point.combat_outcome)}${point.combat_vcr_id !== null ? ` #${point.combat_vcr_id}` : ""}`
         : point.gap_from_previous
             ? " · reacquired"
             : "";
@@ -222,6 +215,61 @@ export function drawHistoricalShipTracks({
     }
 }
 
+function combatEventKey(event: HistoricalCombatEvent): string {
+    return `${event.turn}:${event.vcr_id}`;
+}
+
+function sideName(side: HistoricalCombatEventSide): string {
+    if (side.name !== null && side.name.trim()) return side.name;
+    if (side.object_id !== null) {
+        return side.object_kind === "ship"
+            ? `Ship #${side.object_id}`
+            : `Planet #${side.object_id}`;
+    }
+    return side.object_kind === "ship" ? "Unknown ship" : "Unknown planet";
+}
+
+function eventKindLabel(event: HistoricalCombatEvent): string {
+    const shipCount = event.sides.filter(
+        (side) => side.object_kind === "ship",
+    ).length;
+    if (shipCount === 2) return "ship combat";
+    if (shipCount === 1) return "planet combat";
+    return "combat";
+}
+
+function eventTooltip(event: HistoricalCombatEvent): string {
+    const lines = [
+        `VCR #${event.vcr_id} · T${event.turn} · ${eventKindLabel(event)}`,
+    ];
+
+    if (event.sequence_count > 1) {
+        lines.push(
+            `Combat ${event.sequence_index}/${event.sequence_count} at this position`,
+        );
+    }
+
+    for (const side of event.sides) {
+        const suffix = side.object_kind === "ship"
+            ? ` — ${combatOutcomeLabel(side.sequence_status)}`
+            : side.has_starbase
+                ? " — planet + starbase"
+                : " — planet";
+        lines.push(`${sideName(side)}${suffix}`);
+    }
+
+    if (event.sides.some(
+        (side) =>
+            side.object_kind === "ship" &&
+            side.sequence_status !== null &&
+            side.sequence_status !== "unknown",
+    )) {
+        lines.push("Sequence analysis; factual event data remains unchanged");
+    }
+
+    return lines.join("\n");
+}
+
 export function drawCurrentCombatContacts({
     world,
     tracks,
@@ -233,80 +281,80 @@ export function drawCurrentCombatContacts({
     bounds: MapBounds;
     throughTurn: number;
 }) {
-    const grouped = new Map<
-        string,
-        Array<{
-            track: HistoricalShipTrack;
-            point: HistoricalShipTrackPoint;
-        }>
-    >();
+    const events = new Map<string, HistoricalCombatEvent>();
 
     for (const track of tracks) {
-        const point = track.points.find(
-            (item) => item.turn === throughTurn && item.evidence === "combat",
-        );
-        if (point === undefined || point.has_direct_scan) continue;
+        for (const point of track.points) {
+            const event = point.combat_event;
+            if (
+                point.turn !== throughTurn ||
+                point.evidence !== "combat" ||
+                event === null
+            ) {
+                continue;
+            }
+            events.set(combatEventKey(event), event);
+        }
+    }
 
-        const key = `${point.x}:${point.y}`;
+    const grouped = new Map<string, HistoricalCombatEvent[]>();
+    for (const event of events.values()) {
+        if (event.x === null || event.y === null) continue;
+        const key = `${event.x}:${event.y}`;
         const group = grouped.get(key) ?? [];
-        group.push({ track, point });
+        group.push(event);
         grouped.set(key, group);
     }
 
     for (const group of grouped.values()) {
-        group.sort((left, right) => left.track.ship_id - right.track.ship_id);
+        group.sort((left, right) =>
+            left.sequence_index - right.sequence_index || left.vcr_id - right.vcr_id,
+        );
 
-        group.forEach(({ track, point }, index) => {
-            const centerX = point.x;
-            const centerY = renderY(point.y, bounds);
+        group.forEach((event, index) => {
+            if (event.x === null || event.y === null) return;
+
+            const centerX = event.x;
+            const centerY = renderY(event.y, bounds);
             const count = group.length;
             const angle = -Math.PI / 2
                 + (Math.PI * 2 * index) / Math.max(count, 1);
-            const offsetRadius = count > 1 ? 14 : 11;
+            const offsetRadius = count > 1 ? 15 : 11;
             const x = centerX + Math.cos(angle) * offsetRadius;
             const y = centerY + Math.sin(angle) * offsetRadius;
-            const color = trackColor(track.owner_id);
-            const defeated = point.combat_outcome === "defeated";
+            const hasDefeated = event.sides.some(
+                (side) => side.sequence_status === "defeated",
+            );
+            const markerColor = hasDefeated ? 0xff8a73 : 0xffcc73;
 
             const connector = new Graphics()
                 .moveTo(centerX, centerY)
                 .lineTo(x, y)
                 .stroke({
-                    color: defeated ? 0xff7777 : 0xffc4c4,
-                    width: 0.75,
-                    alpha: defeated ? 0.5 : 0.66,
+                    color: markerColor,
+                    width: 0.8,
+                    alpha: 0.58,
                 });
             world.addChild(connector);
 
-            const marker = defeated
-                ? new Graphics()
-                    .circle(0, 0, 5.1)
-                    .stroke({ color: 0xff6b6b, width: 1.4, alpha: 0.96 })
-                    .moveTo(-3.4, -3.4)
-                    .lineTo(3.4, 3.4)
-                    .moveTo(3.4, -3.4)
-                    .lineTo(-3.4, 3.4)
-                    .stroke({ color: 0xffa0a0, width: 1.35, alpha: 0.98 })
-                : new Graphics()
-                    .moveTo(0, -5.1)
-                    .lineTo(5.1, 0)
-                    .lineTo(0, 5.1)
-                    .lineTo(-5.1, 0)
-                    .closePath()
-                    .fill({ color, alpha: 0.96 })
-                    .stroke({ color: 0xffffff, width: 1.1, alpha: 0.94 });
-
+            const marker = new Graphics()
+                .circle(0, 0, 5.3)
+                .fill({ color: 0x111722, alpha: 0.96 })
+                .stroke({ color: markerColor, width: 1.7, alpha: 0.98 })
+                .moveTo(-3.2, 0)
+                .lineTo(3.2, 0)
+                .moveTo(0, -3.2)
+                .lineTo(0, 3.2)
+                .stroke({ color: 0xffffff, width: 0.9, alpha: 0.86 });
             marker.position.set(x, y);
             marker.eventMode = "static";
-            marker.cursor = "help";
+            marker.cursor = "pointer";
             world.addChild(marker);
 
-            const outcome = combatOutcomeLabel(point.combat_outcome);
-            const name = track.name ?? `Ship #${track.ship_id}`;
             const label = new Text({
-                text: `${name}\n${outcome} · T${throughTurn}${point.combat_vcr_id !== null ? ` · VCR #${point.combat_vcr_id}` : ""}`,
+                text: eventTooltip(event),
                 style: {
-                    fill: defeated ? 0xffb1b1 : 0xffd7d7,
+                    fill: 0xffe3d1,
                     fontFamily: "Inter, Arial, sans-serif",
                     fontSize: 9,
                     lineHeight: 12,
@@ -315,14 +363,20 @@ export function drawCurrentCombatContacts({
                 resolution: 2,
             });
             label.visible = false;
-            label.position.set(x + 7, y - 15);
+            label.position.set(x + 8, y - 18);
             world.addChild(label);
 
+            let pinned = false;
             marker.on("pointerover", () => {
                 label.visible = true;
             });
             marker.on("pointerout", () => {
-                label.visible = false;
+                if (!pinned) label.visible = false;
+            });
+            marker.on("pointertap", (pointerEvent) => {
+                pointerEvent.stopPropagation();
+                pinned = !pinned;
+                label.visible = pinned;
             });
         });
     }

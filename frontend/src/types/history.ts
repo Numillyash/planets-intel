@@ -48,6 +48,29 @@ export type HistoricalCombatOutcome =
     | "survived_to_later_combat"
     | "defeated";
 
+export interface HistoricalCombatEventSide {
+    side: "left" | "right";
+    object_kind: "ship" | "planet";
+    object_id: number | null;
+    owner_id: number | null;
+    name: string | null;
+    hull_id: number | null;
+    has_starbase: boolean | null;
+    sequence_status: HistoricalCombatOutcome | null;
+}
+
+export interface HistoricalCombatEvent {
+    vcr_id: number;
+    turn: number;
+    battle_type: number | null;
+    x: number | null;
+    y: number | null;
+    sequence_index: number;
+    sequence_count: number;
+    analysis_basis: "later_vcr_same_turn_same_position";
+    sides: [HistoricalCombatEventSide, HistoricalCombatEventSide];
+}
+
 export interface HistoricalShipTrackPoint {
     turn: number;
     snapshot_turn: number;
@@ -59,6 +82,7 @@ export interface HistoricalShipTrackPoint {
     evidence: HistoricalShipEvidence;
     combat_vcr_id: number | null;
     combat_outcome: HistoricalCombatOutcome | null;
+    combat_event: HistoricalCombatEvent | null;
     has_direct_scan: boolean;
 }
 

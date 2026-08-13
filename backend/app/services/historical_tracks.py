@@ -18,21 +18,18 @@ def get_historical_ship_tracks(
     linked_account_id: int,
     through_turn: int,
 ) -> dict[str, Any] | None:
-    """Build factual ship tracks from stored scan and combat evidence.
+    """Build derived ship tracks from factual scan and VCR evidence.
 
     Scan points are keyed by the ship's own info_turn so a stale sighting
     repeated in later turn files does not look like new movement. VCR combat
-    points are later host-phase evidence and therefore take precedence over a
-    scan point for the same ship and turn. Unknown movement across observation
-    gaps stays unknown; no path is inferred between non-consecutive turns.
+    points are later host-phase positional evidence and therefore take
+    precedence over a scan point for the same ship and turn.
 
-    VCR planet/starbase sides are never promoted into ship tracks. A VCR side
-    is considered a ship only when it carries a positive hull id and is not a
-    starbase side. Combat outcomes are deliberately conservative: if a ship is
-    observed in a later VCR during the same host it demonstrably survived the
-    earlier battle; if its ship opponent continues to a later VCR while it does
-    not, the earlier ship is marked defeated without claiming destroyed versus
-    captured.
+    Combat sequence analysis is deliberately separate from stored facts. It is
+    constrained to VCRs from the same turn *and the same coordinates*. A ship
+    seen in a later VCR at that location demonstrably survived the earlier
+    event. If its ship opponent continues and it does not, it is labelled
+    defeated without claiming destroyed versus captured.
     """
 
     if through_turn <= 0:
@@ -147,6 +144,7 @@ def get_historical_ship_tracks(
             "evidence": "scan",
             "combat_vcr_id": None,
             "combat_outcome": None,
+            "combat_event": None,
             "phase_priority": 0,
             "sort_key": (
                 0,
@@ -158,44 +156,62 @@ def get_historical_ship_tracks(
         candidates[(ship.ship_id, observation_turn)].append(candidate)
         metadata_candidates[ship.ship_id].append(candidate)
 
+    def is_ship_side(
+        object_id: int | None,
+        hull_id: int | None,
+        has_starbase: bool | None,
+    ) -> bool:
+        return (
+            object_id is not None
+            and hull_id is not None
+            and hull_id > 0
+            and has_starbase is not True
+        )
+
     def ship_side_ids(combat: CombatObservation) -> set[int]:
         result: set[int] = set()
-
-        if (
-            combat.left_object_id is not None
-            and combat.left_is_starbase is not True
-            and combat.left_hull_id is not None
-            and combat.left_hull_id > 0
+        if is_ship_side(
+            combat.left_object_id,
+            combat.left_hull_id,
+            combat.left_is_starbase,
         ):
-            result.add(combat.left_object_id)
-
-        if (
-            combat.right_object_id is not None
-            and combat.right_is_starbase is not True
-            and combat.right_hull_id is not None
-            and combat.right_hull_id > 0
+            result.add(int(combat.left_object_id))
+        if is_ship_side(
+            combat.right_object_id,
+            combat.right_hull_id,
+            combat.right_is_starbase,
         ):
-            result.add(combat.right_object_id)
-
+            result.add(int(combat.right_object_id))
         return result
 
-    # Collapse copies of the same VCR returned through several observer
-    # snapshots before inferring the within-host combat sequence.
+    # Collapse copies of the same factual VCR returned through several
+    # observers. The latest stored copy supplies the structural fields; source
+    # provenance remains on the candidate entries below.
     event_by_key: dict[tuple[int, int], CombatObservation] = {}
     for combat, _batch, _account in combat_rows:
         event_by_key[(combat.battle_turn, combat.vcr_id)] = combat
 
-    events_by_turn: dict[int, list[CombatObservation]] = defaultdict(list)
+    events_by_location: dict[
+        tuple[int, int | None, int | None],
+        list[CombatObservation],
+    ] = defaultdict(list)
     for combat in event_by_key.values():
-        events_by_turn[combat.battle_turn].append(combat)
+        events_by_location[
+            (combat.battle_turn, combat.x, combat.y)
+        ].append(combat)
 
     combat_outcomes: dict[tuple[int, int, int], str] = {}
+    sequence_meta: dict[tuple[int, int], tuple[int, int]] = {}
 
-    for battle_turn, turn_events in events_by_turn.items():
-        ordered = sorted(turn_events, key=lambda item: item.vcr_id)
+    for (_battle_turn, _x, _y), location_events in events_by_location.items():
+        ordered = sorted(location_events, key=lambda item: item.vcr_id)
         ship_ids_by_event = [ship_side_ids(event) for event in ordered]
 
         for index, event in enumerate(ordered):
+            sequence_meta[(event.battle_turn, event.vcr_id)] = (
+                index + 1,
+                len(ordered),
+            )
             current_ids = ship_ids_by_event[index]
             later_ids: set[int] = set()
             for ids in ship_ids_by_event[index + 1 :]:
@@ -212,7 +228,66 @@ def get_historical_ship_tracks(
                         else "unknown"
                     )
 
-                combat_outcomes[(battle_turn, event.vcr_id, ship_id)] = outcome
+                combat_outcomes[(event.battle_turn, event.vcr_id, ship_id)] = (
+                    outcome
+                )
+
+    def side_fact(
+        combat: CombatObservation,
+        *,
+        side: str,
+    ) -> dict[str, Any]:
+        if side == "left":
+            object_id = combat.left_object_id
+            owner_id = combat.left_owner_id
+            hull_id = combat.left_hull_id
+            name = combat.left_name
+            has_starbase = combat.left_is_starbase
+        else:
+            object_id = combat.right_object_id
+            owner_id = combat.right_owner_id
+            hull_id = combat.right_hull_id
+            name = combat.right_name
+            has_starbase = combat.right_is_starbase
+
+        ship = is_ship_side(object_id, hull_id, has_starbase)
+        sequence_status = (
+            combat_outcomes.get(
+                (combat.battle_turn, combat.vcr_id, int(object_id)),
+                "unknown",
+            )
+            if ship and object_id is not None
+            else None
+        )
+
+        return {
+            "side": side,
+            "object_kind": "ship" if ship else "planet",
+            "object_id": object_id,
+            "owner_id": owner_id,
+            "name": name,
+            "hull_id": hull_id if ship else None,
+            "has_starbase": has_starbase if not ship else None,
+            "sequence_status": sequence_status,
+        }
+
+    combat_event_meta: dict[tuple[int, int], dict[str, Any]] = {}
+    for event_key, combat in event_by_key.items():
+        sequence_index, sequence_count = sequence_meta.get(event_key, (1, 1))
+        combat_event_meta[event_key] = {
+            "vcr_id": combat.vcr_id,
+            "turn": combat.battle_turn,
+            "battle_type": combat.battle_type,
+            "x": combat.x,
+            "y": combat.y,
+            "sequence_index": sequence_index,
+            "sequence_count": sequence_count,
+            "analysis_basis": "later_vcr_same_turn_same_position",
+            "sides": [
+                side_fact(combat, side="left"),
+                side_fact(combat, side="right"),
+            ],
+        }
 
     def add_combat_side(
         combat: CombatObservation,
@@ -220,22 +295,14 @@ def get_historical_ship_tracks(
         account: PlanetsAccount,
         *,
         object_id: int | None,
-        is_starbase: bool | None,
+        has_starbase: bool | None,
         hull_id: int | None,
         owner_id: int | None,
         name: str | None,
     ) -> None:
-        # hasstarbase=false is not a ship discriminator: ordinary planet
-        # combat sides also report false. Positive hullid is the reliable
-        # structural discriminator in the VCR payload we observed.
-        if (
-            object_id is None
-            or is_starbase is True
-            or hull_id is None
-            or hull_id <= 0
-        ):
+        if not is_ship_side(object_id, hull_id, has_starbase):
             return
-        if combat.x is None or combat.y is None:
+        if object_id is None or combat.x is None or combat.y is None:
             return
 
         candidate = {
@@ -255,8 +322,9 @@ def get_historical_ship_tracks(
                 (combat.battle_turn, combat.vcr_id, object_id),
                 "unknown",
             ),
-            # Combat is later host-phase positional evidence than an ordinary
-            # scan for the same turn, so prefer it when both are available.
+            "combat_event": combat_event_meta.get(
+                (combat.battle_turn, combat.vcr_id)
+            ),
             "phase_priority": 1,
             "sort_key": (
                 1,
@@ -275,7 +343,7 @@ def get_historical_ship_tracks(
             batch,
             account,
             object_id=combat.left_object_id,
-            is_starbase=combat.left_is_starbase,
+            has_starbase=combat.left_is_starbase,
             hull_id=combat.left_hull_id,
             owner_id=combat.left_owner_id,
             name=combat.left_name,
@@ -285,7 +353,7 @@ def get_historical_ship_tracks(
             batch,
             account,
             object_id=combat.right_object_id,
-            is_starbase=combat.right_is_starbase,
+            has_starbase=combat.right_is_starbase,
             hull_id=combat.right_hull_id,
             owner_id=combat.right_owner_id,
             name=combat.right_name,
@@ -309,6 +377,7 @@ def get_historical_ship_tracks(
                 "evidence": selected["evidence"],
                 "combat_vcr_id": selected["combat_vcr_id"],
                 "combat_outcome": selected["combat_outcome"],
+                "combat_event": selected["combat_event"],
                 "has_direct_scan": any(
                     entry["evidence"] == "scan"
                     for entry in entries
