@@ -196,6 +196,35 @@ def apply_structured_host_evidence(
         values.sort(key=lambda value: value["linked_account_id"])
         return values
 
+    def capturing_owner_id(
+        entries: list[
+            tuple[HostEventObservation, PrivateObservationBatch, PlanetsAccount]
+        ],
+        sides: list[Any],
+    ) -> int | None:
+        ship_ids = {
+            int(event.ship_id)
+            for event, _batch, _account in entries
+            if event.ship_id is not None
+        }
+        if not ship_ids:
+            return None
+
+        for candidate in sides:
+            if not isinstance(candidate, dict):
+                continue
+            if candidate.get("object_kind") != "ship":
+                continue
+            if candidate.get("object_id") not in ship_ids:
+                continue
+            owner_id = candidate.get("owner_id")
+            if isinstance(owner_id, bool) or not isinstance(owner_id, int):
+                continue
+            if owner_id > 0:
+                return owner_id
+
+        return None
+
     events = result.get("events")
     if not isinstance(events, list):
         return result
@@ -250,5 +279,9 @@ def apply_structured_host_evidence(
                     side["result_status"] = "planet_owner_changed_post_host"
                     side["result_basis"] = "structured_planet_ownership_report"
                     side["result_sources"] = sources(matches)
+                    side["post_host_owner_id"] = capturing_owner_id(
+                        matches,
+                        sides,
+                    )
 
     return result
