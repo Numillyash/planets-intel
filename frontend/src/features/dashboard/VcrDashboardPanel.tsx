@@ -7,10 +7,12 @@ import {
     type VcrReplaySideFrame,
     type VcrReplayTraceResponse,
 } from "../../api/vcrReplay";
+import { privateHullAssetUrl } from "../../lib/privateAssets";
 import type {
     CombatEventSideSummary,
     CombatEventSummary,
 } from "../../types/history";
+import "./vcr-hull-artwork.css";
 
 function sideName(side: CombatEventSideSummary): string {
     if (side.name !== null && side.name.trim()) return side.name;
@@ -28,6 +30,42 @@ function eventTitle(event: CombatEventSummary): string {
 
 function sideMarkerClass(side: VcrReplaySideFrame): string {
     return side.is_planet ? "is-planet" : "is-ship";
+}
+
+function CombatObjectArtwork({
+    side,
+    facing,
+}: {
+    side: VcrReplaySideFrame;
+    facing: "left" | "right";
+}) {
+    if (side.is_planet) {
+        return <span className="vcr-object-marker" />;
+    }
+
+    const assetUrl = privateHullAssetUrl(side.hull_id);
+    if (assetUrl === null) {
+        return <span className="vcr-object-marker" />;
+    }
+
+    return (
+        <span className={`vcr-hull-artwork-shell is-facing-${facing}`}>
+            <img
+                alt=""
+                className="vcr-hull-artwork"
+                draggable={false}
+                onError={(event) => {
+                    event.currentTarget.hidden = true;
+                    const fallback = event.currentTarget.nextElementSibling;
+                    if (fallback instanceof HTMLElement) {
+                        fallback.hidden = false;
+                    }
+                }}
+                src={assetUrl}
+            />
+            <span className="vcr-object-marker" hidden />
+        </span>
+    );
 }
 
 function SideStatus({
@@ -86,7 +124,7 @@ function Battlefield({ frame }: { frame: VcrReplayFrame }) {
                 }
                 style={{ left: `${leftPercent}%` }}
             >
-                <span className="vcr-object-marker" />
+                <CombatObjectArtwork facing="right" side={frame.left} />
                 <strong>{frame.left.name ?? `#${frame.left.object_id ?? "?"}`}</strong>
                 {frame.left.fighters_out > 0 && (
                     <small>{frame.left.fighters_out} fighters out</small>
@@ -100,7 +138,7 @@ function Battlefield({ frame }: { frame: VcrReplayFrame }) {
                 }
                 style={{ left: `${rightPercent}%` }}
             >
-                <span className="vcr-object-marker" />
+                <CombatObjectArtwork facing="left" side={frame.right} />
                 <strong>{frame.right.name ?? `#${frame.right.object_id ?? "?"}`}</strong>
                 {frame.right.fighters_out > 0 && (
                     <small>{frame.right.fighters_out} fighters out</small>
