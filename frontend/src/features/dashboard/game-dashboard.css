@@ -1,0 +1,279 @@
+.game-dashboard-shell {
+    display: flex;
+    min-height: 0;
+    flex-direction: column;
+    gap: 0;
+    margin-top: 18px;
+}
+
+.game-dashboard-tabs {
+    display: flex;
+    overflow-x: auto;
+    border: 1px solid #223248;
+    border-bottom: 0;
+    border-radius: 9px 9px 0 0;
+    background: #0a111a;
+    scrollbar-width: thin;
+}
+
+.game-dashboard-tabs button {
+    position: relative;
+    flex: 0 0 auto;
+    min-height: 46px;
+    padding: 0 16px;
+    border: 0;
+    border-right: 1px solid #1d2a3b;
+    background: transparent;
+    color: #8295ae;
+    font: inherit;
+    font-size: 0.76rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.game-dashboard-tabs button:hover,
+.game-dashboard-tabs button.is-active {
+    background: #111d2b;
+    color: #edf4fc;
+}
+
+.game-dashboard-tabs button.is-active::after {
+    position: absolute;
+    right: 12px;
+    bottom: 0;
+    left: 12px;
+    height: 2px;
+    background: #72a7d5;
+    content: "";
+}
+
+.game-dashboard-content {
+    min-height: 520px;
+    padding: 18px;
+    border: 1px solid #223248;
+    border-radius: 0 0 9px 9px;
+    background: #080e16;
+}
+
+.game-dashboard-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.game-dashboard-summary {
+    margin-bottom: 16px;
+}
+
+.game-dashboard-summary button.summary-card {
+    color: inherit;
+    text-align: left;
+    font: inherit;
+    cursor: pointer;
+}
+
+.game-dashboard-summary button.summary-card:hover {
+    border-color: #496d92;
+    background: #101b29;
+}
+
+.game-dashboard-home {
+    margin-top: 0;
+}
+
+.game-dashboard-launch-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+    padding: 0 22px 22px;
+}
+
+.game-dashboard-launch-grid button {
+    display: flex;
+    min-height: 76px;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 5px;
+    padding: 12px 14px;
+    border: 1px solid #263950;
+    border-radius: 8px;
+    background: #0b141f;
+    color: #dce8f5;
+    text-align: left;
+    font: inherit;
+    cursor: pointer;
+}
+
+.game-dashboard-launch-grid button:hover {
+    border-color: #527ba2;
+    background: #112033;
+}
+
+.game-dashboard-launch-grid small {
+    color: #748aa4;
+}
+
+.game-object-table th,
+.game-object-table td {
+    white-space: nowrap;
+}
+
+.dashboard-embedded-panel {
+    margin: 0;
+    padding: 18px 20px;
+}
+
+.dashboard-activity-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.dashboard-activity-card {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 11px;
+    border: 1px solid #233349;
+    border-radius: 7px;
+    background: #09121c;
+}
+
+.dashboard-activity-card > div {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.dashboard-activity-card span {
+    color: #87a7c7;
+    font-size: 0.7rem;
+    text-transform: capitalize;
+}
+
+.dashboard-activity-card small {
+    color: #758aa4;
+}
+
+.dashboard-report-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.dashboard-report-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 12px;
+    border: 1px solid #50333a;
+    border-radius: 7px;
+    background: #160f14;
+}
+
+.dashboard-report-item strong {
+    color: #ffb6b6;
+}
+
+.dashboard-report-item small {
+    color: #879bb5;
+}
+
+.game-dashboard-turn-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    padding: 0 22px 22px;
+}
+
+.game-dashboard-turn-chips span {
+    padding: 5px 9px;
+    border: 1px solid #2e435c;
+    border-radius: 999px;
+    background: #0d1825;
+    color: #a9bed4;
+    font-size: 0.72rem;
+}
+
+.game-dashboard-settings-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 8px;
+    padding: 0 22px 22px;
+}
+
+.game-dashboard-settings-grid > div {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 9px 11px;
+    border: 1px solid #203147;
+    border-radius: 7px;
+    background: #09121c;
+}
+
+.game-dashboard-settings-grid span {
+    color: #7087a3;
+    font-size: 0.67rem;
+    text-transform: capitalize;
+}
+
+.game-dashboard-settings-grid strong {
+    color: #dbe7f4;
+}
+
+.game-dashboard-placeholder {
+    margin: 0;
+    padding: 20px 22px;
+}
+
+.game-dashboard-placeholder h2 {
+    margin: 6px 0 8px;
+}
+
+.game-dashboard-placeholder p {
+    max-width: 760px;
+    margin: 0;
+    color: #879bb5;
+    line-height: 1.55;
+}
+
+.game-dashboard-legacy-embed {
+    position: relative;
+    min-height: 520px;
+    overflow: hidden;
+}
+
+.game-dashboard-legacy-embed > div[style*="position: absolute"] {
+    position: relative !important;
+    z-index: auto !important;
+    top: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    left: auto !important;
+    width: 100% !important;
+    max-width: none !important;
+    max-height: none !important;
+    margin: 10px 0 0 !important;
+}
+
+.game-dashboard-legacy-embed > button[style*="position: absolute"] {
+    position: relative !important;
+    inset: auto !important;
+    margin-top: 10px !important;
+}
+
+@media (max-width: 780px) {
+    .game-dashboard-content {
+        padding: 10px;
+    }
+
+    .game-dashboard-tabs button {
+        min-height: 42px;
+        padding: 0 12px;
+    }
+}
