@@ -3,6 +3,7 @@ export interface VcrReplaySideFrame {
     owner_id: number | null;
     name: string | null;
     hull_id: number;
+    image_id: number | null;
     is_planet: boolean;
     x: number;
     shield: number;
