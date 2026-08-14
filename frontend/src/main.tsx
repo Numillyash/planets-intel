@@ -18,9 +18,8 @@ import {
     refreshPrivateIntel,
 } from "./api/client";
 import { AccountSettings } from "./features/account/AccountSettings";
+import { GameDashboard } from "./features/dashboard/GameDashboard";
 import { PrivateIntelMap } from "./features/map/PrivateIntelMap";
-import { PlayersTable } from "./features/players/PlayersTable";
-import { MilitaryScoreChart } from "./features/statistics/MilitaryScoreChart";
 import type {
     AccountGameSummary,
     CurrentUserResponse,
@@ -131,17 +130,19 @@ function chooseGameId(
     return runningGame?.id ?? games[0]?.id ?? null;
 }
 
-interface DashboardProps {
+function Dashboard({
+    user,
+    onLogout,
+}: {
     user: CurrentUserResponse;
     onLogout: () => Promise<void>;
-}
-
-function Dashboard({ user, onLogout }: DashboardProps) {
+}) {
     const [accounts, setAccounts] = useState<PlanetsAccountResponse[]>([]);
     const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null);
     const [accountsLoading, setAccountsLoading] = useState(true);
     const [accountsError, setAccountsError] = useState<string | null>(null);
     const [accountsRevision, setAccountsRevision] = useState(0);
+    const [accountPageOpen, setAccountPageOpen] = useState(false);
 
     const [games, setGames] = useState<AccountGameSummary[]>([]);
     const [selectedGameId, setSelectedGameId] = useState<number | null>(null);
@@ -164,6 +165,8 @@ function Dashboard({ user, onLogout }: DashboardProps) {
         let cancelled = false;
 
         async function loadAccounts() {
+            setAccountsLoading(true);
+            setAccountsError(null);
             try {
                 const response = await getPlanetsAccounts();
                 if (cancelled) return;
@@ -172,7 +175,15 @@ function Dashboard({ user, onLogout }: DashboardProps) {
                     (account) => account.is_active,
                 );
                 setAccounts(activeAccounts);
-                setSelectedAccountId(activeAccounts[0]?.id ?? null);
+                setSelectedAccountId((previous) => {
+                    if (
+                        previous !== null &&
+                        activeAccounts.some((account) => account.id === previous)
+                    ) {
+                        return previous;
+                    }
+                    return activeAccounts[0]?.id ?? null;
+                });
             } catch (reason) {
                 if (!cancelled) {
                     setAccountsError(
@@ -200,9 +211,7 @@ function Dashboard({ user, onLogout }: DashboardProps) {
             setSelectedGameId(null);
             setGamesError(null);
             setGamesLoading(false);
-            return () => {
-                cancelled = true;
-            };
+            return () => { cancelled = true; };
         }
 
         const accountId = selectedAccountId;
@@ -215,7 +224,6 @@ function Dashboard({ user, onLogout }: DashboardProps) {
             try {
                 const response = await getAccountGames(accountId);
                 if (cancelled) return;
-
                 setGames(response.games);
                 setSelectedGameId((previous) =>
                     chooseGameId(response.games, previous),
@@ -234,9 +242,7 @@ function Dashboard({ user, onLogout }: DashboardProps) {
         }
 
         void loadGames();
-        return () => {
-            cancelled = true;
-        };
+        return () => { cancelled = true; };
     }, [selectedAccountId]);
 
     useEffect(() => {
@@ -247,9 +253,7 @@ function Dashboard({ user, onLogout }: DashboardProps) {
             setHistory(null);
             setDataError(null);
             setDataLoading(false);
-            return () => {
-                cancelled = true;
-            };
+            return () => { cancelled = true; };
         }
 
         const gameId = selectedGameId;
@@ -266,7 +270,6 @@ function Dashboard({ user, onLogout }: DashboardProps) {
                     getScoreHistory(gameId),
                 ]);
                 if (cancelled) return;
-
                 setGame(gameResponse);
                 setHistory(historyResponse);
             } catch (reason) {
@@ -283,9 +286,7 @@ function Dashboard({ user, onLogout }: DashboardProps) {
         }
 
         void loadGameData();
-        return () => {
-            cancelled = true;
-        };
+        return () => { cancelled = true; };
     }, [selectedGameId]);
 
     const selectedAccount =
@@ -304,9 +305,7 @@ function Dashboard({ user, onLogout }: DashboardProps) {
             setPrivateIntel(null);
             setPrivateIntelError(null);
             setPrivateIntelLoading(false);
-            return () => {
-                cancelled = true;
-            };
+            return () => { cancelled = true; };
         }
 
         const accountId = selectedAccountId;
@@ -322,25 +321,14 @@ function Dashboard({ user, onLogout }: DashboardProps) {
             setPrivateIntel(null);
 
             try {
-                let response = await getLatestPrivateIntel(
-                    gameId,
-                    accountId,
-                );
-
-                const needsRefresh =
-                    response === null ||
-                    response.turn < expectedTurn;
+                let response = await getLatestPrivateIntel(gameId, accountId);
+                const needsRefresh = response === null || response.turn < expectedTurn;
 
                 if (needsRefresh && isRunning) {
-                    response = await refreshPrivateIntel(
-                        gameId,
-                        accountId,
-                    );
+                    response = await refreshPrivateIntel(gameId, accountId);
                 }
 
-                if (!cancelled) {
-                    setPrivateIntel(response);
-                }
+                if (!cancelled) setPrivateIntel(response);
             } catch (reason) {
                 if (!cancelled) {
                     setPrivateIntelError(
@@ -350,21 +338,17 @@ function Dashboard({ user, onLogout }: DashboardProps) {
                     );
                 }
             } finally {
-                if (!cancelled) {
-                    setPrivateIntelLoading(false);
-                }
+                if (!cancelled) setPrivateIntelLoading(false);
             }
         }
 
         void loadPrivateIntel();
-        return () => {
-            cancelled = true;
-        };
+        return () => { cancelled = true; };
     }, [selectedAccountId, selectedGameId, selectedGame]);
 
     const latestScores = useMemo(() => {
         const result = new Map<number, ScoreHistoryResponse["items"][number]>();
-        if (!history) return result;
+        if (history === null) return result;
 
         for (const item of history.items) {
             const current = result.get(item.slot_id);
@@ -376,28 +360,19 @@ function Dashboard({ user, onLogout }: DashboardProps) {
     }, [history]);
 
     async function handlePrivateIntelRefresh() {
-        if (
-            selectedAccountId === null ||
-            selectedGameId === null
-        ) {
-            return;
-        }
-
-        const accountId = selectedAccountId;
-        const gameId = selectedGameId;
+        if (selectedAccountId === null || selectedGameId === null) return;
 
         setPrivateIntelLoading(true);
         setPrivateIntelError(null);
 
         try {
             const response = await refreshPrivateIntel(
-                gameId,
-                accountId,
+                selectedGameId,
+                selectedAccountId,
             );
             setPrivateIntel(response);
-
-            const refreshedHistory = await getScoreHistory(gameId);
-            setHistory(refreshedHistory);
+            setHistory(await getScoreHistory(selectedGameId));
+            setGame(await getGame(selectedGameId));
         } catch (reason) {
             setPrivateIntelError(
                 reason instanceof Error
@@ -437,18 +412,27 @@ function Dashboard({ user, onLogout }: DashboardProps) {
         );
     }
 
-    if (accounts.length === 0) {
+    if (accounts.length === 0 || accountPageOpen) {
         return (
             <main className="app-shell">
                 <header className="topbar">
                     <div>
                         <div className="eyebrow">Planets.nu Intel</div>
-                        <h1>Dashboard</h1>
+                        <h1>Accounts</h1>
                         <p className="subtitle">
-                            Link a Planets.nu account to begin.
+                            Linked Planets.nu observers, intel sharing and local account security.
                         </p>
                     </div>
                     <div className="topbar-actions">
+                        {accounts.length > 0 && (
+                            <button
+                                className="secondary-button"
+                                onClick={() => setAccountPageOpen(false)}
+                                type="button"
+                            >
+                                Back to game
+                            </button>
+                        )}
                         <div className="user-menu">
                             <div>
                                 <span className="user-label">Signed in as</span>
@@ -473,10 +457,12 @@ function Dashboard({ user, onLogout }: DashboardProps) {
                     }
                 />
 
-                <div className="error-card" style={{ marginTop: 18 }}>
-                    <h1>No active observers</h1>
-                    <p>Add a Planets.nu account in Account settings.</p>
-                </div>
+                {accounts.length === 0 && (
+                    <div className="error-card" style={{ marginTop: 18 }}>
+                        <h1>No active observers</h1>
+                        <p>Link a Planets.nu account above to begin.</p>
+                    </div>
+                )}
             </main>
         );
     }
@@ -486,14 +472,22 @@ function Dashboard({ user, onLogout }: DashboardProps) {
             <header className="topbar">
                 <div>
                     <div className="eyebrow">Planets.nu Intel</div>
-                    <h1>{game?.game.name ?? selectedGame?.name ?? "Dashboard"}</h1>
+                    <h1>{game?.game.name ?? selectedGame?.name ?? "Game dashboard"}</h1>
                     <p className="subtitle">
-                        {game?.game.short_description ??
-                            selectedGame?.short_description ??
-                            "Select an observer and game."}
+                        {game?.game.short_description
+                            ?? selectedGame?.short_description
+                            ?? "Select an observer and game."}
                     </p>
                 </div>
+
                 <div className="topbar-actions">
+                    <button
+                        className="secondary-button"
+                        onClick={() => setAccountPageOpen(true)}
+                        type="button"
+                    >
+                        Accounts
+                    </button>
                     {game && (
                         <div className="game-status">
                             <span className="status-badge">{game.game.status_name}</span>
@@ -517,13 +511,6 @@ function Dashboard({ user, onLogout }: DashboardProps) {
                     </div>
                 </div>
             </header>
-
-            <AccountSettings
-                accounts={accounts}
-                onAccountsChanged={() =>
-                    setAccountsRevision((value) => value + 1)
-                }
-            />
 
             <section className="summary-grid">
                 <label className="summary-card">
@@ -568,37 +555,6 @@ function Dashboard({ user, onLogout }: DashboardProps) {
                 </label>
             </section>
 
-            {selectedAccount && (
-                <div
-                    style={{
-                        alignItems: "center",
-                        display: "flex",
-                        flexWrap: "wrap",
-                        gap: 12,
-                        justifyContent: "space-between",
-                    }}
-                >
-                    <div className="eyebrow">
-                        Observer provenance: {selectedAccount.planets_username}
-                    </div>
-                    <button
-                        className="secondary-button"
-                        disabled={
-                            privateIntelLoading ||
-                            selectedGameId === null
-                        }
-                        onClick={() => {
-                            void handlePrivateIntelRefresh();
-                        }}
-                        type="button"
-                    >
-                        {privateIntelLoading
-                            ? "Syncing private intel…"
-                            : "Refresh private intel"}
-                    </button>
-                </div>
-            )}
-
             {gamesLoading ? (
                 <div className="loading-card">Loading games for observer…</div>
             ) : gamesError ? (
@@ -613,65 +569,30 @@ function Dashboard({ user, onLogout }: DashboardProps) {
                 </div>
             ) : dataLoading ? (
                 <div className="loading-card">Loading game intelligence…</div>
-            ) : dataError || !game ? (
+            ) : dataError || game === null || selectedAccount === null ? (
                 <div className="error-card">
                     <h1>Failed to load game</h1>
                     <p>{dataError ?? "Game data is unavailable."}</p>
                 </div>
             ) : (
                 <>
-                    <section className="summary-grid">
-                        <div className="summary-card">
-                            <span>Planets</span>
-                            <strong>{game.settings.num_planets}</strong>
-                        </div>
-                        <div className="summary-card">
-                            <span>Ship limit</span>
-                            <strong>{game.settings.ship_limit}</strong>
-                        </div>
-                        <div className="summary-card">
-                            <span>Schedule</span>
-                            <strong>{game.schedule}</strong>
-                        </div>
-                        <div className="summary-card">
-                            <span>Next host</span>
-                            <strong>{game.time_to_host}</strong>
-                        </div>
-                    </section>
+                    <GameDashboard
+                        game={game}
+                        history={history}
+                        latestScores={latestScores}
+                        onRefresh={() => void handlePrivateIntelRefresh()}
+                        privateIntel={privateIntel}
+                        refreshing={privateIntelLoading}
+                        selectedAccount={selectedAccount}
+                    />
 
                     <PrivateIntelMap
                         error={privateIntelError}
                         intel={privateIntel}
                         loading={privateIntelLoading}
-                        observerName={
-                            selectedAccount?.planets_username
-                            ?? "Unknown observer"
-                        }
+                        observerName={selectedAccount.planets_username}
                         players={game.players}
                     />
-
-                    <PlayersTable
-                        latestScores={latestScores}
-                        players={game.players}
-                    />
-
-                    {history ? (
-                        <MilitaryScoreChart
-                            players={game.players}
-                            history={history.items}
-                        />
-                    ) : (
-                        <section className="panel">
-                            <div className="panel-header">
-                                <div>
-                                    <h2>Military score history</h2>
-                                    <p>
-                                        No local public score history has been synced for this game yet.
-                                    </p>
-                                </div>
-                            </div>
-                        </section>
-                    )}
                 </>
             )}
         </main>
@@ -707,9 +628,7 @@ function App() {
         }
 
         void checkSession();
-        return () => {
-            cancelled = true;
-        };
+        return () => { cancelled = true; };
     }, [sessionAttempt]);
 
     async function handleLogin(username: string, password: string) {
