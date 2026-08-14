@@ -41,7 +41,6 @@ def _normalization_marker(path: Path) -> Path:
 
 
 def _normalized_hull_png(content: bytes) -> bytes:
-    """Center the visible alpha bounds without distorting the Nu artwork."""
     try:
         with Image.open(BytesIO(content)) as source:
             rgba = source.convert("RGBA")
@@ -132,7 +131,6 @@ def _normalized_hull_artwork_id(hull_id: int) -> int:
 
 
 def _catalog_hull_image_id(hull_id: int) -> int | None:
-    """Resolve an explicit Nu artwork id when it differs from the hull id."""
     with SessionLocal() as session:
         catalogs = session.execute(
             select(GameRuleCatalog)
@@ -282,8 +280,22 @@ def _hull_sources(image_id: int) -> list[str]:
     ]
 
 
-async def ensure_hull_asset(hull_image_id: int) -> Path | None:
+async def ensure_hull_asset(
+    hull_image_id: int,
+    *,
+    image_hint: int | None = None,
+) -> Path | None:
     image_id = _normalized_hull_artwork_id(hull_image_id)
+
+    mapped_image_id = _catalog_hull_image_id(image_id)
+    if mapped_image_id is not None and mapped_image_id != image_id:
+        mapped = await _ensure_png_from_sources(
+            kind="hulls",
+            name=f"{image_id}-catalog-{mapped_image_id}",
+            urls=_hull_sources(mapped_image_id),
+        )
+        if mapped is not None:
+            return mapped
 
     direct = await _ensure_png_from_sources(
         kind="hulls",
@@ -293,15 +305,25 @@ async def ensure_hull_asset(hull_image_id: int) -> Path | None:
     if direct is not None:
         return direct
 
-    mapped_image_id = _catalog_hull_image_id(image_id)
-    if mapped_image_id is None or mapped_image_id == image_id:
-        return None
-
-    return await _ensure_png_from_sources(
-        kind="hulls",
-        name=str(image_id),
-        urls=_hull_sources(mapped_image_id),
+    normalized_hint = (
+        _normalized_hull_artwork_id(image_hint)
+        if image_hint is not None and image_hint > 0
+        else None
     )
+    if (
+        normalized_hint is not None
+        and normalized_hint != image_id
+        and normalized_hint != mapped_image_id
+    ):
+        hinted = await _ensure_png_from_sources(
+            kind="hulls",
+            name=f"{image_id}-hint-{normalized_hint}",
+            urls=_hull_sources(normalized_hint),
+        )
+        if hinted is not None:
+            return hinted
+
+    return None
 
 
 def _planet_sources(planet_image_name: str) -> list[str]:
