@@ -5,7 +5,10 @@ import {
     getShipOrderDraft,
     saveShipOrderDraft,
 } from "../../api/orderDraft";
-import type { ShipOrderDraft } from "../../types/orderDraft";
+import type {
+    ShipDraftMovementMode,
+    ShipOrderDraft,
+} from "../../types/orderDraft";
 import "./order-draft.css";
 
 
@@ -13,6 +16,12 @@ interface WaypointPickedDetail {
     shipId: number;
     x: number;
     y: number;
+}
+
+
+interface InterceptTargetPickedDetail {
+    shipId: number;
+    targetShipId: number;
 }
 
 
@@ -42,9 +51,14 @@ export function ShipOrderDraftPanel({
     const [warp, setWarp] = useState<number>(upstreamWarp ?? 0);
     const [waypointX, setWaypointX] = useState<number | null>(upstreamWaypointX);
     const [waypointY, setWaypointY] = useState<number | null>(upstreamWaypointY);
+    const [movementMode, setMovementMode] =
+        useState<ShipDraftMovementMode>("waypoint");
+    const [interceptTargetShipId, setInterceptTargetShipId] =
+        useState<number | null>(null);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [pickingWaypoint, setPickingWaypoint] = useState(false);
+    const [pickingInterceptTarget, setPickingInterceptTarget] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
@@ -59,6 +73,8 @@ export function ShipOrderDraftPanel({
                 setWarp(value?.warp ?? upstreamWarp ?? 0);
                 setWaypointX(value?.waypoint_x ?? upstreamWaypointX);
                 setWaypointY(value?.waypoint_y ?? upstreamWaypointY);
+                setMovementMode(value?.movement_mode ?? "waypoint");
+                setInterceptTargetShipId(value?.intercept_target_ship_id ?? null);
             })
             .catch((reason) => {
                 if (!cancelled) {
@@ -94,16 +110,30 @@ export function ShipOrderDraftPanel({
             setWaypointY(detail.y);
             setPickingWaypoint(false);
         };
-        const handleCancelled = (event: Event) => {
+        const handleWaypointCancelled = (event: Event) => {
             const detail = (event as CustomEvent<{ shipId: number }>).detail;
             if (detail?.shipId === shipId) setPickingWaypoint(false);
         };
+        const handleInterceptTarget = (event: Event) => {
+            const detail = (event as CustomEvent<InterceptTargetPickedDetail>).detail;
+            if (!detail || detail.shipId !== shipId) return;
+            setInterceptTargetShipId(detail.targetShipId);
+            setPickingInterceptTarget(false);
+        };
+        const handleInterceptCancelled = (event: Event) => {
+            const detail = (event as CustomEvent<{ shipId: number }>).detail;
+            if (detail?.shipId === shipId) setPickingInterceptTarget(false);
+        };
 
         window.addEventListener("intel-waypoint-picked", handleWaypoint);
-        window.addEventListener("intel-waypoint-pick-cancelled", handleCancelled);
+        window.addEventListener("intel-waypoint-pick-cancelled", handleWaypointCancelled);
+        window.addEventListener("intel-intercept-target-picked", handleInterceptTarget);
+        window.addEventListener("intel-intercept-pick-cancelled", handleInterceptCancelled);
         return () => {
             window.removeEventListener("intel-waypoint-picked", handleWaypoint);
-            window.removeEventListener("intel-waypoint-pick-cancelled", handleCancelled);
+            window.removeEventListener("intel-waypoint-pick-cancelled", handleWaypointCancelled);
+            window.removeEventListener("intel-intercept-target-picked", handleInterceptTarget);
+            window.removeEventListener("intel-intercept-pick-cancelled", handleInterceptCancelled);
         };
     }, [shipId]);
 
@@ -112,14 +142,28 @@ export function ShipOrderDraftPanel({
             window.dispatchEvent(new CustomEvent("intel-waypoint-pick-cancel", {
                 detail: { shipId },
             }));
+            window.dispatchEvent(new CustomEvent("intel-intercept-pick-cancel", {
+                detail: { shipId },
+            }));
         };
     }, [shipId]);
 
     const changed = useMemo(() => {
-        return warp !== (upstreamWarp ?? 0)
-            || waypointX !== upstreamWaypointX
-            || waypointY !== upstreamWaypointY;
+        const savedWarp = draft?.warp ?? upstreamWarp ?? 0;
+        const savedWaypointX = draft?.waypoint_x ?? upstreamWaypointX;
+        const savedWaypointY = draft?.waypoint_y ?? upstreamWaypointY;
+        const savedMode = draft?.movement_mode ?? "waypoint";
+        const savedTarget = draft?.intercept_target_ship_id ?? null;
+
+        return warp !== savedWarp
+            || waypointX !== savedWaypointX
+            || waypointY !== savedWaypointY
+            || movementMode !== savedMode
+            || interceptTargetShipId !== savedTarget;
     }, [
+        draft,
+        interceptTargetShipId,
+        movementMode,
         upstreamWarp,
         upstreamWaypointX,
         upstreamWaypointY,
@@ -127,6 +171,9 @@ export function ShipOrderDraftPanel({
         waypointX,
         waypointY,
     ]);
+
+    const canSave = changed
+        && (movementMode !== "intercept" || interceptTargetShipId !== null);
 
     function announceDraftChange(action: "saved" | "discarded") {
         window.dispatchEvent(new CustomEvent("intel-order-drafts-changed", {
@@ -140,21 +187,55 @@ export function ShipOrderDraftPanel({
         }));
     }
 
+    function cancelWaypointPicker() {
+        window.dispatchEvent(new CustomEvent("intel-waypoint-pick-cancel", {
+            detail: { shipId },
+        }));
+        setPickingWaypoint(false);
+    }
+
+    function cancelInterceptPicker() {
+        window.dispatchEvent(new CustomEvent("intel-intercept-pick-cancel", {
+            detail: { shipId },
+        }));
+        setPickingInterceptTarget(false);
+    }
+
+    function changeMovementMode(nextMode: ShipDraftMovementMode) {
+        cancelWaypointPicker();
+        cancelInterceptPicker();
+        setMovementMode(nextMode);
+        if (nextMode === "waypoint") {
+            setInterceptTargetShipId(null);
+        }
+    }
+
     function toggleWaypointPicker() {
         if (pickingWaypoint) {
-            window.dispatchEvent(new CustomEvent("intel-waypoint-pick-cancel", {
-                detail: { shipId },
-            }));
-            setPickingWaypoint(false);
+            cancelWaypointPicker();
             return;
         }
+        cancelInterceptPicker();
         window.dispatchEvent(new CustomEvent("intel-waypoint-pick-start", {
             detail: { shipId },
         }));
         setPickingWaypoint(true);
     }
 
+    function toggleInterceptPicker() {
+        if (pickingInterceptTarget) {
+            cancelInterceptPicker();
+            return;
+        }
+        cancelWaypointPicker();
+        window.dispatchEvent(new CustomEvent("intel-intercept-pick-start", {
+            detail: { shipId },
+        }));
+        setPickingInterceptTarget(true);
+    }
+
     async function saveDraft() {
+        if (!canSave) return;
         setSaving(true);
         setError(null);
         try {
@@ -165,15 +246,22 @@ export function ShipOrderDraftPanel({
                 shipId,
                 {
                     warp,
-                    ...(waypointX !== null && waypointY !== null
+                    movement_mode: movementMode,
+                    ...(movementMode === "intercept"
                         ? {
-                            waypoint_x: waypointX,
-                            waypoint_y: waypointY,
+                            intercept_target_ship_id: interceptTargetShipId ?? undefined,
                         }
-                        : {}),
+                        : waypointX !== null && waypointY !== null
+                            ? {
+                                waypoint_x: waypointX,
+                                waypoint_y: waypointY,
+                            }
+                            : {}),
                 },
             );
             setDraft(next);
+            setMovementMode(next.movement_mode);
+            setInterceptTargetShipId(next.intercept_target_ship_id);
             announceDraftChange("saved");
         } catch (reason) {
             setError(
@@ -200,6 +288,10 @@ export function ShipOrderDraftPanel({
             setWarp(upstreamWarp ?? 0);
             setWaypointX(upstreamWaypointX);
             setWaypointY(upstreamWaypointY);
+            setMovementMode("waypoint");
+            setInterceptTargetShipId(null);
+            cancelWaypointPicker();
+            cancelInterceptPicker();
             announceDraftChange("discarded");
         } catch (reason) {
             setError(
@@ -245,6 +337,22 @@ export function ShipOrderDraftPanel({
                 </div>
 
                 <div className="order-draft-row">
+                    <strong>Movement</strong>
+                    <span>Nu mission unchanged</span>
+                    <select
+                        aria-label="Draft movement mode"
+                        disabled={saving}
+                        onChange={(event) => changeMovementMode(
+                            event.target.value as ShipDraftMovementMode,
+                        )}
+                        value={movementMode}
+                    >
+                        <option value="waypoint">Waypoint</option>
+                        <option value="intercept">Intercept</option>
+                    </select>
+                </div>
+
+                <div className="order-draft-row">
                     <strong>Warp</strong>
                     <span>{upstreamWarp ?? "—"}</span>
                     <select
@@ -261,30 +369,61 @@ export function ShipOrderDraftPanel({
                     </select>
                 </div>
 
-                <div className="order-draft-row">
-                    <strong>Waypoint</strong>
-                    <span>{waypointLabel(upstreamWaypointX, upstreamWaypointY)}</span>
-                    <span className="order-draft-waypoint-value">
-                        {waypointLabel(waypointX, waypointY)}
-                    </span>
-                </div>
+                {movementMode === "waypoint" ? (
+                    <div className="order-draft-row">
+                        <strong>Waypoint</strong>
+                        <span>{waypointLabel(upstreamWaypointX, upstreamWaypointY)}</span>
+                        <span className="order-draft-waypoint-value">
+                            {waypointLabel(waypointX, waypointY)}
+                        </span>
+                    </div>
+                ) : (
+                    <div className="order-draft-row">
+                        <strong>Target</strong>
+                        <span>Visible ship required</span>
+                        <span className="order-draft-waypoint-value">
+                            {interceptTargetShipId !== null
+                                ? `Ship #${interceptTargetShipId}`
+                                : "—"}
+                        </span>
+                    </div>
+                )}
             </div>
 
             <div className="order-draft-actions">
-                <button
-                    className={
-                        "secondary-button"
-                        + (pickingWaypoint ? " is-active" : "")
-                    }
-                    disabled={saving}
-                    onClick={toggleWaypointPicker}
-                    type="button"
-                >
-                    {pickingWaypoint ? "Cancel waypoint pick" : "Pick waypoint on map"}
-                </button>
+                {movementMode === "waypoint" ? (
+                    <button
+                        className={
+                            "secondary-button"
+                            + (pickingWaypoint ? " is-active" : "")
+                        }
+                        disabled={saving}
+                        onClick={toggleWaypointPicker}
+                        type="button"
+                    >
+                        {pickingWaypoint ? "Cancel waypoint pick" : "Pick waypoint on map"}
+                    </button>
+                ) : (
+                    <button
+                        className={
+                            "secondary-button"
+                            + (pickingInterceptTarget ? " is-active" : "")
+                        }
+                        disabled={saving}
+                        onClick={toggleInterceptPicker}
+                        type="button"
+                    >
+                        {pickingInterceptTarget
+                            ? "Cancel target pick"
+                            : interceptTargetShipId === null
+                                ? "Pick intercept target"
+                                : "Change intercept target"}
+                    </button>
+                )}
+
                 <button
                     className="primary-button"
-                    disabled={saving || !changed}
+                    disabled={saving || !canSave}
                     onClick={() => void saveDraft()}
                     type="button"
                 >
@@ -305,6 +444,18 @@ export function ShipOrderDraftPanel({
             {pickingWaypoint && (
                 <p className="order-draft-map-hint">
                     Click a destination on the Starmap. Dragging still pans the map; a short click selects the waypoint.
+                </p>
+            )}
+
+            {pickingInterceptTarget && (
+                <p className="order-draft-map-hint">
+                    Click a visible ship on the Starmap. The source ship itself is not a valid target.
+                </p>
+            )}
+
+            {movementMode === "intercept" && interceptTargetShipId !== null && (
+                <p className="order-draft-provenance">
+                    Intercept target lock: Ship #{interceptTargetShipId}. The persistent map vector currently points to the factual target sighting; post-Move-Most prediction is added by the movement simulator layer.
                 </p>
             )}
 
