@@ -6,6 +6,7 @@ import {
     isCombinedPrivateIntel,
     type PrivateIntelMapResponse,
 } from "../../types/intel";
+import { useMovementPrediction } from "./useMovementPrediction";
 
 
 export function useMapOrderDrafts(
@@ -14,6 +15,16 @@ export function useMapOrderDrafts(
 ): ShipOrderDraft[] {
     const [drafts, setDrafts] = useState<ShipOrderDraft[]>([]);
     const [revision, setRevision] = useState(0);
+
+    // Keep the backend movement predictor hot alongside draft loading. The
+    // prediction hook publishes its latest result into the synchronous map
+    // scene cache and its state transition also causes PixiMapCanvas to render
+    // again without changing the long-standing draft hook return contract.
+    useMovementPrediction(
+        intel.game_id,
+        linkedAccountId,
+        intel.turn,
+    );
 
     const primarySlotId = isCombinedPrivateIntel(intel)
         ? intel.primary_observer.player_slot_id
