@@ -16,11 +16,11 @@ export function useMapOrderDrafts(
     const [drafts, setDrafts] = useState<ShipOrderDraft[]>([]);
     const [revision, setRevision] = useState(0);
 
-    // Keep the backend movement predictor hot alongside draft loading. The
-    // prediction hook publishes its latest result into the synchronous map
-    // scene cache and its state transition also causes PixiMapCanvas to render
-    // again without changing the long-standing draft hook return contract.
-    useMovementPrediction(
+    // Keep the backend predictor hot alongside draft loading. It publishes the
+    // latest response into the synchronous map-scene cache. Including its state
+    // in the returned array identity deliberately retriggers the existing Pixi
+    // scene effect without changing the public hook contract.
+    const prediction = useMovementPrediction(
         intel.game_id,
         linkedAccountId,
         intel.turn,
@@ -105,5 +105,8 @@ export function useMapOrderDrafts(
         revision,
     ]);
 
-    return drafts;
+    return useMemo(
+        () => [...drafts],
+        [drafts, prediction],
+    );
 }
