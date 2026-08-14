@@ -225,18 +225,8 @@ export function EntityDetails({
         );
     }
 
-    let details;
-
-    if (selected.kind === "starbase") {
-        details = (
-            <StarbaseDetails
-                intel={intel}
-                onSelect={onSelect}
-                starbase={selected.value}
-            />
-        );
-    } else {
-        details = (
+    if (selected.kind === "stellar") {
+        return (
             <StellarFeatureDetails
                 feature={selected.value}
                 intel={intel}
@@ -248,7 +238,11 @@ export function EntityDetails({
 
     return (
         <>
-            {details}
+            <StarbaseDetails
+                intel={intel}
+                onSelect={onSelect}
+                starbase={selected.value}
+            />
             <EntityProvenance intel={intel} selected={selected} />
         </>
     );
