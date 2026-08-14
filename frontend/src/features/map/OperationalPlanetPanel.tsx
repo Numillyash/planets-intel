@@ -20,6 +20,7 @@ import {
     formatTemperature,
     planetFacts,
 } from "./observationView";
+import type { PlanetPostHostState } from "./planetPostHostState";
 
 export type PlanetOperationalTab =
     | "planet"
@@ -76,12 +77,14 @@ export function OperationalPlanetPanel({
     planet,
     intel,
     players,
+    postHostState,
     onSelect,
 }: {
     tab: PlanetOperationalTab;
     planet: MapPlanetObservation;
     intel: PrivateIntelMapResponse;
     players: PlayerInfo[];
+    postHostState: PlanetPostHostState | null;
     onSelect: (entity: SelectedEntity) => void;
 }) {
     const facts = planetFacts(planet);
@@ -92,6 +95,10 @@ export function OperationalPlanetPanel({
     const linkedAccountId = isCombinedPrivateIntel(intel)
         ? intel.primary_observer.linked_account_id
         : intel.observer.linked_account_id;
+    const effectiveOwnerId = postHostState?.ownerId ?? planet.owner_id;
+    const ownerChanged =
+        postHostState !== null &&
+        postHostState.ownerId !== planet.owner_id;
 
     const directShipIds = useMemo(
         () => new Set(orbitShips.map((ship) => ship.ship_id)),
@@ -188,6 +195,11 @@ export function OperationalPlanetPanel({
                     <span className="intel-detail-badge">
                         {facts.knownFieldCount > 0 ? "Detailed scan" : "Position only"}
                     </span>
+                    {ownerChanged && (
+                        <span className="intel-detail-badge operational-owner-change-badge">
+                            Owner changed after host
+                        </span>
+                    )}
                     {starbase !== null && (
                         <span className="intel-detail-badge intel-detail-badge-gold">Starbase</span>
                     )}
@@ -205,7 +217,13 @@ export function OperationalPlanetPanel({
 
                 <dl className="intel-fact-list intel-fact-list-summary">
                     <FactRow label="Planet ID" value={planet.planet_id} />
-                    <FactRow label="Owner" value={playerName(planet.owner_id, players)} />
+                    <FactRow label="Owner" value={playerName(effectiveOwnerId, players)} />
+                    {ownerChanged && (
+                        <FactRow
+                            label="Snapshot owner"
+                            value={playerName(planet.owner_id, players)}
+                        />
+                    )}
                     <FactRow label="Friendly code" value={facts.friendlyCode ?? "—"} />
                     <FactRow label="Info turn" value={planet.info_turn ?? "—"} />
                     <FactRow
@@ -219,24 +237,87 @@ export function OperationalPlanetPanel({
                     <FactRow label="Temperature" value={formatTemperature(facts.temperature)} />
                 </dl>
 
-                <div className="operational-summary-grid">
-                    <div>
-                        <span>Colonists</span>
-                        <strong>{formatInteger(facts.clans)}</strong>
+                {ownerChanged && postHostState !== null && (
+                    <div className="operational-intel-callout operational-owner-change-callout">
+                        <strong>Post-host factual state</strong>
+                        <span>
+                            Fleet/host evidence confirms {playerName(postHostState.ownerId, players)}
+                            {" "}as owner after VCR #{postHostState.vcrId} on turn {postHostState.turn}.
+                            The stored planet snapshot above is retained separately for provenance.
+                        </span>
                     </div>
-                    <div>
-                        <span>Supplies</span>
-                        <strong>{formatInteger(facts.supplies)}</strong>
+                )}
+
+                <DetailSection title="Population">
+                    <div className="operational-summary-grid">
+                        <div>
+                            <span>Colonists</span>
+                            <strong>{formatInteger(facts.clans)}</strong>
+                        </div>
+                        <div>
+                            <span>Natives</span>
+                            <strong>{facts.nativeRace ?? "—"}</strong>
+                        </div>
+                        <div>
+                            <span>Native clans</span>
+                            <strong>{formatInteger(facts.nativeClans)}</strong>
+                        </div>
+                        <div>
+                            <span>Native gov.</span>
+                            <strong>{facts.nativeGovernment ?? "—"}</strong>
+                        </div>
                     </div>
-                    <div>
-                        <span>MegaCredits</span>
-                        <strong>{formatInteger(facts.megacredits)}</strong>
+                </DetailSection>
+
+                <DetailSection title="Structures">
+                    <div className="operational-summary-grid">
+                        <div>
+                            <span>Mines</span>
+                            <strong>{formatInteger(facts.mines)}</strong>
+                        </div>
+                        <div>
+                            <span>Factories</span>
+                            <strong>{formatInteger(facts.factories)}</strong>
+                        </div>
+                        <div>
+                            <span>Defense</span>
+                            <strong>{formatInteger(facts.defense)}</strong>
+                        </div>
+                        <div>
+                            <span>Starbase</span>
+                            <strong>{starbase !== null ? "Yes" : "No"}</strong>
+                        </div>
                     </div>
-                    <div>
-                        <span>Defense</span>
-                        <strong>{formatInteger(facts.defense)}</strong>
+                </DetailSection>
+
+                <DetailSection title="Planet cargo">
+                    <div className="operational-summary-grid operational-resource-grid">
+                        <div>
+                            <span>Neutronium</span>
+                            <strong>{formatInteger(facts.neutronium.surface)}</strong>
+                        </div>
+                        <div>
+                            <span>Duranium</span>
+                            <strong>{formatInteger(facts.duranium.surface)}</strong>
+                        </div>
+                        <div>
+                            <span>Tritanium</span>
+                            <strong>{formatInteger(facts.tritanium.surface)}</strong>
+                        </div>
+                        <div>
+                            <span>Molybdenum</span>
+                            <strong>{formatInteger(facts.molybdenum.surface)}</strong>
+                        </div>
+                        <div>
+                            <span>Supplies</span>
+                            <strong>{formatInteger(facts.supplies)}</strong>
+                        </div>
+                        <div>
+                            <span>MegaCredits</span>
+                            <strong>{formatInteger(facts.megacredits)}</strong>
+                        </div>
                     </div>
-                </div>
+                </DetailSection>
             </div>
         );
     }
@@ -370,12 +451,27 @@ export function OperationalPlanetPanel({
                     </span>
                 </div>
                 <dl className="intel-fact-list">
+                    <FactRow label="Effective owner" value={playerName(effectiveOwnerId, players)} />
+                    {ownerChanged && (
+                        <FactRow label="Snapshot owner" value={playerName(planet.owner_id, players)} />
+                    )}
                     <FactRow label="Snapshot turn" value={intel.turn} />
                     <FactRow label="Planet info turn" value={planet.info_turn ?? "—"} />
                     <FactRow label="Known fields" value={facts.knownFieldCount} />
                     <FactRow label="Direct ships" value={orbitShips.length} />
                     <FactRow label="Host-confirmed ships" value={combatOrbitContacts.length} />
                 </dl>
+                {ownerChanged && postHostState !== null && (
+                    <DetailSection title="Post-host ownership">
+                        <div className="operational-intel-callout operational-owner-change-callout">
+                            <strong>{playerName(postHostState.ownerId, players)}</strong>
+                            <span>
+                                VCR #{postHostState.vcrId} · T{postHostState.turn}
+                                {postHostState.basis !== null ? ` · ${postHostState.basis}` : ""}
+                            </span>
+                        </div>
+                    </DetailSection>
+                )}
                 {combatOrbitContacts.length > 0 && (
                     <DetailSection title="Host-confirmed presence">
                         <div className="intel-orbit-list">
@@ -403,6 +499,28 @@ export function OperationalPlanetPanel({
                             Planet factual info turn: {planet.info_turn ?? "unknown"}
                         </small>
                     </div>
+                    {ownerChanged && postHostState !== null && (
+                        <button
+                            className="operational-timeline-item"
+                            onClick={() => {
+                                window.dispatchEvent(
+                                    new CustomEvent("dashboard-event-select", {
+                                        detail: {
+                                            turn: postHostState.turn,
+                                            vcrId: postHostState.vcrId,
+                                        },
+                                    }),
+                                );
+                            }}
+                            type="button"
+                        >
+                            <span>T{postHostState.turn}</span>
+                            <strong>
+                                Owner changed: {playerName(planet.owner_id, players)} → {playerName(postHostState.ownerId, players)}
+                            </strong>
+                            <small>Host-confirmed after VCR #{postHostState.vcrId}</small>
+                        </button>
+                    )}
                     {combatOrbitContacts.map(({ track, point }) => (
                         <button
                             className="operational-timeline-item"
@@ -432,6 +550,15 @@ export function OperationalPlanetPanel({
                 <span>Combat evidence</span>
                 <strong>{combatOrbitContacts.length}</strong>
             </div>
+            {ownerChanged && postHostState !== null && (
+                <div className="operational-intel-callout operational-owner-change-callout">
+                    <strong>Planet ownership changed after host</strong>
+                    <span>
+                        {playerName(planet.owner_id, players)} → {playerName(postHostState.ownerId, players)}
+                        {" · "}VCR #{postHostState.vcrId}
+                    </span>
+                </div>
+            )}
             {tracksLoading ? (
                 <p className="intel-no-facts">Loading combat evidence…</p>
             ) : combatOrbitContacts.length > 0 ? (
