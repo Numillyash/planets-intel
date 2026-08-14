@@ -25,6 +25,7 @@ import { DetailSection, FactRow, playerName } from "./DetailPrimitives";
 import { EntityIcon } from "./EntityIcon";
 import { LoadoutInference } from "./LoadoutInference";
 import { PlayerTurnStatistics } from "./PlayerTurnStatistics";
+import { ShipOrderDraftPanel } from "./ShipOrderDraftPanel";
 import { ThreatAnalysis } from "./ThreatAnalysis";
 
 
@@ -371,26 +372,15 @@ export function ShipDetails({
                 {activeTab === "orders" && (
                     <div className="operational-tab-section">
                         {isOwnShip ? (
-                            <>
-                                <div className="operational-intel-callout">
-                                    <strong>Observed orders · read-only</strong>
-                                    <span>
-                                        This tab is the future write-mode surface. The values below are factual upstream state; editing/submission is not enabled yet.
-                                    </span>
-                                </div>
-                                <DetailSection title="Current orders">
-                                    <dl className="intel-fact-list">
-                                        <FactRow label="Friendly code" value={facts.friendlyCode ?? "—"} />
-                                        <FactRow label="Warp" value={ship.warp ?? "—"} />
-                                        <FactRow label="Waypoint" value={
-                                            facts.waypointX !== null && facts.waypointY !== null
-                                                ? `${facts.waypointX}, ${facts.waypointY}`
-                                                : "—"
-                                        } />
-                                        <FactRow label="Mission" value={facts.mission ?? "—"} />
-                                    </dl>
-                                </DetailSection>
-                            </>
+                            <ShipOrderDraftPanel
+                                gameId={intel.game_id}
+                                linkedAccountId={linkedAccountId}
+                                shipId={ship.ship_id}
+                                turn={intel.turn}
+                                upstreamWarp={ship.warp}
+                                upstreamWaypointX={facts.waypointX}
+                                upstreamWaypointY={facts.waypointY}
+                            />
                         ) : (
                             <div className="operational-intel-callout">
                                 <strong>Orders unavailable</strong>
