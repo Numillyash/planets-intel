@@ -29,6 +29,25 @@ class MovementInterceptTests(unittest.TestCase):
         self.assertEqual(result.position, Point(0, 0))
         self.assertEqual(result.moved_distance, 0.0)
 
+    def test_visible_target_without_post_move_position_is_unresolved(self):
+        result = resolve_intercepts(
+            [
+                InterceptOrder(
+                    ship_id=10,
+                    origin=Point(0, 0),
+                    target_ship_id=20,
+                    max_distance=81,
+                    target_visible=True,
+                )
+            ],
+            prior_final_positions={},
+            mode=InterceptMode.CHAINED,
+        )[10]
+
+        self.assertEqual(result.status, InterceptStatus.UNRESOLVED_TARGET)
+        self.assertIsNone(result.position)
+        self.assertFalse(result.certain)
+
     def test_interceptor_uses_post_move_most_target_position(self):
         result = resolve_intercepts(
             [
