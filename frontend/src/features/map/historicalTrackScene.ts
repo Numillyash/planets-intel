@@ -79,8 +79,6 @@ function lifecycleBreak(
     previous: HistoricalShipTrackPoint,
     current: HistoricalShipTrackPoint,
 ): boolean {
-    if (current.gap_from_previous) return true;
-
     // A VCR-derived defeat with no later structured host survival evidence
     // closes this ship-id lifecycle. Planets.nu can later reuse the numeric ID
     // for a newly built ship, which must never be connected to the old hull.
@@ -395,6 +393,8 @@ export function drawHistoricalShipTracks({
             for (let index = 1; index < segment.length; index += 1) {
                 const previous = segment[index - 1];
                 const current = segment[index];
+                if (current.gap_from_previous) continue;
+
                 const alpha = fadedAlpha(
                     selectedSegment ? 0.94 : 0.34,
                     current.turn,
