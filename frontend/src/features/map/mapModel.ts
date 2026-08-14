@@ -200,7 +200,6 @@ export function planetLinks(
         (planet): planet is MapPlanetObservation & { x: number; y: number } =>
             planet.x !== null && planet.y !== null,
     );
-    const maxDistanceSquared = maxDistance * maxDistance;
     const links: PlanetLink[] = [];
 
     for (let left = 0; left < positioned.length; left += 1) {
@@ -209,7 +208,15 @@ export function planetLinks(
             const to = positioned[right];
             const dx = from.x - to.x;
             const dy = from.y - to.y;
-            if (dx * dx + dy * dy <= maxDistanceSquared) {
+
+            // Planets navigation presents distance as whole light-years and
+            // edge-of-range W9 destinations are treated according to that
+            // rounded navigation distance. Using the raw Euclidean float here
+            // incorrectly dropped pairs such as Taurus (2027,1691) and Cue
+            // Ball (2093,1644): sqrt(66^2 + 47^2) = 81.0247..., displayed as
+            // 81 ly and reachable at the W9 boundary.
+            const navigationDistance = Math.round(Math.hypot(dx, dy));
+            if (navigationDistance <= maxDistance) {
                 links.push({ from, to });
             }
         }
@@ -263,10 +270,8 @@ function clusteredOffset(
         capacity = firstRingCapacity + ring * 4;
     }
 
-    const radius = baseRadius + ring * 6;
-    const countOnRing = Math.min(capacity, size - (index - remainingIndex));
-    const angle = -Math.PI / 2 + (Math.PI * 2 * remainingIndex) / Math.max(countOnRing, 1);
-
+    const radius = baseRadius + ring * Math.max(baseRadius * 0.85, 6);
+    const angle = -Math.PI / 2 + (Math.PI * 2 * remainingIndex) / capacity;
     return {
         x: Math.cos(angle) * radius,
         y: Math.sin(angle) * radius,
@@ -277,18 +282,19 @@ export function shipVisualPositions(
     intel: PrivateIntelMapResponse,
     bounds: MapBounds,
 ): ShipVisualPosition[] {
-    const planetAt = new Map<string, MapPlanetObservation>();
+    const positionedShips = intel.ships.filter(
+        (ship): ship is MapShipObservation & { x: number; y: number } =>
+            ship.x !== null && ship.y !== null,
+    );
+    const planetsByCoordinate = new Map<string, MapPlanetObservation>();
     for (const planet of intel.planets) {
         if (planet.x !== null && planet.y !== null) {
-            planetAt.set(coordinateKey(planet.x, planet.y), planet);
+            planetsByCoordinate.set(coordinateKey(planet.x, planet.y), planet);
         }
     }
 
-    const groups = new Map<string, MapShipObservation[]>();
-    for (const ship of intel.ships) {
-        if (ship.x === null || ship.y === null) {
-            continue;
-        }
+    const groups = new Map<string, Array<MapShipObservation & { x: number; y: number }>>();
+    for (const ship of positionedShips) {
         const key = coordinateKey(ship.x, ship.y);
         const group = groups.get(key) ?? [];
         group.push(ship);
@@ -296,43 +302,29 @@ export function shipVisualPositions(
     }
 
     const result: ShipVisualPosition[] = [];
-
-    for (const [key, ships] of groups) {
-        const first = ships[0];
-        if (first.x === null || first.y === null) {
-            continue;
-        }
-
-        const anchorX = first.x;
-        const anchorY = renderY(first.y, bounds);
-        const planet = planetAt.get(key) ?? null;
-
-        ships.forEach((ship, index) => {
-            let offset = { x: 0, y: 0 };
-
-            if (planet !== null) {
-                offset = clusteredOffset(
-                    index,
-                    ships.length,
-                    PLANET_ORBIT_RADIUS,
-                    8,
-                    true,
-                );
-            } else if (ships.length > 1) {
-                offset = clusteredOffset(index, ships.length, 6, 6);
-            }
-
+    for (const group of groups.values()) {
+        group.sort((a, b) => a.ship_id - b.ship_id);
+        const planet = planetsByCoordinate.get(coordinateKey(group[0].x, group[0].y)) ?? null;
+        for (let index = 0; index < group.length; index += 1) {
+            const ship = group[index];
+            const offset = clusteredOffset(
+                index,
+                group.length,
+                PLANET_ORBIT_RADIUS,
+                6,
+                planet !== null,
+            );
             result.push({
                 ship,
-                anchorX,
-                anchorY,
-                x: anchorX + offset.x,
-                y: anchorY + offset.y,
+                anchorX: ship.x,
+                anchorY: renderY(ship.y, bounds),
+                x: ship.x + offset.x,
+                y: renderY(ship.y, bounds) + offset.y,
                 planetId: planet?.planet_id ?? null,
-                clusterSize: ships.length,
+                clusterSize: group.length,
                 clusterIndex: index,
             });
-        });
+        }
     }
 
     return result;
