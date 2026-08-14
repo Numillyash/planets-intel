@@ -7,6 +7,7 @@ from app.api.routes.games import router as games_router
 from app.api.routes.health import router as health_router
 from app.api.routes.historical_intel import router as historical_intel_router
 from app.api.routes.intel_sharing import router as intel_sharing_router
+from app.api.routes.movement_prediction import router as movement_prediction_router
 from app.api.routes.order_drafts import router as order_drafts_router
 from app.api.routes.private_assets import router as private_assets_router
 from app.api.routes.private_intel import router as private_intel_router
@@ -66,6 +67,11 @@ api_router.include_router(
 api_router.include_router(
     order_drafts_router,
     tags=["order-drafts"],
+)
+
+api_router.include_router(
+    movement_prediction_router,
+    tags=["movement-prediction"],
 )
 
 api_router.include_router(
