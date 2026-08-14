@@ -74,11 +74,11 @@ def _factual_ship_context(
         select(PrivateObservationBatch)
         .where(
             PrivateObservationBatch.game_id == game_id,
-            PrivateObservationBatch.turn == turn,
             PrivateObservationBatch.observer_planets_account_id
             == linked_account_id,
         )
         .order_by(
+            PrivateObservationBatch.turn.desc(),
             PrivateObservationBatch.observed_at.desc(),
             PrivateObservationBatch.id.desc(),
         )
@@ -86,7 +86,11 @@ def _factual_ship_context(
     ).scalar_one_or_none()
     if batch is None:
         raise OrderDraftNotFound(
-            "No factual snapshot is stored for this observer and turn"
+            "No factual snapshot is stored for this observer and game"
+        )
+    if batch.turn != turn:
+        raise OrderDraftAccessError(
+            "Order drafts are only available for the latest factual turn"
         )
 
     ship = session.execute(
@@ -237,7 +241,6 @@ def upsert_ship_order_draft(
             if waypoint_x is not None and waypoint_y is not None:
                 draft.waypoint_x = waypoint_x
                 draft.waypoint_y = waypoint_y
-            # Saving against fresh factual state acknowledges the latest snapshot.
             draft.base_batch_id = batch.id
             draft.base_snapshot_hash = batch.snapshot_hash
 
