@@ -1,14 +1,17 @@
 .operational-feature-icon {
-    display: grid;
+    display: inline-grid;
     place-items: center;
     width: 44px;
     height: 44px;
+    overflow: hidden;
     border: 1px solid #3a526e;
     border-radius: 10px;
     background: radial-gradient(circle at 35% 30%, #24384f 0, #111c29 58%, #09111b 100%);
     color: #b9d9f7;
     font-size: 1.45rem;
     font-weight: 800;
+    line-height: 1;
+    text-align: center;
     box-shadow: 0 0 16px rgba(59, 103, 145, 0.18);
 }
 
