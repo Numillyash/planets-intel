@@ -196,19 +196,24 @@ export function drawOrderVectors({
         const upstreamDistance = routeDistance(upstreamRoute);
         const selectedShip = selectedShipId === ship.ship_id;
 
-        if (upstreamRoute.length >= 2 && upstreamDistance >= 0.5) {
+        // mapScene already renders the selected ship's factual trajectory with
+        // the stronger selection treatment. The dashed layer is the persistent
+        // cue for orders belonging to ships that are not currently selected.
+        if (
+            !selectedShip
+            && upstreamRoute.length >= 2
+            && upstreamDistance >= 0.5
+        ) {
             drawVector({
                 world,
                 route: upstreamRoute,
                 bounds,
                 color: 0x62cfff,
-                alpha: selectedShip ? 0.72 : 0.34,
-                width: selectedShip ? 1.45 : 0.9,
+                alpha: 0.36,
+                width: 0.95,
                 dashLength: 7,
                 gapLength: 5,
-                label: selectedShip
-                    ? `${upstreamDistance.toFixed(1)} ly · W${ship.warp ?? "—"}`
-                    : null,
+                label: null,
             });
         }
 
