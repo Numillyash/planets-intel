@@ -128,6 +128,31 @@ function segmentOwnerId(
     return track.owner_id;
 }
 
+function selectedLifecycleTrack(
+    tracks: HistoricalShipTrack[],
+    selectedShipId: number | null,
+    selectedHullId: number | null,
+    throughTurn: number,
+): HistoricalShipTrack | null {
+    if (selectedShipId === null) return null;
+
+    const candidates = tracks
+        .filter((track) =>
+            track.ship_id === selectedShipId
+            && track.first_turn <= throughTurn
+            && (
+                selectedHullId === null
+                || track.hull_id === null
+                || track.hull_id === selectedHullId
+            ),
+        )
+        .sort((left, right) =>
+            right.last_turn - left.last_turn
+            || right.first_turn - left.first_turn,
+        );
+    return candidates[0] ?? null;
+}
+
 function drawTrackArrowHead({
     world,
     previous,
@@ -322,6 +347,12 @@ export function drawHistoricalShipTracks({
     const selectedHullId = selected?.kind === "ship"
         ? selected.value.hull_id
         : null;
+    const selectedTrackRecord = selectedLifecycleTrack(
+        tracks,
+        selectedShipId,
+        selectedHullId,
+        throughTurn,
+    );
     const minimumTurn = lookbackTurns === null
         ? Number.NEGATIVE_INFINITY
         : throughTurn - Math.max(lookbackTurns, 0);
@@ -333,7 +364,7 @@ export function drawHistoricalShipTracks({
         if (points.length === 0) continue;
 
         const segments = splitLifecycleSegments(track, points);
-        const trackMatchesSelection = selectedShipId === track.ship_id;
+        const trackMatchesSelection = track === selectedTrackRecord;
         let selectedSegmentIndex = trackMatchesSelection
             ? segments.length - 1
             : -1;
