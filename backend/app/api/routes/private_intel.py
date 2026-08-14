@@ -45,38 +45,11 @@ def _latest_or_none(
     )
 
 
-@router.get(
-    "/games/{game_id}/private-intel/latest",
-    response_model=LatestPrivateIntelResponse,
-)
-def latest_private_intel(
-    game_id: int = Path(gt=0),
-    linked_account_id: int = Query(gt=0),
-    user: AppUser = Depends(require_user),
-) -> LatestPrivateIntelResponse:
-    result = _latest_or_none(
-        user_id=user.id,
-        game_id=game_id,
-        linked_account_id=linked_account_id,
-    )
-
-    if result is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Private intelligence snapshot not found",
-        )
-
-    return LatestPrivateIntelResponse(**result)
-
-
-@router.post(
-    "/games/{game_id}/private-intel/refresh",
-    response_model=LatestPrivateIntelResponse,
-)
-async def refresh_private_intel(
-    game_id: int = Path(gt=0),
-    linked_account_id: int = Query(gt=0),
-    user: AppUser = Depends(require_user),
+async def _refresh_private_intel_for_user(
+    *,
+    game_id: int,
+    linked_account_id: int,
+    user: AppUser,
 ) -> LatestPrivateIntelResponse:
     with SessionLocal() as session:
         owned_account_id = session.execute(
@@ -146,6 +119,51 @@ async def refresh_private_intel(
         )
 
     return LatestPrivateIntelResponse(**result)
+
+
+@router.get(
+    "/games/{game_id}/private-intel/latest",
+    response_model=LatestPrivateIntelResponse,
+)
+async def latest_private_intel(
+    game_id: int = Path(gt=0),
+    linked_account_id: int = Query(gt=0),
+    user: AppUser = Depends(require_user),
+) -> LatestPrivateIntelResponse:
+    result = _latest_or_none(
+        user_id=user.id,
+        game_id=game_id,
+        linked_account_id=linked_account_id,
+    )
+
+    if result is not None:
+        return LatestPrivateIntelResponse(**result)
+
+    # Selecting a game that has never been synchronized locally must be enough
+    # to initialize its factual snapshot. Without this bootstrap, the SPA sees
+    # a 404 and can remain on an empty map until a full page reload happens to
+    # trigger a separate refresh path.
+    return await _refresh_private_intel_for_user(
+        game_id=game_id,
+        linked_account_id=linked_account_id,
+        user=user,
+    )
+
+
+@router.post(
+    "/games/{game_id}/private-intel/refresh",
+    response_model=LatestPrivateIntelResponse,
+)
+async def refresh_private_intel(
+    game_id: int = Path(gt=0),
+    linked_account_id: int = Query(gt=0),
+    user: AppUser = Depends(require_user),
+) -> LatestPrivateIntelResponse:
+    return await _refresh_private_intel_for_user(
+        game_id=game_id,
+        linked_account_id=linked_account_id,
+        user=user,
+    )
 
 
 @router.post(
