@@ -92,6 +92,8 @@ def build_player_info(
         ships=raw["ships"],
         starbases=raw["starbases"],
         turn_ready=raw["turnready"],
+        active_advantages=str(raw.get("activeadvantages", "")),
+        active_hulls=str(raw.get("activehulls", "")),
     )
 
 
