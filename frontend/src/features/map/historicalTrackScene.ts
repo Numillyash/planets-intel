@@ -79,21 +79,34 @@ function lifecycleBreak(
     previous: HistoricalShipTrackPoint,
     current: HistoricalShipTrackPoint,
 ): boolean {
-    // A VCR-derived defeat with no later structured host survival evidence
-    // closes this ship-id lifecycle. Planets.nu can later reuse the numeric ID
-    // for a newly built ship, which must never be connected to the old hull.
-    if (
-        previous.combat_outcome === "defeated"
-        && !previous.post_host_confirmed
-    ) {
-        return true;
-    }
-
+    // Identity is only split by a structural contradiction we can actually
+    // prove: the same numeric ship ID is observed with a different hull.
+    // "Defeated" alone can also mean captured, and a scan gap merely means
+    // reacquisition, so neither is sufficient to create a new identity.
     const previousHullId = pointHullId(track, previous);
     const currentHullId = pointHullId(track, current);
     return previousHullId !== null
         && currentHullId !== null
         && previousHullId !== currentHullId;
+}
+
+function movementConnectionIsSafe(
+    previous: HistoricalShipTrackPoint,
+    current: HistoricalShipTrackPoint,
+): boolean {
+    if (current.gap_from_previous) return false;
+
+    // A generic VCR defeat does not prove destruction, so keep the identity;
+    // however, absent direct post-host survival evidence we also cannot claim
+    // that a later point is a continuous movement leg. Suppress the arrow.
+    if (
+        previous.combat_outcome === "defeated"
+        && !previous.post_host_confirmed
+    ) {
+        return false;
+    }
+
+    return true;
 }
 
 function splitLifecycleSegments(
@@ -393,7 +406,7 @@ export function drawHistoricalShipTracks({
             for (let index = 1; index < segment.length; index += 1) {
                 const previous = segment[index - 1];
                 const current = segment[index];
-                if (current.gap_from_previous) continue;
+                if (!movementConnectionIsSafe(previous, current)) continue;
 
                 const alpha = fadedAlpha(
                     selectedSegment ? 0.94 : 0.34,
