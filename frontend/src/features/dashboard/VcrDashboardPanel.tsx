@@ -7,7 +7,10 @@ import {
     type VcrReplaySideFrame,
     type VcrReplayTraceResponse,
 } from "../../api/vcrReplay";
-import { privateHullAssetUrl } from "../../lib/privateAssets";
+import {
+    privateHullAssetUrl,
+    privatePlanetAssetUrl,
+} from "../../lib/privateAssets";
 import type {
     CombatEventSideSummary,
     CombatEventSummary,
@@ -39,31 +42,47 @@ function CombatObjectArtwork({
     side: VcrReplaySideFrame;
     facing: "left" | "right";
 }) {
-    if (side.is_planet) {
-        return <span className="vcr-object-marker" />;
-    }
+    const assetUrl = side.is_planet
+        ? privatePlanetAssetUrl()
+        : privateHullAssetUrl(side.image_id ?? side.hull_id);
+    const [loaded, setLoaded] = useState(false);
+    const [failed, setFailed] = useState(false);
 
-    const assetUrl = privateHullAssetUrl(side.hull_id);
+    useEffect(() => {
+        setLoaded(false);
+        setFailed(false);
+    }, [assetUrl]);
+
     if (assetUrl === null) {
         return <span className="vcr-object-marker" />;
     }
 
     return (
-        <span className={`vcr-hull-artwork-shell is-facing-${facing}`}>
+        <span
+            className={
+                `vcr-hull-artwork-shell is-facing-${facing}`
+                + (side.is_planet ? " is-planet-artwork" : "")
+            }
+        >
             <img
                 alt=""
                 className="vcr-hull-artwork"
                 draggable={false}
-                onError={(event) => {
-                    event.currentTarget.hidden = true;
-                    const fallback = event.currentTarget.nextElementSibling;
-                    if (fallback instanceof HTMLElement) {
-                        fallback.hidden = false;
-                    }
+                hidden={!loaded || failed}
+                onError={() => {
+                    setLoaded(false);
+                    setFailed(true);
+                }}
+                onLoad={() => {
+                    setFailed(false);
+                    setLoaded(true);
                 }}
                 src={assetUrl}
             />
-            <span className="vcr-object-marker" hidden />
+            <span
+                className="vcr-object-marker"
+                hidden={loaded && !failed}
+            />
         </span>
     );
 }
@@ -107,15 +126,95 @@ function SideStatus({
     );
 }
 
-function Battlefield({ frame }: { frame: VcrReplayFrame }) {
-    const leftPercent = Math.max(4, Math.min(96, (frame.left.x / 640) * 100));
-    const rightPercent = Math.max(4, Math.min(96, (frame.right.x / 640) * 100));
+const TORPEDO_PRESENTATION_FRAMES = 10;
+
+function combatPercent(x: number): number {
+    return Math.max(4, Math.min(96, (x / 640) * 100));
+}
+
+interface TorpedoPresentation {
+    key: string;
+    side: "left" | "right";
+    x: number;
+    hit: boolean;
+}
+
+function activeTorpedoPresentations(
+    frames: VcrReplayFrame[],
+    frameIndex: number,
+): TorpedoPresentation[] {
+    const result: TorpedoPresentation[] = [];
+
+    for (const side of ["left", "right"] as const) {
+        const eventName = `${side}_torpedo`;
+        const hitName = side === "left" ? "right_hit" : "left_hit";
+
+        for (
+            let launchIndex = frameIndex;
+            launchIndex >= Math.max(0, frameIndex - TORPEDO_PRESENTATION_FRAMES + 1);
+            launchIndex -= 1
+        ) {
+            const launchFrame = frames[launchIndex];
+            if (!launchFrame.events.includes(eventName)) continue;
+
+            const age = frameIndex - launchIndex;
+            const progress = Math.min(
+                1,
+                (age + 1) / TORPEDO_PRESENTATION_FRAMES,
+            );
+            const launchSide = side === "left"
+                ? launchFrame.left
+                : launchFrame.right;
+            const targetSide = side === "left"
+                ? launchFrame.right
+                : launchFrame.left;
+            const x = launchSide.x + (targetSide.x - launchSide.x) * progress;
+
+            result.push({
+                key: `${side}-${launchIndex}`,
+                side,
+                x: combatPercent(x),
+                hit: launchFrame.events.includes(hitName),
+            });
+            break;
+        }
+    }
+
+    return result;
+}
+
+function Battlefield({
+    frame,
+    frames,
+    frameIndex,
+}: {
+    frame: VcrReplayFrame;
+    frames: VcrReplayFrame[];
+    frameIndex: number;
+}) {
+    const leftPercent = combatPercent(frame.left.x);
+    const rightPercent = combatPercent(frame.right.x);
     const hitLeft = frame.events.includes("left_hit");
     const hitRight = frame.events.includes("right_hit");
+    const torpedoes = activeTorpedoPresentations(frames, frameIndex);
 
     return (
         <div className="vcr-battlefield">
             <div className="vcr-range-line" />
+
+            {torpedoes.map((torpedo) => (
+                <span
+                    aria-hidden="true"
+                    className={
+                        `vcr-torpedo-projectile is-${torpedo.side}`
+                        + (torpedo.hit ? " is-hit-course" : "")
+                    }
+                    key={torpedo.key}
+                    style={{ left: `${torpedo.x}%` }}
+                >
+                    <span />
+                </span>
+            ))}
 
             <div
                 className={
@@ -144,11 +243,6 @@ function Battlefield({ frame }: { frame: VcrReplayFrame }) {
                     <small>{frame.right.fighters_out} fighters out</small>
                 )}
             </div>
-
-            {(frame.events.includes("left_torpedo")
-                || frame.events.includes("right_torpedo")) && (
-                <div className="vcr-event-flash">TORPEDO</div>
-            )}
         </div>
     );
 }
@@ -339,7 +433,11 @@ export function VcrDashboardPanel({
                             <div className="error-card">Replay contains no frames.</div>
                         ) : (
                             <>
-                                <Battlefield frame={frame} />
+                                <Battlefield
+                                    frame={frame}
+                                    frameIndex={frameIndex}
+                                    frames={trace.frames}
+                                />
 
                                 <div className="vcr-status-grid">
                                     <SideStatus label="LEFT" side={frame.left} />
