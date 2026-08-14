@@ -172,32 +172,52 @@ function drawStarCluster(
     }
 
     const y = renderY(feature.y, bounds);
-    const temperature = payloadNumber(feature, "temperature");
-    const coreRadius = payloadNumber(feature, "coreradius")
+    const temperature = payloadNumber(feature, "temp")
+        ?? payloadNumber(feature, "temperature");
+    const mass = payloadNumber(feature, "mass");
+
+    // Nu uses feature.radius as the full-radiation/core boundary while
+    // radiation continues through a larger halo with radius sqrt(mass).
+    // Keep the renderer on the same geometry as radiationAtPoint().
+    const radiationCoreRadius = Math.max(feature.radius, 0);
+    const radiationHaloRadius = Math.max(
+        mass !== null && mass > 0 ? Math.sqrt(mass) : radiationCoreRadius,
+        radiationCoreRadius,
+    );
+    const visualCoreRadius = payloadNumber(feature, "coreradius")
         ?? payloadNumber(feature, "core_radius")
         ?? Math.max(feature.radius * 0.17, 1);
+
     const color = starClusterColor(temperature);
     const isSelected = featureIsSelected(selected, feature);
 
     const halo = new Graphics()
-        .circle(0, 0, feature.radius)
-        .fill({ color, alpha: 0.025 })
+        .circle(0, 0, radiationHaloRadius)
+        .fill({ color, alpha: 0.018 })
         .stroke({
             color: isSelected ? 0xe9f3ff : color,
-            width: isSelected ? 2.2 : 1.4,
-            alpha: isSelected ? 0.95 : 0.52,
+            width: isSelected ? 2.2 : 1.2,
+            alpha: isSelected ? 0.9 : 0.32,
         });
 
-    halo.circle(0, 0, feature.radius * 0.72).stroke({
-        color,
-        width: 1,
-        alpha: 0.18,
-    });
-    halo.circle(0, 0, feature.radius * 0.46).stroke({
-        color,
-        width: 1,
-        alpha: 0.12,
-    });
+    if (radiationHaloRadius > radiationCoreRadius + 0.5) {
+        const middleHaloRadius = radiationCoreRadius
+            + (radiationHaloRadius - radiationCoreRadius) * 0.55;
+        halo.circle(0, 0, middleHaloRadius).stroke({
+            color,
+            width: 1,
+            alpha: 0.12,
+        });
+    }
+
+    halo.circle(0, 0, radiationCoreRadius)
+        .fill({ color, alpha: 0.022 })
+        .stroke({
+            color,
+            width: 1.2,
+            alpha: 0.42,
+        });
+
     halo.position.set(feature.x, y);
     halo.eventMode = "static";
     halo.cursor = "pointer";
@@ -208,7 +228,7 @@ function drawStarCluster(
     world.addChild(halo);
 
     const core = new Graphics()
-        .circle(0, 0, coreRadius)
+        .circle(0, 0, visualCoreRadius)
         .fill({ color, alpha: 0.78 })
         .stroke({
             color: 0xf4f7ff,
@@ -734,28 +754,6 @@ export function drawMapScene({
 
         if (assetReady) {
             addShipHullArtwork(world, position, isSelected, onSelect);
-        }
-
-        if (position.planetId !== null || position.clusterSize > 1) {
-            const shipLabel = new Text({
-                text: `#${position.ship.ship_id}`,
-                style: {
-                    fill: 0xeaf3ff,
-                    fontFamily: "Inter, Arial, sans-serif",
-                    fontSize: 9,
-                    fontWeight: "600",
-                    stroke: {
-                        color: 0x060a10,
-                        width: 3,
-                    },
-                },
-                resolution: 2,
-            });
-            shipLabel.position.set(
-                position.x + 7,
-                position.y - 11,
-            );
-            world.addChild(shipLabel);
         }
     }
 }
