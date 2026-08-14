@@ -1,0 +1,15 @@
+.operational-entity-icon-hull {
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    border: 1px solid #34516f;
+    border-radius: 8px;
+    background: radial-gradient(circle, #172638 0, #09111b 70%);
+}
+
+.operational-entity-icon-hull img {
+    width: 58px;
+    height: 58px;
+    object-fit: contain;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.8));
+}
