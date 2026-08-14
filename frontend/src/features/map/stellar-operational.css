@@ -1,0 +1,38 @@
+.operational-feature-icon {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    border: 1px solid #3a526e;
+    border-radius: 10px;
+    background: radial-gradient(circle at 35% 30%, #24384f 0, #111c29 58%, #09111b 100%);
+    color: #b9d9f7;
+    font-size: 1.45rem;
+    font-weight: 800;
+    box-shadow: 0 0 16px rgba(59, 103, 145, 0.18);
+}
+
+.operational-feature-icon.is-minefield {
+    border-color: #7f6f3b;
+    color: #f1d06a;
+    background: radial-gradient(circle, rgba(116, 92, 25, 0.34), #111820 72%);
+}
+
+.operational-feature-icon.is-ion_storm {
+    border-color: #9a7f32;
+    color: #ffe36f;
+    background: radial-gradient(circle, rgba(119, 93, 16, 0.42), #17160d 72%);
+}
+
+.operational-feature-icon.is-star_cluster {
+    border-radius: 50%;
+    border-color: #6f8eb3;
+    color: #f3f6ff;
+    background: radial-gradient(circle, #d5e5ff 0 5%, #6f93be 7% 18%, #203248 34%, #0a111a 72%);
+}
+
+.operational-feature-icon.is-nebula {
+    border-color: #4c87aa;
+    color: #9bdcff;
+    background: radial-gradient(circle at 60% 45%, rgba(86, 160, 204, 0.4), rgba(32, 77, 108, 0.36) 34%, #0b121b 76%);
+}
