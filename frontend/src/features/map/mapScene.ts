@@ -346,7 +346,10 @@ function addShipHullArtwork(
     isSelected: boolean,
     onSelect: (entity: SelectedEntity) => void,
 ): boolean {
-    const assetUrl = privateHullAssetUrl(position.ship.hull_id);
+    const assetUrl = privateHullAssetUrl(
+        position.ship.hull_id,
+        position.ship.payload,
+    );
     if (assetUrl === null) return false;
 
     const group = new Container();
@@ -485,6 +488,7 @@ export function drawMapScene({
     labelMode,
     selected,
     onSelect,
+    loadedHullAssetUrls,
 }: {
     world: Container;
     intel: PrivateIntelMapResponse;
@@ -495,6 +499,7 @@ export function drawMapScene({
     labelMode: PlanetLabelMode;
     selected: SelectedEntity | null;
     onSelect: (entity: SelectedEntity) => void;
+    loadedHullAssetUrls: ReadonlySet<string>;
 }) {
     drawStellarCartography(
         world,
@@ -634,9 +639,15 @@ export function drawMapScene({
             selected?.kind === "ship" &&
             selected.value.ship_id === position.ship.ship_id
         );
-        const assetUrl = privateHullAssetUrl(position.ship.hull_id);
+        const assetUrl = privateHullAssetUrl(
+            position.ship.hull_id,
+            position.ship.payload,
+        );
+        const assetReady = (
+            assetUrl !== null && loadedHullAssetUrls.has(assetUrl)
+        );
 
-        if (isSelected && assetUrl === null) {
+        if (isSelected && !assetReady) {
             const halo = new Graphics()
                 .circle(0, 0, 8)
                 .stroke({
@@ -653,7 +664,7 @@ export function drawMapScene({
             ownerColor(position.ship.owner_id),
         );
 
-        if (assetUrl !== null) marker.alpha = 0.14;
+        if (assetReady) marker.alpha = 0.14;
 
         marker.position.set(position.x, position.y);
         marker.eventMode = "static";
@@ -667,7 +678,7 @@ export function drawMapScene({
         });
         world.addChild(marker);
 
-        if (assetUrl !== null) {
+        if (assetReady) {
             addShipHullArtwork(world, position, isSelected, onSelect);
         }
 
