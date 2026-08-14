@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+from typing import Any
 
 import httpx
+from sqlalchemy import select
 
 from app.core.config import get_settings
+from app.db.session import SessionLocal
+from app.models.game_rule_catalog import GameRuleCatalog
 
 
 _PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
@@ -34,6 +38,41 @@ def _cached_png(kind: str, name: str) -> Path | None:
     except OSError:
         return None
     return path
+
+
+def _positive_image_id(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if value > 0 else None
+    if isinstance(value, str):
+        text = value.strip()
+        if text.endswith(".png"):
+            text = text[:-4]
+        if text.isdigit():
+            result = int(text)
+            return result if result > 0 else None
+    return None
+
+
+def _catalog_hull_image_id(hull_id: int) -> int | None:
+    """Resolve an explicit Nu artwork id when it differs from the hull id."""
+    with SessionLocal() as session:
+        catalogs = session.execute(
+            select(GameRuleCatalog)
+            .order_by(GameRuleCatalog.observed_turn.desc())
+        ).scalars().all()
+
+        for catalog in catalogs:
+            for hull in catalog.hulls:
+                if _positive_image_id(hull.get("id")) != hull_id:
+                    continue
+                for key in ("img", "imageid", "image_id", "image"):
+                    image_id = _positive_image_id(hull.get(key))
+                    if image_id is not None:
+                        return image_id
+                return None
+    return None
 
 
 async def _download_png(url: str) -> httpx.Response:
@@ -113,10 +152,25 @@ def cached_hull_path(hull_image_id: int) -> Path | None:
 async def ensure_hull_asset(hull_image_id: int) -> Path | None:
     settings = get_settings()
     base_url = settings.planetsnu_hull_asset_base_url.rstrip("/")
-    return await _ensure_png(
+
+    direct = await _ensure_png(
         kind="hulls",
         name=str(hull_image_id),
         url=f"{base_url}/{hull_image_id}.png",
+    )
+    if direct is not None:
+        return direct
+
+    mapped_image_id = _catalog_hull_image_id(hull_image_id)
+    if mapped_image_id is None or mapped_image_id == hull_image_id:
+        return None
+
+    # Cache the mapped artwork under the logical hull id as well. Existing
+    # consumers that only know hull_id then become correct without a new API.
+    return await _ensure_png(
+        kind="hulls",
+        name=str(hull_image_id),
+        url=f"{base_url}/{mapped_image_id}.png",
     )
 
 
