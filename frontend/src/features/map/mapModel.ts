@@ -284,10 +284,21 @@ export function shipVisualPositions(
     intel: PrivateIntelMapResponse,
     bounds: MapBounds,
 ): ShipVisualPosition[] {
-    const positionedShips = intel.ships.filter(
-        (ship): ship is PositionedShip =>
-            ship.x !== null && ship.y !== null,
-    );
+    // PrivateIntelMapResponse is a union whose `ships` member is either the
+    // raw observation array or the combined-intel array. TypeScript does not
+    // preserve a filter type predicate reliably across that union. Materialize
+    // concrete numeric coordinates here instead of relying on downstream
+    // control-flow narrowing.
+    const positionedShips: PositionedShip[] = [];
+    for (const ship of intel.ships) {
+        const x = ship.x;
+        const y = ship.y;
+        if (x === null || y === null) {
+            continue;
+        }
+        positionedShips.push({ ...ship, x, y });
+    }
+
     const planetsByCoordinate = new Map<string, MapPlanetObservation>();
     for (const planet of intel.planets) {
         if (planet.x !== null && planet.y !== null) {
