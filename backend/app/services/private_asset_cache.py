@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from io import BytesIO
 from pathlib import Path
+import re
 from typing import Any
 
 import httpx
@@ -15,7 +16,7 @@ from app.models.game_rule_catalog import GameRuleCatalog
 
 
 _PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
-_HULL_NORMALIZATION_VERSION = "alpha-center-v1"
+_HULL_NORMALIZATION_VERSION = "alpha-centroid-v2"
 _DOWNLOAD_TIMEOUT = httpx.Timeout(
     timeout=7.0,
     connect=4.0,
@@ -40,6 +41,31 @@ def _normalization_marker(path: Path) -> Path:
     return path.with_name(f"{path.name}.{_HULL_NORMALIZATION_VERSION}")
 
 
+def _alpha_weighted_centroid(image: Image.Image) -> tuple[float, float]:
+    alpha = image.getchannel("A")
+    width, height = image.size
+    weighted_x = 0.0
+    weighted_y = 0.0
+    total = 0.0
+
+    # Squaring alpha suppresses barely-visible antialias/glow pixels so the
+    # perceived body of the ship, rather than the raw transparent canvas,
+    # defines the visual center.
+    for y in range(height):
+        for x in range(width):
+            value = alpha.getpixel((x, y))
+            if value <= 8:
+                continue
+            weight = float(value * value)
+            weighted_x += x * weight
+            weighted_y += y * weight
+            total += weight
+
+    if total <= 0:
+        return (width / 2.0, height / 2.0)
+    return (weighted_x / total, weighted_y / total)
+
+
 def _normalized_hull_png(content: bytes) -> bytes:
     try:
         with Image.open(BytesIO(content)) as source:
@@ -61,11 +87,20 @@ def _normalized_hull_png(content: bytes) -> bytes:
                 (canvas_side, canvas_side),
                 (0, 0, 0, 0),
             )
-            offset = (
-                (canvas_side - width) // 2,
-                (canvas_side - height) // 2,
-            )
-            canvas.alpha_composite(artwork, dest=offset)
+
+            centroid_x, centroid_y = _alpha_weighted_centroid(artwork)
+            desired_x = canvas_side / 2.0
+            # Nu hulls read visually low when centered only by their alpha
+            # bounds. Keep their perceived body a little above mathematical
+            # center, matching the classic client's icon presentation.
+            desired_y = canvas_side * 0.45
+
+            offset_x = round(desired_x - centroid_x)
+            offset_y = round(desired_y - centroid_y)
+            offset_x = min(max(offset_x, 0), canvas_side - width)
+            offset_y = min(max(offset_y, 0), canvas_side - height)
+
+            canvas.alpha_composite(artwork, dest=(offset_x, offset_y))
 
             output = BytesIO()
             canvas.save(output, format="PNG", optimize=True)
@@ -114,10 +149,16 @@ def _positive_image_id(value: Any) -> int | None:
         return value if value > 0 else None
     if isinstance(value, str):
         text = value.strip()
-        if text.endswith(".png"):
-            text = text[:-4]
-        if text.isdigit():
-            result = int(text)
+        match = re.search(
+            r"(?:^|/)(\d+)(?:\.png)?(?:$|[?#])",
+            text,
+            flags=re.IGNORECASE,
+        )
+        if match is None and text.isdigit():
+            match_value = int(text)
+            return match_value if match_value > 0 else None
+        if match is not None:
+            result = int(match.group(1))
             return result if result > 0 else None
     return None
 
@@ -280,49 +321,66 @@ def _hull_sources(image_id: int) -> list[str]:
     ]
 
 
+async def _try_hull_candidate(
+    *,
+    logical_image_id: int,
+    source_image_id: int,
+) -> tuple[Path | None, PrivateAssetError | None]:
+    try:
+        path = await _ensure_png_from_sources(
+            kind="hulls",
+            # Cache a successfully resolved alias under the logical hull id so
+            # future requests do not repeatedly wait for a known-bad source.
+            name=str(logical_image_id),
+            urls=_hull_sources(source_image_id),
+        )
+        return path, None
+    except PrivateAssetError as exc:
+        return None, exc
+
+
 async def ensure_hull_asset(
     hull_image_id: int,
     *,
     image_hint: int | None = None,
 ) -> Path | None:
     image_id = _normalized_hull_artwork_id(hull_image_id)
+    cached = _cached_png("hulls", str(image_id))
+    if cached is not None:
+        return cached
 
     mapped_image_id = _catalog_hull_image_id(image_id)
-    if mapped_image_id is not None and mapped_image_id != image_id:
-        mapped = await _ensure_png_from_sources(
-            kind="hulls",
-            name=f"{image_id}-catalog-{mapped_image_id}",
-            urls=_hull_sources(mapped_image_id),
-        )
-        if mapped is not None:
-            return mapped
-
-    direct = await _ensure_png_from_sources(
-        kind="hulls",
-        name=str(image_id),
-        urls=_hull_sources(image_id),
-    )
-    if direct is not None:
-        return direct
-
     normalized_hint = (
         _normalized_hull_artwork_id(image_hint)
         if image_hint is not None and image_hint > 0
         else None
     )
-    if (
-        normalized_hint is not None
-        and normalized_hint != image_id
-        and normalized_hint != mapped_image_id
-    ):
-        hinted = await _ensure_png_from_sources(
-            kind="hulls",
-            name=f"{image_id}-hint-{normalized_hint}",
-            urls=_hull_sources(normalized_hint),
-        )
-        if hinted is not None:
-            return hinted
 
+    candidates: list[int] = []
+    for candidate in (mapped_image_id, image_id, normalized_hint):
+        if candidate is None or candidate <= 0 or candidate in candidates:
+            continue
+        candidates.append(candidate)
+
+    errors: list[PrivateAssetError] = []
+    saw_clean_miss = False
+    for candidate in candidates:
+        result, error = await _try_hull_candidate(
+            logical_image_id=image_id,
+            source_image_id=candidate,
+        )
+        if result is not None:
+            return result
+        if error is not None:
+            errors.append(error)
+        else:
+            saw_clean_miss = True
+
+    if errors and not saw_clean_miss and len(errors) == len(candidates):
+        raise PrivateAssetError(
+            "All candidate hull artwork sources failed: "
+            + " | ".join(str(error) for error in errors)
+        )
     return None
 
 
