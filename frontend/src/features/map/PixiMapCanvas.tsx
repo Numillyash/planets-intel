@@ -127,10 +127,12 @@ export function PixiMapCanvas({
     const intelRef = useRef(intel);
     const boundsRef = useRef<MapBounds | null>(null);
     const lastFitGameIdRef = useRef<number | null>(null);
+    const waypointPickShipIdRef = useRef<number | null>(null);
     const loadedHullAssetUrlsRef = useRef<Set<string>>(new Set());
     const loadingHullAssetUrlsRef = useRef<Set<string>>(new Set());
     const [appReadyRevision, setAppReadyRevision] = useState(0);
     const [hullArtworkRevision, setHullArtworkRevision] = useState(0);
+    const [waypointPickShipId, setWaypointPickShipId] = useState<number | null>(null);
     const [historicalTracks, setHistoricalTracks] =
         useState<HistoricalShipTrack[]>([]);
     const [trackMode, setTrackMode] = useState<ShipTrackMode>("all");
@@ -166,6 +168,44 @@ export function PixiMapCanvas({
 
     intelRef.current = intel;
     boundsRef.current = bounds;
+
+    useEffect(() => {
+        const startPicking = (event: Event) => {
+            const detail = (event as CustomEvent<{ shipId?: number }>).detail;
+            if (typeof detail?.shipId !== "number") return;
+            waypointPickShipIdRef.current = detail.shipId;
+            setWaypointPickShipId(detail.shipId);
+            if (appRef.current !== null) {
+                appRef.current.canvas.style.cursor = "crosshair";
+            }
+        };
+
+        const cancelPicking = (event: Event) => {
+            const detail = (event as CustomEvent<{ shipId?: number }>).detail;
+            if (
+                typeof detail?.shipId === "number"
+                && waypointPickShipIdRef.current !== detail.shipId
+            ) return;
+            const cancelledShipId = waypointPickShipIdRef.current;
+            waypointPickShipIdRef.current = null;
+            setWaypointPickShipId(null);
+            if (appRef.current !== null) {
+                appRef.current.canvas.style.cursor = "";
+            }
+            if (cancelledShipId !== null) {
+                window.dispatchEvent(new CustomEvent("intel-waypoint-pick-cancelled", {
+                    detail: { shipId: cancelledShipId },
+                }));
+            }
+        };
+
+        window.addEventListener("intel-waypoint-pick-start", startPicking);
+        window.addEventListener("intel-waypoint-pick-cancel", cancelPicking);
+        return () => {
+            window.removeEventListener("intel-waypoint-pick-start", startPicking);
+            window.removeEventListener("intel-waypoint-pick-cancel", cancelPicking);
+        };
+    }, []);
 
     useEffect(() => {
         let cancelled = false;
@@ -273,6 +313,9 @@ export function PixiMapCanvas({
             appRef.current = nextApp;
             host.replaceChildren(nextApp.canvas);
             nextApp.canvas.className = "intel-pixi-canvas";
+            if (waypointPickShipIdRef.current !== null) {
+                nextApp.canvas.style.cursor = "crosshair";
+            }
 
             const world = new Container();
             worldRef.current = world;
@@ -341,6 +384,9 @@ export function PixiMapCanvas({
             let pointerId: number | null = null;
             let lastX = 0;
             let lastY = 0;
+            let pointerDownX = 0;
+            let pointerDownY = 0;
+            let pointerMoved = false;
 
             const screenPoint = (event: PointerEvent | WheelEvent) => {
                 const rect = canvas.getBoundingClientRect();
@@ -421,6 +467,9 @@ export function PixiMapCanvas({
                 pointerId = event.pointerId;
                 lastX = point.x;
                 lastY = point.y;
+                pointerDownX = point.x;
+                pointerDownY = point.y;
+                pointerMoved = false;
                 hideHazardTooltip();
                 canvas.setPointerCapture(event.pointerId);
                 canvas.classList.add("is-dragging");
@@ -430,6 +479,14 @@ export function PixiMapCanvas({
                 const point = screenPoint(event);
                 const currentWorld = worldRef.current;
                 if (dragging && pointerId === event.pointerId && currentWorld !== null) {
+                    if (
+                        Math.hypot(
+                            point.x - pointerDownX,
+                            point.y - pointerDownY,
+                        ) > 4
+                    ) {
+                        pointerMoved = true;
+                    }
                     currentWorld.position.x += point.x - lastX;
                     currentWorld.position.y += point.y - lastY;
                     lastX = point.x;
@@ -442,13 +499,40 @@ export function PixiMapCanvas({
 
             const stopDragging = (event: PointerEvent) => {
                 if (pointerId !== event.pointerId) return;
+                const point = screenPoint(event);
                 dragging = false;
                 pointerId = null;
                 canvas.classList.remove("is-dragging");
                 if (canvas.hasPointerCapture(event.pointerId)) {
                     canvas.releasePointerCapture(event.pointerId);
                 }
-                updateHazardTooltip(screenPoint(event));
+
+                const pickingShipId = waypointPickShipIdRef.current;
+                const currentWorld = worldRef.current;
+                if (
+                    pickingShipId !== null
+                    && !pointerMoved
+                    && currentWorld !== null
+                ) {
+                    const scale = Math.max(currentWorld.scale.x, 0.0001);
+                    const worldX = (point.x - currentWorld.position.x) / scale;
+                    const renderedY = (point.y - currentWorld.position.y) / scale;
+                    const factualY = -renderedY;
+                    waypointPickShipIdRef.current = null;
+                    setWaypointPickShipId(null);
+                    canvas.style.cursor = "";
+                    hideHazardTooltip();
+                    window.dispatchEvent(new CustomEvent("intel-waypoint-picked", {
+                        detail: {
+                            shipId: pickingShipId,
+                            x: Math.round(worldX),
+                            y: Math.round(factualY),
+                        },
+                    }));
+                    return;
+                }
+
+                updateHazardTooltip(point);
             };
 
             const handleWheel = (event: WheelEvent) => {
@@ -518,12 +602,17 @@ export function PixiMapCanvas({
         const oldChildren = world.removeChildren();
         for (const child of oldChildren) child.destroy();
 
+        const selectMapEntity = (entity: SelectedEntity) => {
+            if (waypointPickShipIdRef.current !== null) return;
+            onSelect(entity);
+        };
+
         drawMinefields({
             world,
             intel,
             bounds,
             selected,
-            onSelect,
+            onSelect: selectMapEntity,
         });
 
         drawHistoricalShipTracks({
@@ -546,7 +635,7 @@ export function PixiMapCanvas({
             basesByPlanet,
             labelMode,
             selected,
-            onSelect,
+            onSelect: selectMapEntity,
             loadedHullAssetUrls: loadedHullAssetUrlsRef.current,
         });
 
@@ -561,7 +650,11 @@ export function PixiMapCanvas({
             selectedEventKey: selectedCombatEvent === null
                 ? null
                 : combatEventKey(selectedCombatEvent),
-            onSelectEvent: setSelectedCombatEvent,
+            onSelectEvent: (event) => {
+                if (waypointPickShipIdRef.current === null) {
+                    setSelectedCombatEvent(event);
+                }
+            },
         });
 
         if (hoverLayerRef.current !== null) hoverLayerRef.current.visible = false;
@@ -621,6 +714,28 @@ export function PixiMapCanvas({
     return (
         <>
             <div className="intel-map-canvas-host" ref={hostRef} />
+
+            {waypointPickShipId !== null && (
+                <div
+                    style={{
+                        position: "absolute",
+                        zIndex: 6,
+                        left: "50%",
+                        top: 12,
+                        transform: "translateX(-50%)",
+                        padding: "7px 11px",
+                        border: "1px solid rgba(98, 184, 255, 0.65)",
+                        borderRadius: 7,
+                        background: "rgba(8, 17, 28, 0.94)",
+                        color: "#a9dbff",
+                        fontSize: 12,
+                        fontWeight: 700,
+                        pointerEvents: "none",
+                    }}
+                >
+                    Pick waypoint for ship #{waypointPickShipId} · click map
+                </div>
+            )}
 
             <CombatEventPanel
                 gameId={intel.game_id}
