@@ -22,19 +22,19 @@
     position: relative;
     z-index: 2;
     display: block;
-    width: 58px;
-    height: 58px;
     object-fit: contain;
-    object-position: center;
+    object-position: center center;
     filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.8));
 }
 
-/* The original Nu hull PNGs are centered for the map/VCR presentation, but
-   read a few pixels low/right inside our compact 44px details thumbnail.
-   Keep this correction local to the header instead of modifying the shared
-   artwork or the Pixi position. */
+/* Hull artwork in the 44px entity header must fit inside the thumbnail.
+   Do not reuse starmap sizing or compensate with a positional transform:
+   Nu hull canvases have different aspect ratios and the old 58px image was
+   being cropped by the 44px container. */
 .operational-entity-icon-hull img {
-    transform: translate(-2px, -3px);
+    width: 40px;
+    height: 40px;
+    transform: none;
 }
 
 .operational-entity-icon-planet-artwork img {
