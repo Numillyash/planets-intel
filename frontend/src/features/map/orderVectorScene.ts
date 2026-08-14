@@ -14,6 +14,7 @@ import {
     type MapBounds,
     type SelectedEntity,
 } from "./mapModel";
+import { getCachedMovementPrediction } from "./movementPredictionState";
 import {
     routeDistance,
     shipPlannedRoute,
@@ -233,18 +234,26 @@ export function drawOrderVectors({
     bounds,
     selected,
     drafts,
-    prediction,
+    prediction: suppliedPrediction,
 }: {
     world: Container;
     intel: PrivateIntelMapResponse;
     bounds: MapBounds;
     selected: SelectedEntity | null;
     drafts: ShipOrderDraft[];
-    prediction: DraftMovementPredictionResponse | null;
+    prediction?: DraftMovementPredictionResponse | null;
 }) {
     const primarySlotId = isCombinedPrivateIntel(intel)
         ? intel.primary_observer.player_slot_id
         : intel.observer.player_slot_id;
+    const linkedAccountId = isCombinedPrivateIntel(intel)
+        ? intel.primary_observer.linked_account_id
+        : intel.observer.linked_account_id;
+    const prediction = suppliedPrediction ?? getCachedMovementPrediction(
+        intel.game_id,
+        linkedAccountId,
+        intel.turn,
+    );
     const selectedShipId = selected?.kind === "ship"
         ? selected.value.ship_id
         : null;
