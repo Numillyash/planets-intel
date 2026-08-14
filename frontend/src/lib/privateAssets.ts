@@ -1,4 +1,4 @@
-const PRIVATE_ARTWORK_VERSION = 2;
+const PRIVATE_ARTWORK_VERSION = 3;
 
 function positiveImageId(value: unknown): number | null {
     if (typeof value === "number" && Number.isInteger(value) && value > 0) {
@@ -35,6 +35,19 @@ function safePlanetArtworkName(value: unknown): string | null {
     return match?.[1] ?? null;
 }
 
+function payloadHullArtworkHint(
+    payload?: Record<string, unknown> | null,
+): number | null {
+    if (payload === undefined || payload === null) return null;
+    for (const key of ["img", "imageid", "image_id", "image"]) {
+        const candidate = positiveImageId(payload[key]);
+        if (candidate !== null) {
+            return normalizedNuHullArtworkId(candidate);
+        }
+    }
+    return null;
+}
+
 export function privateHullArtworkId(
     hullId: number | null,
     payload?: Record<string, unknown> | null,
@@ -43,16 +56,7 @@ export function privateHullArtworkId(
     if (canonicalHullId !== null) {
         return normalizedNuHullArtworkId(canonicalHullId);
     }
-
-    if (payload !== undefined && payload !== null) {
-        for (const key of ["img", "imageid", "image_id", "image"]) {
-            const candidate = positiveImageId(payload[key]);
-            if (candidate !== null) {
-                return normalizedNuHullArtworkId(candidate);
-            }
-        }
-    }
-    return null;
+    return payloadHullArtworkHint(payload);
 }
 
 export function privateHullAssetUrl(
@@ -61,7 +65,16 @@ export function privateHullAssetUrl(
 ): string | null {
     const imageId = privateHullArtworkId(hullId, payload);
     if (imageId === null) return null;
-    return `/api/private-assets/hulls/${imageId}.png?v=${PRIVATE_ARTWORK_VERSION}`;
+
+    const hint = payloadHullArtworkHint(payload);
+    const params = new URLSearchParams({
+        v: String(PRIVATE_ARTWORK_VERSION),
+    });
+    if (hint !== null && hint !== imageId) {
+        params.set("hint", String(hint));
+    }
+
+    return `/api/private-assets/hulls/${imageId}.png?${params.toString()}`;
 }
 
 export function privatePlanetArtworkName(
