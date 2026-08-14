@@ -119,6 +119,18 @@
     white-space: nowrap;
 }
 
+.game-object-own {
+    background: rgba(41, 75, 108, 0.14);
+}
+
+.dashboard-inline-control {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #8196af;
+    font-size: 0.72rem;
+}
+
 .dashboard-embedded-panel {
     margin: 0;
     padding: 18px 20px;
@@ -183,22 +195,6 @@
     color: #879bb5;
 }
 
-.game-dashboard-turn-chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 7px;
-    padding: 0 22px 22px;
-}
-
-.game-dashboard-turn-chips span {
-    padding: 5px 9px;
-    border: 1px solid #2e435c;
-    border-radius: 999px;
-    background: #0d1825;
-    color: #a9bed4;
-    font-size: 0.72rem;
-}
-
 .game-dashboard-settings-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -242,29 +238,465 @@
     line-height: 1.55;
 }
 
-.game-dashboard-legacy-embed {
+.game-dashboard-empty {
+    padding: 24px;
+    color: #8195ad;
+    text-align: center;
+}
+
+/* Diplomacy: current observer only, instead of the full NxN relation matrix. */
+.diplomacy-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 10px;
+    padding: 0 22px 22px;
+}
+
+.diplomacy-card {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px 14px;
+    border: 1px solid #24364d;
+    border-radius: 8px;
+    background: #09121c;
+}
+
+.diplomacy-card > div:first-child {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.diplomacy-card > div:first-child span,
+.diplomacy-unknown {
+    color: #71869f;
+    font-size: 0.72rem;
+}
+
+.diplomacy-card dl {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    margin: 0;
+}
+
+.diplomacy-card dl > div {
+    padding: 7px 8px;
+    border-radius: 6px;
+    background: #0d1926;
+}
+
+.diplomacy-card dt {
+    color: #748aa5;
+    font-size: 0.62rem;
+    text-transform: uppercase;
+}
+
+.diplomacy-card dd {
+    margin: 3px 0 0;
+    color: #e4edf7;
+    font-weight: 750;
+}
+
+/* Advantages */
+.advantages-summary,
+.time-machine-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 8px;
+    padding: 0 22px 16px;
+}
+
+.advantages-summary > div,
+.time-machine-summary > div {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 11px;
+    border: 1px solid #21334a;
+    border-radius: 7px;
+    background: #09131f;
+}
+
+.advantages-summary span,
+.time-machine-summary span {
+    color: #7189a4;
+    font-size: 0.64rem;
+    text-transform: uppercase;
+}
+
+.advantage-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 10px;
+    padding: 0 22px 22px;
+}
+
+.advantage-card {
+    padding: 12px 14px;
+    border: 1px solid #293a4f;
+    border-radius: 8px;
+    background: #0a131e;
+}
+
+.advantage-card.is-active {
+    border-color: #3e8060;
+    background: rgba(20, 64, 44, 0.36);
+}
+
+.advantage-card > div {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.advantage-card > div span {
+    color: #87b9a0;
+    font-size: 0.68rem;
+}
+
+.advantage-card p {
+    margin: 9px 0;
+    color: #91a5bd;
+    line-height: 1.45;
+}
+
+.advantage-card small {
+    color: #657b96;
+}
+
+/* Time machine */
+.time-machine-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.time-machine-preview-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    padding: 0 22px 12px;
+}
+
+.time-machine-preview-grid > section {
+    padding: 12px;
+    border: 1px solid #203147;
+    border-radius: 8px;
+    background: #08111b;
+}
+
+.time-machine-preview-grid h3 {
+    margin: 0 0 9px;
+}
+
+.time-machine-object-list {
+    display: flex;
+    max-height: 360px;
+    flex-direction: column;
+    gap: 5px;
+    overflow-y: auto;
+}
+
+.time-machine-object-list > div {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 7px 8px;
+    border-bottom: 1px solid #18263a;
+}
+
+.time-machine-object-list small,
+.time-machine-note {
+    color: #758ba5;
+}
+
+.time-machine-note {
+    margin: 0;
+    padding: 0 22px 22px;
+    font-size: 0.72rem;
+}
+
+/* VCR */
+.vcr-dashboard-layout {
+    display: grid;
+    grid-template-columns: minmax(230px, 300px) minmax(0, 1fr);
+    min-height: 570px;
+    border-top: 1px solid #1d2c40;
+}
+
+.vcr-event-list {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 10px;
+    border-right: 1px solid #1e2d41;
+    background: #080f18;
+}
+
+.vcr-event-list button {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 11px;
+    border: 1px solid #27384d;
+    border-radius: 7px;
+    background: #0c1622;
+    color: #dce7f3;
+    text-align: left;
+    font: inherit;
+    cursor: pointer;
+}
+
+.vcr-event-list button.is-active {
+    border-color: #a88646;
+    background: #2e2818;
+}
+
+.vcr-event-list span {
+    color: #8499b1;
+    font-size: 0.68rem;
+    line-height: 1.35;
+}
+
+.vcr-player {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 12px;
+    padding: 14px;
+}
+
+.vcr-player-heading,
+.vcr-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.vcr-player-heading > div:first-child {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.vcr-player-heading span {
+    color: #7089a5;
+    font-size: 0.66rem;
+    text-transform: uppercase;
+}
+
+.vcr-nav-buttons,
+.vcr-speed-buttons {
+    display: flex;
+    gap: 6px;
+}
+
+.vcr-battlefield {
     position: relative;
-    min-height: 520px;
+    min-height: 230px;
     overflow: hidden;
+    border: 1px solid #25364b;
+    border-radius: 10px;
+    background:
+        radial-gradient(circle at 50% 50%, rgba(42, 68, 93, 0.18), transparent 55%),
+        #03070c;
 }
 
-.game-dashboard-legacy-embed > div[style*="position: absolute"] {
-    position: relative !important;
-    z-index: auto !important;
-    top: auto !important;
-    right: auto !important;
-    bottom: auto !important;
-    left: auto !important;
-    width: 100% !important;
-    max-width: none !important;
-    max-height: none !important;
-    margin: 10px 0 0 !important;
+.vcr-range-line {
+    position: absolute;
+    top: 50%;
+    right: 4%;
+    left: 4%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, #28415c, transparent);
 }
 
-.game-dashboard-legacy-embed > button[style*="position: absolute"] {
-    position: relative !important;
-    inset: auto !important;
-    margin-top: 10px !important;
+.vcr-combat-object {
+    position: absolute;
+    top: 50%;
+    display: flex;
+    width: 150px;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    transform: translate(-50%, -50%);
+    color: #dce9f6;
+    text-align: center;
+    transition: left 45ms linear;
+}
+
+.vcr-object-marker {
+    display: block;
+    width: 34px;
+    height: 34px;
+    border: 2px solid #8cc0ef;
+    background: #385f82;
+    box-shadow: 0 0 18px rgba(98, 173, 235, 0.32);
+}
+
+.vcr-combat-object.is-planet .vcr-object-marker {
+    border-radius: 50%;
+    background: radial-gradient(circle at 32% 28%, #d8efff 0 7%, #5588b4 18%, #1b3855 72%);
+}
+
+.vcr-combat-object.is-ship .vcr-object-marker {
+    clip-path: polygon(50% 0, 100% 100%, 50% 78%, 0 100%);
+}
+
+.vcr-combat-object.is-hit .vcr-object-marker {
+    border-color: #ff9b76;
+    box-shadow: 0 0 28px rgba(255, 83, 54, 0.9);
+}
+
+.vcr-combat-object strong {
+    max-width: 150px;
+    overflow: hidden;
+    font-size: 0.7rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.vcr-combat-object small {
+    color: #f3c377;
+    font-size: 0.62rem;
+}
+
+.vcr-event-flash {
+    position: absolute;
+    top: 18px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #ffd575;
+    font-size: 0.72rem;
+    font-weight: 900;
+    letter-spacing: 0.16em;
+}
+
+.vcr-status-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+}
+
+.vcr-status-card {
+    padding: 10px 11px;
+    border: 1px solid #25374d;
+    border-radius: 8px;
+    background: #09131e;
+}
+
+.vcr-status-card > div:first-child {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.vcr-status-card > div:first-child span {
+    color: #7088a4;
+    font-size: 0.62rem;
+}
+
+.vcr-status-card dl {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    margin: 9px 0;
+}
+
+.vcr-status-card dl > div {
+    padding: 6px;
+    border-radius: 5px;
+    background: #0d1a28;
+}
+
+.vcr-status-card dt {
+    color: #6e849e;
+    font-size: 0.58rem;
+    text-transform: uppercase;
+}
+
+.vcr-status-card dd {
+    margin: 2px 0 0;
+    font-weight: 750;
+}
+
+.vcr-charge-bars {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.vcr-charge-bars label {
+    display: grid;
+    grid-template-columns: 65px minmax(0, 1fr);
+    align-items: center;
+    gap: 7px;
+    color: #71869f;
+    font-size: 0.62rem;
+}
+
+.vcr-charge-bars progress {
+    width: 100%;
+}
+
+.vcr-controls {
+    justify-content: flex-start;
+}
+
+.vcr-controls > span {
+    margin-left: auto;
+    color: #758ba5;
+    font-size: 0.7rem;
+}
+
+.vcr-speed-buttons button {
+    min-width: 42px;
+    padding: 6px 8px;
+    border: 1px solid #2b4059;
+    border-radius: 6px;
+    background: #0a1420;
+    color: #91a9c2;
+    cursor: pointer;
+}
+
+.vcr-speed-buttons button.is-active {
+    border-color: #6f9bc4;
+    background: #17304a;
+    color: #eef6fd;
+}
+
+.vcr-timeline {
+    width: 100%;
+}
+
+.vcr-event-strip {
+    min-height: 28px;
+    padding: 7px 9px;
+    border-radius: 6px;
+    background: #070e17;
+    color: #a7bad0;
+    font-size: 0.68rem;
+    text-transform: capitalize;
+}
+
+@media (max-width: 900px) {
+    .vcr-dashboard-layout,
+    .time-machine-preview-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .vcr-event-list {
+        max-height: 220px;
+        overflow-y: auto;
+        border-right: 0;
+        border-bottom: 1px solid #1e2d41;
+    }
 }
 
 @media (max-width: 780px) {
@@ -275,5 +707,10 @@
     .game-dashboard-tabs button {
         min-height: 42px;
         padding: 0 12px;
+    }
+
+    .vcr-status-grid,
+    .diplomacy-card dl {
+        grid-template-columns: 1fr;
     }
 }
