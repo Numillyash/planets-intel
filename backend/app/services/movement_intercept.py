@@ -103,6 +103,23 @@ def _invalid_target_result(
     )
 
 
+def _unresolved_target_result(
+    order: InterceptOrder,
+    reason: str,
+) -> InterceptResult:
+    return InterceptResult(
+        ship_id=order.ship_id,
+        status=InterceptStatus.UNRESOLVED_TARGET,
+        position=None,
+        target_ship_id=order.target_ship_id,
+        target_position=None,
+        requested_distance=None,
+        moved_distance=None,
+        certain=False,
+        reason=reason,
+    )
+
+
 def _movement_result(
     order: InterceptOrder,
     target_position: Point,
@@ -143,12 +160,10 @@ def resolve_classic_intercepts(
 ) -> dict[int, InterceptResult]:
     """Resolve Classic Intercept in ascending Ship ID order.
 
-    ``prior_final_positions`` must contain ships that have already completed
-    Tow/Move Most. Interceptors are seeded at their own origins and then updated
-    one-by-one. This preserves the Classic behavior where a lower-ID
-    interceptor targeting a higher-ID interceptor sees the latter before its
-    Intercept move, while a higher-ID interceptor can follow a lower-ID target
-    after it has moved.
+    ``prior_final_positions`` must contain ships whose position after Tow/Move
+    Most is actually known. Interceptors are seeded at their own origins and
+    then updated one-by-one. Missing post-Move-Most target positions remain
+    unresolved rather than being misclassified as invalid target locks.
     """
 
     orders_by_id = {order.ship_id: order for order in orders}
@@ -173,9 +188,9 @@ def resolve_classic_intercepts(
         else:
             target_position = positions.get(order.target_ship_id)
             if target_position is None:
-                result = _invalid_target_result(
+                result = _unresolved_target_result(
                     order,
-                    "Intercept target has no known position in the movement state.",
+                    "Intercept target is visible, but its post-Move-Most position is not known.",
                 )
             else:
                 result = _movement_result(order, target_position)
@@ -264,28 +279,18 @@ def resolve_chained_intercepts(
                 if target_result.position is None:
                     if ship_id in results:
                         return results[ship_id]
-                    result = InterceptResult(
-                        ship_id=ship_id,
-                        status=InterceptStatus.UNRESOLVED_TARGET,
-                        position=None,
-                        target_ship_id=target_id,
-                        target_position=None,
-                        requested_distance=None,
-                        moved_distance=None,
-                        certain=False,
-                        reason=(
-                            "Intercept target final position is unresolved, so "
-                            "this chained interceptor cannot be predicted safely."
-                        ),
+                    result = _unresolved_target_result(
+                        order,
+                        "Intercept target final position is unresolved, so this chained interceptor cannot be predicted safely.",
                     )
                 else:
                     result = _movement_result(order, target_result.position)
             else:
                 target_position = prior_final_positions.get(target_id)
                 if target_position is None:
-                    result = _invalid_target_result(
+                    result = _unresolved_target_result(
                         order,
-                        "Intercept target has no known post-Move-Most position.",
+                        "Intercept target is visible, but its post-Move-Most position is not known.",
                     )
                 else:
                     result = _movement_result(order, target_position)
