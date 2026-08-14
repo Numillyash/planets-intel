@@ -59,7 +59,8 @@
     color: #dce9f8;
 }
 
-.order-draft-row select {
+.order-draft-row select,
+.order-draft-target-choice select {
     min-width: 0;
     border: 1px solid #35516d;
     border-radius: 6px;
@@ -71,6 +72,26 @@
 .order-draft-waypoint-value {
     color: #8dcaff;
     font-weight: 700;
+}
+
+.order-draft-target-choice {
+    display: grid;
+    gap: 6px;
+    border: 1px solid rgba(98, 184, 255, 0.42);
+    border-radius: 8px;
+    padding: 10px;
+    background: rgba(20, 47, 72, 0.32);
+    color: #9fd4ff;
+    font-size: 12px;
+}
+
+.order-draft-target-choice strong {
+    color: #dce9f8;
+}
+
+.order-draft-target-choice span {
+    color: #8ba4c2;
+    font-size: 11px;
 }
 
 .order-draft-actions {
