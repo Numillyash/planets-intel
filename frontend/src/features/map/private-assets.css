@@ -1,3 +1,5 @@
+@import "./stellar-operational.css";
+
 .operational-entity-icon-hull {
     display: grid;
     place-items: center;
