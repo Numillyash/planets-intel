@@ -1,6 +1,7 @@
 import { Container, Graphics, Text } from "pixi.js";
 import type {
     HistoricalCombatEvent,
+    HistoricalCombatEventSide,
     HistoricalCombatOutcome,
     HistoricalShipTrack,
     HistoricalShipTrackPoint,
@@ -49,6 +50,164 @@ function combatOutcomeLabel(outcome: HistoricalCombatOutcome | null): string {
         case "survived_to_later_combat": return "survived to later combat";
         default: return "final result unknown";
     }
+}
+
+function trackedCombatSide(
+    track: HistoricalShipTrack,
+    point: HistoricalShipTrackPoint,
+): HistoricalCombatEventSide | null {
+    const event = point.combat_event;
+    if (event === null) return null;
+    return event.sides.find(
+        (side) =>
+            side.object_kind === "ship"
+            && side.object_id === track.ship_id,
+    ) ?? null;
+}
+
+function pointHullId(
+    track: HistoricalShipTrack,
+    point: HistoricalShipTrackPoint,
+): number | null {
+    const combatHullId = trackedCombatSide(track, point)?.hull_id ?? null;
+    if (combatHullId !== null) return combatHullId;
+    return point.turn === track.last_turn ? track.hull_id : null;
+}
+
+function lifecycleBreak(
+    track: HistoricalShipTrack,
+    previous: HistoricalShipTrackPoint,
+    current: HistoricalShipTrackPoint,
+): boolean {
+    if (current.gap_from_previous) return true;
+
+    // A VCR-derived defeat with no later structured host survival evidence
+    // closes this ship-id lifecycle. Planets.nu can later reuse the numeric ID
+    // for a newly built ship, which must never be connected to the old hull.
+    if (
+        previous.combat_outcome === "defeated"
+        && !previous.post_host_confirmed
+    ) {
+        return true;
+    }
+
+    const previousHullId = pointHullId(track, previous);
+    const currentHullId = pointHullId(track, current);
+    return previousHullId !== null
+        && currentHullId !== null
+        && previousHullId !== currentHullId;
+}
+
+function splitLifecycleSegments(
+    track: HistoricalShipTrack,
+    points: HistoricalShipTrackPoint[],
+): HistoricalShipTrackPoint[][] {
+    if (points.length === 0) return [];
+
+    const segments: HistoricalShipTrackPoint[][] = [[points[0]]];
+    for (let index = 1; index < points.length; index += 1) {
+        const previous = points[index - 1];
+        const current = points[index];
+        if (lifecycleBreak(track, previous, current)) {
+            segments.push([current]);
+        } else {
+            segments[segments.length - 1].push(current);
+        }
+    }
+    return segments;
+}
+
+function segmentOwnerId(
+    track: HistoricalShipTrack,
+    points: HistoricalShipTrackPoint[],
+): number | null {
+    for (let index = points.length - 1; index >= 0; index -= 1) {
+        const ownerId = trackedCombatSide(track, points[index])?.owner_id ?? null;
+        if (ownerId !== null) return ownerId;
+    }
+    return track.owner_id;
+}
+
+function drawTrackArrowHead({
+    world,
+    previous,
+    current,
+    bounds,
+    color,
+    alpha,
+    width,
+}: {
+    world: Container;
+    previous: HistoricalShipTrackPoint;
+    current: HistoricalShipTrackPoint;
+    bounds: MapBounds;
+    color: number;
+    alpha: number;
+    width: number;
+}) {
+    const fromX = previous.x;
+    const fromY = renderY(previous.y, bounds);
+    const toX = current.x;
+    const toY = renderY(current.y, bounds);
+    const angle = Math.atan2(toY - fromY, toX - fromX);
+    const size = width >= 2 ? 6.2 : 4.2;
+    const wing = Math.PI * 0.78;
+
+    const arrow = new Graphics()
+        .moveTo(toX, toY)
+        .lineTo(
+            toX + Math.cos(angle + wing) * size,
+            toY + Math.sin(angle + wing) * size,
+        )
+        .moveTo(toX, toY)
+        .lineTo(
+            toX + Math.cos(angle - wing) * size,
+            toY + Math.sin(angle - wing) * size,
+        )
+        .stroke({ color, alpha, width });
+    world.addChild(arrow);
+}
+
+function drawTrackDistanceLabel({
+    world,
+    previous,
+    current,
+    bounds,
+    color,
+    alpha,
+}: {
+    world: Container;
+    previous: HistoricalShipTrackPoint;
+    current: HistoricalShipTrackPoint;
+    bounds: MapBounds;
+    color: number;
+    alpha: number;
+}) {
+    const distance = Math.hypot(
+        current.x - previous.x,
+        current.y - previous.y,
+    );
+    if (distance < 0.5) return;
+
+    const x = (previous.x + current.x) / 2;
+    const y = (
+        renderY(previous.y, bounds)
+        + renderY(current.y, bounds)
+    ) / 2;
+    const label = new Text({
+        text: `${distance.toFixed(1)} ly`,
+        style: {
+            fill: color,
+            fontFamily: "Inter, Arial, sans-serif",
+            fontSize: 8,
+            stroke: { color: 0x060a10, width: 3 },
+        },
+        resolution: 2,
+    });
+    label.anchor.set(0.5, 1);
+    label.alpha = alpha;
+    label.position.set(x, y - 3);
+    world.addChild(label);
 }
 
 function drawTrackPoint({ world, point, bounds, color, selectedTrack, throughTurn, fadePerTurn }: {
@@ -160,53 +319,100 @@ export function drawHistoricalShipTracks({
     const selectedShipId = selected?.kind === "ship"
         ? selected.value.ship_id
         : null;
+    const selectedHullId = selected?.kind === "ship"
+        ? selected.value.hull_id
+        : null;
     const minimumTurn = lookbackTurns === null
         ? Number.NEGATIVE_INFINITY
         : throughTurn - Math.max(lookbackTurns, 0);
 
     for (const track of tracks) {
-        const selectedTrack = selectedShipId === track.ship_id;
-        if (mode === "selected" && !selectedTrack) continue;
-
         const points = track.points.filter(
             (point) => point.turn >= minimumTurn && point.turn <= throughTurn,
         );
         if (points.length === 0) continue;
 
-        const color = trackColor(track.owner_id);
-        for (let index = 1; index < points.length; index += 1) {
-            const previous = points[index - 1];
-            const current = points[index];
-            if (current.gap_from_previous) continue;
+        const segments = splitLifecycleSegments(track, points);
+        const trackMatchesSelection = selectedShipId === track.ship_id;
+        let selectedSegmentIndex = trackMatchesSelection
+            ? segments.length - 1
+            : -1;
 
-            const line = new Graphics()
-                .moveTo(previous.x, renderY(previous.y, bounds))
-                .lineTo(current.x, renderY(current.y, bounds))
-                .stroke({
+        if (
+            trackMatchesSelection
+            && selectedHullId !== null
+        ) {
+            for (let index = segments.length - 1; index >= 0; index -= 1) {
+                const knownHullIds = segments[index]
+                    .map((point) => pointHullId(track, point))
+                    .filter((value): value is number => value !== null);
+                if (
+                    knownHullIds.length === 0
+                    || knownHullIds.includes(selectedHullId)
+                ) {
+                    selectedSegmentIndex = index;
+                    break;
+                }
+            }
+        }
+
+        segments.forEach((segment, segmentIndex) => {
+            const selectedSegment = segmentIndex === selectedSegmentIndex;
+            if (mode === "selected" && !selectedSegment) return;
+
+            const color = trackColor(segmentOwnerId(track, segment));
+            for (let index = 1; index < segment.length; index += 1) {
+                const previous = segment[index - 1];
+                const current = segment[index];
+                const alpha = fadedAlpha(
+                    selectedSegment ? 0.94 : 0.34,
+                    current.turn,
+                    throughTurn,
+                    fadePerTurn,
+                    selectedSegment ? 0.08 : 0.025,
+                );
+                const width = selectedSegment ? 2.5 : 1.15;
+
+                const line = new Graphics()
+                    .moveTo(previous.x, renderY(previous.y, bounds))
+                    .lineTo(current.x, renderY(current.y, bounds))
+                    .stroke({ color, width, alpha });
+                world.addChild(line);
+
+                drawTrackArrowHead({
+                    world,
+                    previous,
+                    current,
+                    bounds,
                     color,
-                    width: selectedTrack ? 2.5 : 1.15,
-                    alpha: fadedAlpha(
-                        selectedTrack ? 0.94 : 0.34,
-                        current.turn,
-                        throughTurn,
-                        fadePerTurn,
-                        selectedTrack ? 0.08 : 0.025,
-                    ),
+                    alpha,
+                    width,
                 });
-            world.addChild(line);
-        }
 
-        for (const point of points) {
-            drawTrackPoint({
-                world,
-                point,
-                bounds,
-                color,
-                selectedTrack,
-                throughTurn,
-                fadePerTurn,
-            });
-        }
+                if (selectedSegment) {
+                    drawTrackDistanceLabel({
+                        world,
+                        previous,
+                        current,
+                        bounds,
+                        color,
+                        alpha: Math.min(alpha + 0.08, 1),
+                    });
+                }
+            }
+
+            for (const point of segment) {
+                drawTrackPoint({
+                    world,
+                    point,
+                    bounds,
+                    color,
+                    selectedTrack: selectedSegment,
+                    throughTurn,
+                    fadePerTurn,
+                });
+            }
+        });
     }
 }
 
@@ -260,7 +466,10 @@ function drawVcrOnlyShipContacts({
 
             const x = centerX + Math.cos(angle) * radius;
             const y = centerY + Math.sin(angle) * radius;
-            const color = trackColor(contact.track.owner_id);
+            const color = trackColor(
+                trackedCombatSide(contact.track, contact.point)?.owner_id
+                ?? contact.track.owner_id,
+            );
             const confirmedBySequence =
                 contact.point.combat_outcome === "survived_to_later_combat";
             const evidenceColor =
@@ -292,7 +501,9 @@ function drawVcrOnlyShipContacts({
             world.addChild(connector);
 
             // VCR-only contacts are ships, not combat-event markers. Render a
-            // ship-like triangle and keep the outer ring as provenance.
+            // ship-like triangle and keep the outer ring as provenance. Do not
+            // add a numeric ship label: dense starmap IDs were deliberately
+            // removed from the normal operational map.
             const marker = new Graphics()
                 .moveTo(0, -6)
                 .lineTo(5.5, 5)
@@ -314,20 +525,6 @@ function drawVcrOnlyShipContacts({
                 requestEventSelection(contact.event);
             });
             world.addChild(marker);
-
-            const label = new Text({
-                text: `#${contact.track.ship_id}`,
-                style: {
-                    fill: 0xeaf3ff,
-                    fontFamily: "Inter, Arial, sans-serif",
-                    fontSize: 9,
-                    fontWeight: "600",
-                    stroke: { color: 0x060a10, width: 3 },
-                },
-                resolution: 2,
-            });
-            label.position.set(x + 10, y - 15);
-            world.addChild(label);
         });
     }
 }
