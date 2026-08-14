@@ -55,6 +55,17 @@ def _positive_image_id(value: Any) -> int | None:
     return None
 
 
+def _normalized_hull_artwork_id(hull_id: int) -> int:
+    # The Nu client namespaces many campaign/upgraded hull ids in the 1000,
+    # 2000 and 3000 ranges while reusing the base hull artwork. Historic Nu
+    # addons mirror the client by stripping that namespace for hull images.
+    if 1000 < hull_id < 4000:
+        normalized = hull_id % 1000
+        if normalized > 0:
+            return normalized
+    return hull_id
+
+
 def _catalog_hull_image_id(hull_id: int) -> int | None:
     """Resolve an explicit Nu artwork id when it differs from the hull id."""
     with SessionLocal() as session:
@@ -65,12 +76,15 @@ def _catalog_hull_image_id(hull_id: int) -> int | None:
 
         for catalog in catalogs:
             for hull in catalog.hulls:
-                if _positive_image_id(hull.get("id")) != hull_id:
+                raw_id = _positive_image_id(hull.get("id"))
+                if raw_id is None:
+                    continue
+                if raw_id != hull_id and _normalized_hull_artwork_id(raw_id) != hull_id:
                     continue
                 for key in ("img", "imageid", "image_id", "image"):
                     image_id = _positive_image_id(hull.get(key))
                     if image_id is not None:
-                        return image_id
+                        return _normalized_hull_artwork_id(image_id)
                 return None
     return None
 
@@ -145,40 +159,78 @@ async def _ensure_png(
         return target
 
 
+async def _ensure_png_from_sources(
+    *,
+    kind: str,
+    name: str,
+    urls: list[str],
+) -> Path | None:
+    cached = _cached_png(kind, name)
+    if cached is not None:
+        return cached
+
+    last_error: PrivateAssetError | None = None
+    for url in urls:
+        try:
+            result = await _ensure_png(kind=kind, name=name, url=url)
+        except PrivateAssetError as exc:
+            last_error = exc
+            continue
+        if result is not None:
+            return result
+
+    if last_error is not None:
+        raise last_error
+    return None
+
+
 def cached_hull_path(hull_image_id: int) -> Path | None:
-    return _cached_png("hulls", str(hull_image_id))
+    image_id = _normalized_hull_artwork_id(hull_image_id)
+    return _cached_png("hulls", str(image_id))
 
 
 async def ensure_hull_asset(hull_image_id: int) -> Path | None:
     settings = get_settings()
+    image_id = _normalized_hull_artwork_id(hull_image_id)
     base_url = settings.planetsnu_hull_asset_base_url.rstrip("/")
 
-    direct = await _ensure_png(
+    direct = await _ensure_png_from_sources(
         kind="hulls",
-        name=str(hull_image_id),
-        url=f"{base_url}/{hull_image_id}.png",
+        name=str(image_id),
+        urls=[
+            f"{base_url}/{image_id}.png",
+            f"https://play.planets.nu/img/hulls/{image_id}.png",
+        ],
     )
     if direct is not None:
         return direct
 
-    mapped_image_id = _catalog_hull_image_id(hull_image_id)
-    if mapped_image_id is None or mapped_image_id == hull_image_id:
+    mapped_image_id = _catalog_hull_image_id(image_id)
+    if mapped_image_id is None or mapped_image_id == image_id:
         return None
 
-    # Cache the mapped artwork under the logical hull id as well. Existing
-    # consumers that only know hull_id then become correct without a new API.
-    return await _ensure_png(
+    return await _ensure_png_from_sources(
         kind="hulls",
-        name=str(hull_image_id),
-        url=f"{base_url}/{mapped_image_id}.png",
+        name=str(image_id),
+        urls=[
+            f"{base_url}/{mapped_image_id}.png",
+            f"https://play.planets.nu/img/hulls/{mapped_image_id}.png",
+        ],
+    )
+
+
+async def ensure_planet_asset(planet_image_name: str) -> Path | None:
+    settings = get_settings()
+    base_url = settings.planetsnu_planet_asset_base_url.rstrip("/")
+    return await _ensure_png_from_sources(
+        kind="planets",
+        name=planet_image_name,
+        urls=[
+            f"{base_url}/{planet_image_name}.png",
+            f"https://play.planets.nu/img/planets/{planet_image_name}.png",
+        ],
     )
 
 
 async def ensure_unknown_planet_asset() -> Path | None:
-    settings = get_settings()
-    base_url = settings.planetsnu_planet_asset_base_url.rstrip("/")
-    return await _ensure_png(
-        kind="planets",
-        name="unknown",
-        url=f"{base_url}/unknown.png",
-    )
+    return await ensure_planet_asset("unknown")
