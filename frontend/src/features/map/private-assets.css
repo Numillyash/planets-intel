@@ -8,8 +8,37 @@
 }
 
 .operational-entity-icon-hull img {
+    position: relative;
+    z-index: 2;
     width: 58px;
     height: 58px;
     object-fit: contain;
     filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.8));
+}
+
+.operational-entity-icon-hull-fallback {
+    position: absolute;
+    z-index: 1;
+    width: 24px;
+    height: 24px;
+    border: 1px solid rgba(174, 207, 239, 0.65);
+    background: rgba(87, 137, 180, 0.42);
+    clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+    transition: opacity 120ms ease;
+}
+
+.operational-entity-icon-hull-fallback.is-freighter {
+    clip-path: polygon(16% 22%, 84% 22%, 100% 50%, 84% 78%, 16% 78%, 0 50%);
+}
+
+.operational-entity-icon-hull-fallback.is-torpedo {
+    clip-path: polygon(50% 0, 92% 88%, 50% 70%, 8% 88%);
+}
+
+.operational-entity-icon-hull-fallback.is-carrier {
+    clip-path: polygon(50% 0, 100% 30%, 84% 88%, 50% 100%, 16% 88%, 0 30%);
+}
+
+.operational-entity-icon-hull-fallback.is-hidden {
+    opacity: 0;
 }
