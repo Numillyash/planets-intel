@@ -1,0 +1,40 @@
+.vcr-hull-artwork-shell {
+    position: relative;
+    display: flex;
+    width: 96px;
+    height: 64px;
+    align-items: center;
+    justify-content: center;
+    overflow: visible;
+}
+
+.vcr-hull-artwork {
+    display: block;
+    width: 150px;
+    height: 100px;
+    max-width: none;
+    object-fit: contain;
+    pointer-events: none;
+    user-select: none;
+    filter:
+        drop-shadow(0 0 2px rgba(220, 238, 255, 0.7))
+        drop-shadow(0 0 10px rgba(76, 147, 205, 0.35));
+}
+
+.vcr-hull-artwork-shell.is-facing-left .vcr-hull-artwork {
+    transform: scaleX(-1);
+}
+
+.vcr-combat-object.is-hit .vcr-hull-artwork {
+    filter:
+        drop-shadow(0 0 2px rgba(255, 239, 220, 0.95))
+        drop-shadow(0 0 14px rgba(255, 72, 42, 0.95));
+}
+
+.vcr-hull-artwork-shell > .vcr-object-marker[hidden] {
+    display: none;
+}
+
+.vcr-hull-artwork-shell > .vcr-object-marker:not([hidden]) {
+    display: block;
+}
