@@ -1,0 +1,273 @@
+from typing import Any
+
+from sqlalchemy import delete, select
+from sqlalchemy.orm import Session
+
+from app.db.session import SessionLocal
+from app.models.planets_account import PlanetsAccount
+from app.models.private_observation_batch import PrivateObservationBatch
+from app.models.ship_observation import ShipObservation
+from app.models.ship_order_draft import ShipOrderDraft
+
+
+class OrderDraftAccessError(Exception):
+    pass
+
+
+class OrderDraftNotFound(Exception):
+    pass
+
+
+def _payload_int(payload: dict[str, Any], *keys: str) -> int | None:
+    normalized = {key.lower() for key in keys}
+    for key, value in payload.items():
+        if key.lower() not in normalized:
+            continue
+        if isinstance(value, bool):
+            return None
+        if isinstance(value, int):
+            return value
+        if isinstance(value, float) and value.is_integer():
+            return int(value)
+        if isinstance(value, str):
+            try:
+                return int(value.strip())
+            except ValueError:
+                return None
+    return None
+
+
+def _account(
+    session: Session,
+    *,
+    user_id: int,
+    linked_account_id: int,
+) -> PlanetsAccount:
+    account = session.execute(
+        select(PlanetsAccount).where(
+            PlanetsAccount.id == linked_account_id,
+            PlanetsAccount.user_id == user_id,
+            PlanetsAccount.is_active.is_(True),
+        )
+    ).scalar_one_or_none()
+    if account is None:
+        raise OrderDraftAccessError("Linked Planets.nu account is unavailable")
+    return account
+
+
+def _factual_ship_context(
+    session: Session,
+    *,
+    user_id: int,
+    linked_account_id: int,
+    game_id: int,
+    turn: int,
+    ship_id: int,
+) -> tuple[PrivateObservationBatch, ShipObservation]:
+    _account(
+        session,
+        user_id=user_id,
+        linked_account_id=linked_account_id,
+    )
+
+    batch = session.execute(
+        select(PrivateObservationBatch)
+        .where(
+            PrivateObservationBatch.game_id == game_id,
+            PrivateObservationBatch.turn == turn,
+            PrivateObservationBatch.observer_planets_account_id
+            == linked_account_id,
+        )
+        .order_by(
+            PrivateObservationBatch.observed_at.desc(),
+            PrivateObservationBatch.id.desc(),
+        )
+        .limit(1)
+    ).scalar_one_or_none()
+    if batch is None:
+        raise OrderDraftNotFound(
+            "No factual snapshot is stored for this observer and turn"
+        )
+
+    ship = session.execute(
+        select(ShipObservation).where(
+            ShipObservation.batch_id == batch.id,
+            ShipObservation.ship_id == ship_id,
+        )
+    ).scalar_one_or_none()
+    if ship is None:
+        raise OrderDraftNotFound("Ship is not present in the factual snapshot")
+
+    if (
+        batch.source_player_slot_id is None
+        or ship.owner_id != batch.source_player_slot_id
+    ):
+        raise OrderDraftAccessError(
+            "Order drafts are only allowed for ships controlled by the observer"
+        )
+
+    return batch, ship
+
+
+def _serialize(
+    draft: ShipOrderDraft,
+    *,
+    batch: PrivateObservationBatch,
+    ship: ShipObservation,
+) -> dict[str, Any]:
+    upstream_waypoint_x = _payload_int(
+        ship.payload,
+        "waypointx",
+        "targetx",
+        "waypoint_x",
+    )
+    upstream_waypoint_y = _payload_int(
+        ship.payload,
+        "waypointy",
+        "targety",
+        "waypoint_y",
+    )
+    changed_waypoint = (
+        draft.waypoint_x is not None
+        and draft.waypoint_y is not None
+        and (
+            draft.waypoint_x != upstream_waypoint_x
+            or draft.waypoint_y != upstream_waypoint_y
+        )
+    )
+
+    return {
+        "game_id": draft.game_id,
+        "linked_account_id": draft.linked_account_id,
+        "turn": draft.turn,
+        "ship_id": draft.ship_id,
+        "base_batch_id": draft.base_batch_id,
+        "base_snapshot_hash": draft.base_snapshot_hash,
+        "stale": draft.base_snapshot_hash != batch.snapshot_hash,
+        "upstream_warp": ship.warp,
+        "upstream_waypoint_x": upstream_waypoint_x,
+        "upstream_waypoint_y": upstream_waypoint_y,
+        "warp": draft.warp,
+        "waypoint_x": draft.waypoint_x,
+        "waypoint_y": draft.waypoint_y,
+        "changed_warp": draft.warp is not None and draft.warp != ship.warp,
+        "changed_waypoint": changed_waypoint,
+        "source": "local_order_draft",
+    }
+
+
+def get_ship_order_draft(
+    *,
+    user_id: int,
+    linked_account_id: int,
+    game_id: int,
+    turn: int,
+    ship_id: int,
+) -> dict[str, Any] | None:
+    with SessionLocal() as session:
+        batch, ship = _factual_ship_context(
+            session,
+            user_id=user_id,
+            linked_account_id=linked_account_id,
+            game_id=game_id,
+            turn=turn,
+            ship_id=ship_id,
+        )
+        draft = session.execute(
+            select(ShipOrderDraft).where(
+                ShipOrderDraft.user_id == user_id,
+                ShipOrderDraft.linked_account_id == linked_account_id,
+                ShipOrderDraft.game_id == game_id,
+                ShipOrderDraft.turn == turn,
+                ShipOrderDraft.ship_id == ship_id,
+            )
+        ).scalar_one_or_none()
+        if draft is None:
+            return None
+        return _serialize(draft, batch=batch, ship=ship)
+
+
+def upsert_ship_order_draft(
+    *,
+    user_id: int,
+    linked_account_id: int,
+    game_id: int,
+    turn: int,
+    ship_id: int,
+    warp: int | None,
+    waypoint_x: int | None,
+    waypoint_y: int | None,
+) -> dict[str, Any]:
+    with SessionLocal() as session:
+        batch, ship = _factual_ship_context(
+            session,
+            user_id=user_id,
+            linked_account_id=linked_account_id,
+            game_id=game_id,
+            turn=turn,
+            ship_id=ship_id,
+        )
+        draft = session.execute(
+            select(ShipOrderDraft).where(
+                ShipOrderDraft.user_id == user_id,
+                ShipOrderDraft.linked_account_id == linked_account_id,
+                ShipOrderDraft.game_id == game_id,
+                ShipOrderDraft.turn == turn,
+                ShipOrderDraft.ship_id == ship_id,
+            )
+        ).scalar_one_or_none()
+
+        if draft is None:
+            draft = ShipOrderDraft(
+                user_id=user_id,
+                linked_account_id=linked_account_id,
+                game_id=game_id,
+                turn=turn,
+                ship_id=ship_id,
+                base_batch_id=batch.id,
+                base_snapshot_hash=batch.snapshot_hash,
+                warp=warp,
+                waypoint_x=waypoint_x,
+                waypoint_y=waypoint_y,
+            )
+            session.add(draft)
+        else:
+            if warp is not None:
+                draft.warp = warp
+            if waypoint_x is not None and waypoint_y is not None:
+                draft.waypoint_x = waypoint_x
+                draft.waypoint_y = waypoint_y
+            # Saving against fresh factual state acknowledges the latest snapshot.
+            draft.base_batch_id = batch.id
+            draft.base_snapshot_hash = batch.snapshot_hash
+
+        session.commit()
+        session.refresh(draft)
+        return _serialize(draft, batch=batch, ship=ship)
+
+
+def discard_ship_order_draft(
+    *,
+    user_id: int,
+    linked_account_id: int,
+    game_id: int,
+    turn: int,
+    ship_id: int,
+) -> bool:
+    with SessionLocal() as session:
+        _account(
+            session,
+            user_id=user_id,
+            linked_account_id=linked_account_id,
+        )
+        result = session.execute(
+            delete(ShipOrderDraft).where(
+                ShipOrderDraft.user_id == user_id,
+                ShipOrderDraft.linked_account_id == linked_account_id,
+                ShipOrderDraft.game_id == game_id,
+                ShipOrderDraft.turn == turn,
+                ShipOrderDraft.ship_id == ship_id,
+            )
+        )
+        session.commit()
+        return bool(result.rowcount)
