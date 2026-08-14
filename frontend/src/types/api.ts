@@ -180,6 +180,16 @@ export interface PrivateIntelObservationMetadata {
     observed_at: string;
 }
 
+export interface PrivateIntelCounts {
+    planets: number;
+    ships: number;
+    starbases: number;
+    nebulas: number;
+    ion_storms: number;
+    star_clusters: number;
+    minefields: number;
+}
+
 export interface PlanetObservationResponse {
     planet_id: number;
     owner_id: number | null;
@@ -210,8 +220,14 @@ export interface StarbaseObservationResponse {
     payload: Record<string, unknown>;
 }
 
+export type StellarCartographyFeatureType =
+    | "nebula"
+    | "ion_storm"
+    | "star_cluster"
+    | "minefield";
+
 export interface StellarCartographyObservationResponse {
-    feature_type: string;
+    feature_type: StellarCartographyFeatureType;
     feature_id: number;
     name: string | null;
     info_turn: number | null;
@@ -219,16 +235,6 @@ export interface StellarCartographyObservationResponse {
     y: number | null;
     radius: number | null;
     payload: Record<string, unknown>;
-}
-
-export interface PrivateIntelCounts {
-    planets: number;
-    ships: number;
-    starbases: number;
-    nebulas: number;
-    ion_storms: number;
-    star_clusters: number;
-    minefields: number;
 }
 
 export interface LatestPrivateIntelResponse {
