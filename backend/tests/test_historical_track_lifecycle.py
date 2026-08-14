@@ -66,6 +66,62 @@ class HistoricalTrackLifecycleTests(unittest.TestCase):
         self.assertEqual(segments[1]["owner_id"], 8)
         self.assertEqual(segments[1]["hull_id"], 92)
 
+    def test_reused_ship_id_split_survives_later_turn(self):
+        track = {
+            "ship_id": 20,
+            "name": "PATRIOT CLASS LIGHT CARRIER",
+            "owner_id": 8,
+            "hull_id": 92,
+            "first_turn": 9,
+            "last_turn": 11,
+            "points": [
+                {
+                    "turn": 9,
+                    "name": "ILL WIND CLASS BATTLECRUISER",
+                    "owner_id": 4,
+                    "hull_id": 70,
+                    "gap_from_previous": False,
+                    "evidence": "combat",
+                    "combat_outcome": "defeated",
+                    "post_host_confirmed": False,
+                    "combat_event": None,
+                },
+                {
+                    "turn": 10,
+                    "name": "PATRIOT CLASS LIGHT CARRIER",
+                    "owner_id": 8,
+                    "hull_id": 92,
+                    "gap_from_previous": False,
+                    "evidence": "scan",
+                    "combat_outcome": None,
+                    "post_host_confirmed": False,
+                    "combat_event": None,
+                },
+                {
+                    "turn": 11,
+                    "name": "PATRIOT CLASS LIGHT CARRIER",
+                    "owner_id": 8,
+                    "hull_id": 92,
+                    "gap_from_previous": False,
+                    "evidence": "scan",
+                    "combat_outcome": None,
+                    "post_host_confirmed": False,
+                    "combat_event": None,
+                },
+            ],
+        }
+
+        segments = _segment_track(track)
+
+        self.assertEqual(len(segments), 2)
+        self.assertEqual(segments[0]["first_turn"], 9)
+        self.assertEqual(segments[0]["last_turn"], 9)
+        self.assertEqual(segments[0]["hull_id"], 70)
+        self.assertEqual(segments[1]["first_turn"], 10)
+        self.assertEqual(segments[1]["last_turn"], 11)
+        self.assertEqual(segments[1]["hull_id"], 92)
+        self.assertEqual(len(segments[1]["points"]), 2)
+
     def test_reacquisition_gap_does_not_create_new_identity(self):
         track = {
             "ship_id": 38,
