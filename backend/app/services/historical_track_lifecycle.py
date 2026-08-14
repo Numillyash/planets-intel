@@ -32,13 +32,22 @@ def _point_hull_id(
     track: dict[str, Any],
     point: dict[str, Any],
 ) -> int | None:
+    # Raw historical points now preserve the factual hull observed on that turn.
+    # Prefer it over track-level metadata so an already-proven lifecycle split
+    # remains stable after a later turn makes that point no longer `last_turn`.
+    hull_id = point.get("hull_id")
+    if isinstance(hull_id, int):
+        return int(hull_id)
+
     side = _tracked_combat_side(track, point)
     if side is not None and isinstance(side.get("hull_id"), int):
         return int(side["hull_id"])
 
+    # Compatibility fallback for older/unit-test shaped raw tracks that do not
+    # carry per-point identity metadata yet.
     if point.get("turn") == track.get("last_turn"):
-        hull_id = track.get("hull_id")
-        return int(hull_id) if isinstance(hull_id, int) else None
+        track_hull_id = track.get("hull_id")
+        return int(track_hull_id) if isinstance(track_hull_id, int) else None
     return None
 
 
@@ -70,15 +79,22 @@ def _segment_metadata(
     hull_id = None
 
     for point in reversed(points):
+        if name is None and isinstance(point.get("name"), str):
+            name = point["name"]
+        if owner_id is None and isinstance(point.get("owner_id"), int):
+            owner_id = int(point["owner_id"])
+        if hull_id is None and isinstance(point.get("hull_id"), int):
+            hull_id = int(point["hull_id"])
+
         side = _tracked_combat_side(track, point)
-        if side is None:
-            continue
-        if name is None and isinstance(side.get("name"), str):
-            name = side["name"]
-        if owner_id is None and isinstance(side.get("owner_id"), int):
-            owner_id = int(side["owner_id"])
-        if hull_id is None and isinstance(side.get("hull_id"), int):
-            hull_id = int(side["hull_id"])
+        if side is not None:
+            if name is None and isinstance(side.get("name"), str):
+                name = side["name"]
+            if owner_id is None and isinstance(side.get("owner_id"), int):
+                owner_id = int(side["owner_id"])
+            if hull_id is None and isinstance(side.get("hull_id"), int):
+                hull_id = int(side["hull_id"])
+
         if name is not None and owner_id is not None and hull_id is not None:
             break
 
