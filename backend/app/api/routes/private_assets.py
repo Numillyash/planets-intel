@@ -1,6 +1,6 @@
 import re
 
-from fastapi import APIRouter, Depends, HTTPException, Path, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from fastapi.responses import FileResponse
 
 from app.api.dependencies.auth import require_user
@@ -32,10 +32,14 @@ def _file_response(path) -> FileResponse:
 )
 async def get_hull_asset(
     hull_image_id: int = Path(gt=0, le=10000),
+    hint: int | None = Query(default=None, gt=0, le=10000),
     _user: AppUser = Depends(require_user),
 ) -> FileResponse:
     try:
-        path = await ensure_hull_asset(hull_image_id)
+        path = await ensure_hull_asset(
+            hull_image_id,
+            image_hint=hint,
+        )
     except PrivateAssetError as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
