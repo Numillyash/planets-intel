@@ -1,4 +1,4 @@
-const PRIVATE_ARTWORK_VERSION = 4;
+const PRIVATE_ARTWORK_VERSION = 5;
 
 function positiveImageId(value: unknown): number | null {
     if (typeof value === "number" && Number.isInteger(value) && value > 0) {
