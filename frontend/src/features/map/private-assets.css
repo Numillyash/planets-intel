@@ -1,6 +1,8 @@
 @import "./stellar-operational.css";
 
-.operational-entity-icon-hull {
+.operational-entity-icon-hull,
+.operational-entity-icon-planet-artwork {
+    position: relative;
     display: grid;
     place-items: center;
     overflow: hidden;
@@ -9,23 +11,56 @@
     background: radial-gradient(circle, #172638 0, #09111b 70%);
 }
 
-.operational-entity-icon-hull img {
+.operational-entity-icon-planet-artwork {
+    border-radius: 50%;
+    border-color: #5e86ad;
+    background: radial-gradient(circle, #1e3348 0, #09111b 72%);
+}
+
+.operational-entity-icon-hull img,
+.operational-entity-icon-planet-artwork img {
     position: relative;
     z-index: 2;
+    display: block;
     width: 58px;
     height: 58px;
     object-fit: contain;
+    object-position: center;
     filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.8));
+}
+
+.operational-entity-icon-planet-artwork img {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
 }
 
 .operational-entity-icon-hull-fallback {
     position: absolute;
+    top: 50%;
+    left: 50%;
     z-index: 1;
     width: 24px;
     height: 24px;
     border: 1px solid rgba(174, 207, 239, 0.65);
     background: rgba(87, 137, 180, 0.42);
     clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+    transform: translate(-50%, -50%);
+    transform-origin: center;
+    transition: opacity 120ms ease;
+}
+
+.operational-entity-icon-planet-fallback {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    z-index: 1;
+    width: 30px;
+    height: 30px;
+    border: 1px solid rgba(176, 218, 249, 0.75);
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #d9f1ff 0 5%, #6aa6d2 9% 30%, #244766 58%, #0c1722 100%);
+    transform: translate(-50%, -50%);
     transition: opacity 120ms ease;
 }
 
@@ -41,6 +76,7 @@
     clip-path: polygon(50% 0, 100% 30%, 84% 88%, 50% 100%, 16% 88%, 0 30%);
 }
 
-.operational-entity-icon-hull-fallback.is-hidden {
+.operational-entity-icon-hull-fallback.is-hidden,
+.operational-entity-icon-planet-fallback.is-hidden {
     opacity: 0;
 }
