@@ -44,7 +44,9 @@ export interface ShipVisualPosition {
 
 export const PLANET_LINK_RANGE = 81;
 export const PLANET_RADIUS = 7;
-export const PLANET_ORBIT_RADIUS = 18;
+// Visual separation only. Keep it compact enough that a ship still reads as
+// being at the planet rather than physically many light-years away.
+export const PLANET_ORBIT_RADIUS = 10;
 
 export const SHIP_ROLE_LABEL: Record<ShipRole, string> = {
     freighter: "Freighter",
@@ -261,7 +263,7 @@ function clusteredOffset(
         capacity = firstRingCapacity + ring * 4;
     }
 
-    const radius = baseRadius + ring * 10;
+    const radius = baseRadius + ring * 6;
     const countOnRing = Math.min(capacity, size - (index - remainingIndex));
     const angle = -Math.PI / 2 + (Math.PI * 2 * remainingIndex) / Math.max(countOnRing, 1);
 
@@ -317,7 +319,7 @@ export function shipVisualPositions(
                     true,
                 );
             } else if (ships.length > 1) {
-                offset = clusteredOffset(index, ships.length, 10, 6);
+                offset = clusteredOffset(index, ships.length, 6, 6);
             }
 
             result.push({
