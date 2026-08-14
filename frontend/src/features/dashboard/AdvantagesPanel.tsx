@@ -120,9 +120,7 @@ export function AdvantagesPanel({
             .filter((record) => {
                 const id = recordId(record);
                 if (id === null) return false;
-                return active.has(id)
-                    || raceIds.size === 0
-                    || raceIds.has(id);
+                return active.has(id) || raceIds.has(id);
             })
             .sort((left, right) => {
                 const leftId = recordId(left) ?? 999999;
@@ -132,7 +130,7 @@ export function AdvantagesPanel({
                 return leftActive - rightActive || leftId - rightId;
             });
 
-        return { active, race, relevant };
+        return { active, race, raceIds, relevant };
     }, [catalog, selectedPlayer]);
 
     return (
@@ -198,6 +196,14 @@ export function AdvantagesPanel({
                             </strong>
                         </div>
                         <div>
+                            <span>Race advantage IDs</span>
+                            <strong>
+                                {view.raceIds.size > 0
+                                    ? [...view.raceIds].join(", ")
+                                    : "Not exposed by race record"}
+                            </strong>
+                        </div>
+                        <div>
                             <span>Active hull IDs</span>
                             <strong>
                                 {numericIds(selectedPlayer.active_hulls).join(", ")
@@ -209,8 +215,9 @@ export function AdvantagesPanel({
                     <div className="advantage-grid">
                         {view.relevant.length === 0 ? (
                             <div className="game-dashboard-empty">
-                                The catalog contains no advantages matching
-                                this race/player context.
+                                No race-scoped advantage records could be matched.
+                                The raw active/race IDs above are still factual
+                                and are not replaced with guessed names.
                             </div>
                         ) : view.relevant.map((record) => {
                             const id = recordId(record);
@@ -238,7 +245,7 @@ export function AdvantagesPanel({
                                     <div>
                                         <strong>{name}</strong>
                                         <span>
-                                            {isActive ? "Active" : "Available / catalog"}
+                                            {isActive ? "Active" : "Race catalog"}
                                         </span>
                                     </div>
                                     {description !== null && (
