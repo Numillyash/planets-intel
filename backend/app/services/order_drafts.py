@@ -113,6 +113,28 @@ def _factual_ship_context(
     return batch, ship
 
 
+def _validate_intercept_target(
+    session: Session,
+    *,
+    batch_id: int,
+    ship_id: int,
+    target_ship_id: int,
+) -> None:
+    if target_ship_id == ship_id:
+        raise OrderDraftAccessError("A ship cannot intercept itself")
+
+    target = session.execute(
+        select(ShipObservation.ship_id).where(
+            ShipObservation.batch_id == batch_id,
+            ShipObservation.ship_id == target_ship_id,
+        )
+    ).scalar_one_or_none()
+    if target is None:
+        raise OrderDraftAccessError(
+            "Intercept target is not visible in the latest factual snapshot"
+        )
+
+
 def _serialize(
     draft: ShipOrderDraft,
     *,
@@ -154,8 +176,14 @@ def _serialize(
         "warp": draft.warp,
         "waypoint_x": draft.waypoint_x,
         "waypoint_y": draft.waypoint_y,
+        "movement_mode": draft.movement_mode,
+        "intercept_target_ship_id": draft.intercept_target_ship_id,
         "changed_warp": draft.warp is not None and draft.warp != ship.warp,
         "changed_waypoint": changed_waypoint,
+        # We deliberately do not infer the semantic Nu mission from numeric
+        # mission ids here. A local Intercept draft is therefore treated as a
+        # changed movement order until save-back mapping is verified separately.
+        "changed_movement": draft.movement_mode == "intercept",
         "source": "local_order_draft",
     }
 
@@ -201,6 +229,8 @@ def upsert_ship_order_draft(
     warp: int | None,
     waypoint_x: int | None,
     waypoint_y: int | None,
+    movement_mode: str | None,
+    intercept_target_ship_id: int | None,
 ) -> dict[str, Any]:
     with SessionLocal() as session:
         batch, ship = _factual_ship_context(
@@ -211,6 +241,19 @@ def upsert_ship_order_draft(
             turn=turn,
             ship_id=ship_id,
         )
+
+        if movement_mode == "intercept":
+            if intercept_target_ship_id is None:
+                raise OrderDraftAccessError(
+                    "Intercept movement requires a target ship"
+                )
+            _validate_intercept_target(
+                session,
+                batch_id=batch.id,
+                ship_id=ship_id,
+                target_ship_id=intercept_target_ship_id,
+            )
+
         draft = session.execute(
             select(ShipOrderDraft).where(
                 ShipOrderDraft.user_id == user_id,
@@ -233,6 +276,12 @@ def upsert_ship_order_draft(
                 warp=warp,
                 waypoint_x=waypoint_x,
                 waypoint_y=waypoint_y,
+                movement_mode=movement_mode or "waypoint",
+                intercept_target_ship_id=(
+                    intercept_target_ship_id
+                    if movement_mode == "intercept"
+                    else None
+                ),
             )
             session.add(draft)
         else:
@@ -241,6 +290,12 @@ def upsert_ship_order_draft(
             if waypoint_x is not None and waypoint_y is not None:
                 draft.waypoint_x = waypoint_x
                 draft.waypoint_y = waypoint_y
+            if movement_mode is not None:
+                draft.movement_mode = movement_mode
+                if movement_mode == "waypoint":
+                    draft.intercept_target_ship_id = None
+                else:
+                    draft.intercept_target_ship_id = intercept_target_ship_id
             draft.base_batch_id = batch.id
             draft.base_snapshot_hash = batch.snapshot_hash
 
