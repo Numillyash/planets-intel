@@ -13,6 +13,8 @@ import type {
 export type PlanetLabelMode = "none" | "id" | "name";
 export type ShipRole = "freighter" | "torpedo" | "carrier" | "warship";
 
+type PositionedShip = MapShipObservation & { x: number; y: number };
+
 export type SelectedEntity =
     | { kind: "planet"; value: MapPlanetObservation }
     | { kind: "ship"; value: MapShipObservation }
@@ -283,7 +285,7 @@ export function shipVisualPositions(
     bounds: MapBounds,
 ): ShipVisualPosition[] {
     const positionedShips = intel.ships.filter(
-        (ship): ship is MapShipObservation & { x: number; y: number } =>
+        (ship): ship is PositionedShip =>
             ship.x !== null && ship.y !== null,
     );
     const planetsByCoordinate = new Map<string, MapPlanetObservation>();
@@ -293,7 +295,7 @@ export function shipVisualPositions(
         }
     }
 
-    const groups = new Map<string, Array<MapShipObservation & { x: number; y: number }>>();
+    const groups = new Map<string, PositionedShip[]>();
     for (const ship of positionedShips) {
         const key = coordinateKey(ship.x, ship.y);
         const group = groups.get(key) ?? [];
@@ -304,9 +306,15 @@ export function shipVisualPositions(
     const result: ShipVisualPosition[] = [];
     for (const group of groups.values()) {
         group.sort((a, b) => a.ship_id - b.ship_id);
-        const planet = planetsByCoordinate.get(coordinateKey(group[0].x, group[0].y)) ?? null;
-        for (let index = 0; index < group.length; index += 1) {
-            const ship = group[index];
+        const first = group[0];
+        if (first === undefined) {
+            continue;
+        }
+        const planet = planetsByCoordinate.get(
+            coordinateKey(first.x, first.y),
+        ) ?? null;
+
+        for (const [index, ship] of group.entries()) {
             const offset = clusteredOffset(
                 index,
                 group.length,
