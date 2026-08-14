@@ -47,16 +47,11 @@ def _lifecycle_break(
     previous: dict[str, Any],
     current: dict[str, Any],
 ) -> bool:
-    # VCR defeat is the strongest lifecycle boundary we currently have.
-    # If a later host report directly confirms survival at the same position,
-    # do not close the lifecycle; otherwise a later appearance of the numeric
-    # ship ID can be a newly built ship reusing that ID.
-    if (
-        previous.get("combat_outcome") == "defeated"
-        and not bool(previous.get("post_host_confirmed"))
-    ):
-        return True
-
+    # A numeric ship_id is reusable in Planets.nu, but a physical ship cannot
+    # change its hull. Therefore an observed hull replacement is strong enough
+    # to prove a new lifecycle. A generic VCR "defeated" status is deliberately
+    # not sufficient because the loser may have been captured rather than
+    # destroyed.
     previous_hull_id = _point_hull_id(track, previous)
     current_hull_id = _point_hull_id(track, current)
     return (
@@ -170,7 +165,5 @@ def get_historical_ship_tracks(
     return {
         **result,
         "tracks": tracks,
-        "track_identity_policy": (
-            "split_on_defeat_or_observed_hull_change"
-        ),
+        "track_identity_policy": "split_on_observed_hull_change",
     }
