@@ -35,6 +35,7 @@ import {
 } from "./navigationAnalysis";
 import { CombatEventPanel } from "./CombatEventPanel";
 import { drawMapScene } from "./mapScene";
+import { drawOrderVectors } from "./orderVectorScene";
 import {
     combatEventKey,
     drawCurrentCombatContacts,
@@ -42,6 +43,8 @@ import {
     type ShipTrackMode,
 } from "./historicalTrackScene";
 import { drawMinefields } from "./minefieldScene";
+import { TrackControls } from "./TrackControls";
+import { useMapOrderDrafts } from "./useMapOrderDrafts";
 
 
 function combatOutcomeLabel(outcome: HistoricalCombatOutcome | null): string {
@@ -165,6 +168,7 @@ export function PixiMapCanvas({
     const linkedAccountId = isCombinedPrivateIntel(intel)
         ? intel.primary_observer.linked_account_id
         : intel.observer.linked_account_id;
+    const orderDrafts = useMapOrderDrafts(intel, linkedAccountId);
 
     intelRef.current = intel;
     boundsRef.current = bounds;
@@ -639,6 +643,14 @@ export function PixiMapCanvas({
             loadedHullAssetUrls: loadedHullAssetUrlsRef.current,
         });
 
+        drawOrderVectors({
+            world,
+            intel,
+            bounds,
+            selected,
+            drafts: orderDrafts,
+        });
+
         drawCurrentCombatContacts({
             world,
             tracks: historicalTracks,
@@ -674,6 +686,7 @@ export function PixiMapCanvas({
         labelMode,
         links,
         onSelect,
+        orderDrafts,
         selected,
         selectedCombatEvent,
         shipPositions,
@@ -736,6 +749,15 @@ export function PixiMapCanvas({
                     Pick waypoint for ship #{waypointPickShipId} · click map
                 </div>
             )}
+
+            <TrackControls
+                fadePercent={trackFadePercent}
+                lookbackTurns={trackLookbackTurns}
+                mode={trackMode}
+                onFadeChange={setTrackFadePercent}
+                onLookbackChange={setTrackLookbackTurns}
+                onModeChange={setTrackMode}
+            />
 
             <CombatEventPanel
                 gameId={intel.game_id}
