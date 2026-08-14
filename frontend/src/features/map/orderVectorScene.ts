@@ -323,14 +323,11 @@ export function drawOrderVectors({
                         route: lockRoute,
                         bounds,
                         color: draft.stale ? 0xffc766 : 0xf29bff,
-                        alpha: 0.76,
-                        width: 1.55,
+                        alpha: 0.62,
+                        width: 1.35,
                         dashLength: 6,
                         gapLength: 5,
-                        label: (
-                            `INTERCEPT LOCK · #${target.ship_id}`
-                            + ` · ${lockDistance.toFixed(1)} ly sighting`
-                        ),
+                        label: `LOCK #${target.ship_id} · ${lockDistance.toFixed(0)} ly`,
                     });
                 }
             }
