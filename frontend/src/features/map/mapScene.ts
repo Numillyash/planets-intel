@@ -29,6 +29,7 @@ import {
 
 
 const UNKNOWN_OWNER_COLOR = 0x7b8798;
+const PLANETS_SELECTION_GREEN = 0x15f27a;
 
 
 function ownerColor(ownerId: number | null): number {
@@ -300,30 +301,30 @@ function drawStellarCartography(
 
 function shipMarker(role: ShipRole, color: number): Graphics {
     const marker = new Graphics();
-    const radius = 4.1;
+    const radius = 3.4;
 
     if (role === "freighter") {
         marker.rect(-radius, -radius, radius * 2, radius * 2);
     } else if (role === "carrier") {
         marker.poly([
-            0, -radius - 0.8,
+            0, -radius - 0.7,
             radius, -radius * 0.45,
             radius, radius * 0.45,
-            0, radius + 0.8,
+            0, radius + 0.7,
             -radius, radius * 0.45,
             -radius, -radius * 0.45,
         ]);
     } else if (role === "torpedo") {
         marker.poly([
-            0, -radius - 0.8,
+            0, -radius - 0.7,
             radius, radius,
             -radius, radius,
         ]);
     } else {
         marker.poly([
-            0, -radius - 0.8,
+            0, -radius - 0.7,
             radius, 0,
-            0, radius + 0.8,
+            0, radius + 0.7,
             -radius, 0,
         ]);
     }
@@ -331,9 +332,9 @@ function shipMarker(role: ShipRole, color: number): Graphics {
     marker
         .fill({ color, alpha: 0.96 })
         .stroke({
-            color: 0xffffff,
-            width: 0.8,
-            alpha: 0.68,
+            color: 0x061018,
+            width: 1.1,
+            alpha: 0.9,
         });
 
     return marker;
@@ -362,17 +363,19 @@ function addShipHullArtwork(
     });
 
     const ownerRing = new Graphics()
-        .circle(0, 0, isSelected ? 11 : 9)
+        .circle(0, 0, isSelected ? 8.5 : 7)
         .stroke({
-            color: isSelected ? 0xe8f3ff : ownerColor(position.ship.owner_id),
-            width: isSelected ? 1.7 : 1.25,
-            alpha: isSelected ? 0.96 : 0.9,
+            color: isSelected
+                ? PLANETS_SELECTION_GREEN
+                : ownerColor(position.ship.owner_id),
+            width: isSelected ? 1.8 : 1.2,
+            alpha: isSelected ? 1 : 0.92,
         });
 
     const sprite = Sprite.from(assetUrl);
     sprite.anchor.set(0.5);
-    sprite.width = isSelected ? 38 : 32;
-    sprite.height = isSelected ? 38 : 32;
+    sprite.width = isSelected ? 26 : 22;
+    sprite.height = isSelected ? 26 : 22;
     sprite.alpha = 0.98;
     sprite.eventMode = "none";
 
@@ -478,6 +481,30 @@ function drawSelectedShipTrajectory(
 }
 
 
+function drawShipVisualAnchor(
+    world: Container,
+    position: ShipVisualPosition,
+) {
+    const dx = position.x - position.anchorX;
+    const dy = position.y - position.anchorY;
+    if (Math.hypot(dx, dy) < 0.5) return;
+
+    const color = ownerColor(position.ship.owner_id);
+    const guide = new Graphics()
+        .moveTo(position.anchorX, position.anchorY)
+        .lineTo(position.x, position.y)
+        .stroke({ color, width: 0.8, alpha: 0.36 });
+    world.addChild(guide);
+
+    const factualAnchor = new Graphics()
+        .circle(0, 0, 1.45)
+        .fill({ color, alpha: 0.92 })
+        .stroke({ color: 0x071019, width: 0.7, alpha: 0.9 });
+    factualAnchor.position.set(position.anchorX, position.anchorY);
+    world.addChild(factualAnchor);
+}
+
+
 export function drawMapScene({
     world,
     intel,
@@ -546,14 +573,15 @@ export function drawMapScene({
         const orbitShips = shipsAtPlanet(intel.ships, planet);
         const starbase = basesByPlanet.get(planet.planet_id) ?? null;
         const isSelected = planetIsSelected(selected, planet);
+        const color = ownerColor(planet.owner_id);
 
         if (isSelected) {
             const selectionHalo = new Graphics()
-                .circle(0, 0, PLANET_RADIUS + 8)
+                .circle(0, 0, PLANET_RADIUS + 5)
                 .stroke({
-                    color: 0xe8f3ff,
-                    width: 2,
-                    alpha: 0.96,
+                    color: PLANETS_SELECTION_GREEN,
+                    width: 2.2,
+                    alpha: 1,
                 });
             selectionHalo.position.set(planet.x, y);
             world.addChild(selectionHalo);
@@ -561,11 +589,11 @@ export function drawMapScene({
 
         if (orbitShips.length > 0) {
             const orbitRing = new Graphics()
-                .circle(0, 0, PLANET_RADIUS + 4.5)
+                .circle(0, 0, PLANET_RADIUS + 2.8)
                 .stroke({
-                    color: isSelected ? 0xb7d8ff : 0x8fa2bb,
-                    width: isSelected ? 1.6 : 1.1,
-                    alpha: isSelected ? 0.94 : 0.68,
+                    color: isSelected ? PLANETS_SELECTION_GREEN : color,
+                    width: isSelected ? 1.2 : 0.9,
+                    alpha: isSelected ? 0.7 : 0.42,
                 });
             orbitRing.position.set(planet.x, y);
             world.addChild(orbitRing);
@@ -584,11 +612,11 @@ export function drawMapScene({
         }
 
         marker
-            .fill(ownerColor(planet.owner_id))
+            .fill({ color, alpha: 1 })
             .stroke({
-                color: starbase !== null ? 0xf3c969 : 0xf4f7fb,
-                width: starbase !== null ? 1.8 : 1.2,
-                alpha: starbase !== null ? 0.95 : 0.58,
+                color: starbase !== null ? 0xe9b934 : 0x071019,
+                width: starbase !== null ? 1.7 : 1.35,
+                alpha: 0.98,
             });
 
         marker.position.set(planet.x, y);
@@ -602,6 +630,13 @@ export function drawMapScene({
             });
         });
         world.addChild(marker);
+
+        const highlight = new Graphics()
+            .circle(-PLANET_RADIUS * 0.28, -PLANET_RADIUS * 0.28, 1.1)
+            .fill({ color: 0xffffff, alpha: starbase === null ? 0.42 : 0.18 });
+        highlight.position.set(planet.x, y);
+        highlight.eventMode = "none";
+        world.addChild(highlight);
 
         const normalLabel = planetLabel(planet, labelMode);
         const labelText = normalLabel ?? (
@@ -647,13 +682,15 @@ export function drawMapScene({
             assetUrl !== null && loadedHullAssetUrls.has(assetUrl)
         );
 
+        drawShipVisualAnchor(world, position);
+
         if (isSelected && !assetReady) {
             const halo = new Graphics()
-                .circle(0, 0, 8)
+                .circle(0, 0, 7)
                 .stroke({
-                    color: 0xe8f3ff,
-                    width: 1.6,
-                    alpha: 0.96,
+                    color: PLANETS_SELECTION_GREEN,
+                    width: 1.8,
+                    alpha: 1,
                 });
             halo.position.set(position.x, position.y);
             world.addChild(halo);
@@ -664,7 +701,7 @@ export function drawMapScene({
             ownerColor(position.ship.owner_id),
         );
 
-        if (assetReady) marker.alpha = 0.14;
+        if (assetReady) marker.alpha = 0.1;
 
         marker.position.set(position.x, position.y);
         marker.eventMode = "static";
@@ -682,7 +719,7 @@ export function drawMapScene({
             addShipHullArtwork(world, position, isSelected, onSelect);
         }
 
-        if (position.planetId !== null) {
+        if (position.planetId !== null || position.clusterSize > 1) {
             const shipLabel = new Text({
                 text: `#${position.ship.ship_id}`,
                 style: {
@@ -698,8 +735,8 @@ export function drawMapScene({
                 resolution: 2,
             });
             shipLabel.position.set(
-                position.x + 8,
-                position.y - 13,
+                position.x + 7,
+                position.y - 11,
             );
             world.addChild(shipLabel);
         }
