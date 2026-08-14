@@ -196,6 +196,8 @@ export function IntelboardGamePicker({
             };
         }
 
+        const accountId = selectedAccountId;
+
         async function loadGames() {
             setLoadingGames(true);
             setError(null);
@@ -203,7 +205,7 @@ export function IntelboardGamePicker({
             setDetailsByGameId(new Map());
 
             try {
-                const response = await getAccountGames(selectedAccountId);
+                const response = await getAccountGames(accountId);
                 if (cancelled) return;
                 setGames(response.games);
 
