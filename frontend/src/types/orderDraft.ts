@@ -1,3 +1,5 @@
+export type ShipDraftMovementMode = "waypoint" | "intercept";
+
 export interface ShipOrderDraft {
     game_id: number;
     linked_account_id: number;
@@ -14,9 +16,12 @@ export interface ShipOrderDraft {
     warp: number | null;
     waypoint_x: number | null;
     waypoint_y: number | null;
+    movement_mode: ShipDraftMovementMode;
+    intercept_target_ship_id: number | null;
 
     changed_warp: boolean;
     changed_waypoint: boolean;
+    changed_movement: boolean;
     source: "local_order_draft";
 }
 
@@ -24,4 +29,6 @@ export interface ShipOrderDraftUpdate {
     warp?: number;
     waypoint_x?: number;
     waypoint_y?: number;
+    movement_mode?: ShipDraftMovementMode;
+    intercept_target_ship_id?: number;
 }
