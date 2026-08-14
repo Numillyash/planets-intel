@@ -19,50 +19,6 @@ function rendered(point: MapPoint, bounds: MapBounds): RenderPoint {
 }
 
 
-function pointToward(
-    from: MapPoint,
-    to: MapPoint,
-    maxDistance: number,
-): MapPoint {
-    const dx = to.x - from.x;
-    const dy = to.y - from.y;
-    const distance = Math.hypot(dx, dy);
-    if (distance < 0.001 || maxDistance <= 0) return from;
-    if (distance <= maxDistance) return to;
-    const ratio = maxDistance / distance;
-    return {
-        x: from.x + dx * ratio,
-        y: from.y + dy * ratio,
-    };
-}
-
-
-function drawArrowHead(
-    world: Container,
-    from: RenderPoint,
-    to: RenderPoint,
-    color: number,
-    alpha: number,
-) {
-    const angle = Math.atan2(to.y - from.y, to.x - from.x);
-    const wing = Math.PI * 0.78;
-    const size = 6.5;
-    const arrow = new Graphics()
-        .moveTo(to.x, to.y)
-        .lineTo(
-            to.x + Math.cos(angle + wing) * size,
-            to.y + Math.sin(angle + wing) * size,
-        )
-        .moveTo(to.x, to.y)
-        .lineTo(
-            to.x + Math.cos(angle - wing) * size,
-            to.y + Math.sin(angle - wing) * size,
-        )
-        .stroke({ color, alpha, width: 1.55 });
-    world.addChild(arrow);
-}
-
-
 function drawSightingMarker(
     world: Container,
     point: RenderPoint,
@@ -77,6 +33,53 @@ function drawSightingMarker(
         .lineTo(point.x, point.y + 9)
         .stroke({ color, alpha: 0.72, width: 1 });
     world.addChild(marker);
+}
+
+
+function drawDashedCircle(
+    world: Container,
+    center: RenderPoint,
+    radius: number,
+    color: number,
+) {
+    if (radius < 0.5) return;
+
+    const circumference = Math.PI * 2 * radius;
+    const dashLength = 8;
+    const gapLength = 6;
+    const period = dashLength + gapLength;
+    const count = Math.max(Math.floor(circumference / period), 18);
+    const angularPeriod = (Math.PI * 2) / count;
+    const dashFraction = dashLength / period;
+    const graphics = new Graphics();
+
+    for (let index = 0; index < count; index += 1) {
+        const startAngle = index * angularPeriod;
+        const endAngle = startAngle + angularPeriod * dashFraction;
+        const subdivisions = 3;
+
+        for (let step = 0; step < subdivisions; step += 1) {
+            const leftAngle = startAngle
+                + (endAngle - startAngle) * (step / subdivisions);
+            const rightAngle = startAngle
+                + (endAngle - startAngle) * ((step + 1) / subdivisions);
+            const leftX = center.x + Math.cos(leftAngle) * radius;
+            const leftY = center.y + Math.sin(leftAngle) * radius;
+            const rightX = center.x + Math.cos(rightAngle) * radius;
+            const rightY = center.y + Math.sin(rightAngle) * radius;
+            graphics
+                .moveTo(leftX, leftY)
+                .lineTo(rightX, rightY);
+        }
+    }
+
+    graphics.stroke({ color, alpha: 0.66, width: 1.15 });
+    world.addChild(graphics);
+
+    const fill = new Graphics()
+        .circle(center.x, center.y, radius)
+        .fill({ color, alpha: 0.018 });
+    world.addChildAt(fill, 0);
 }
 
 
@@ -104,38 +107,29 @@ export function drawProvisionalInterceptPrediction({
 
     const origin: MapPoint = { x: item.start_x, y: item.start_y };
     const sighting: MapPoint = { x: item.target_x, y: item.target_y };
-    const endpoint = pointToward(origin, sighting, item.max_distance);
-    const movedDistance = routeDistance([origin, endpoint]);
     const sightingDistance = routeDistance([origin, sighting]);
 
     const from = rendered(origin, bounds);
-    const to = rendered(endpoint, bounds);
     const target = rendered(sighting, bounds);
-    const color = 0xffc266;
+    const rangeColor = 0xffc266;
+    const sightingColor = 0xf29bff;
 
-    drawSightingMarker(world, target, 0xf29bff);
+    drawSightingMarker(world, target, sightingColor);
+    drawDashedCircle(
+        world,
+        from,
+        Math.max(item.max_distance, 0),
+        rangeColor,
+    );
 
-    if (movedDistance >= 0.5) {
-        const path = new Graphics()
-            .moveTo(from.x, from.y)
-            .lineTo(to.x, to.y)
-            .stroke({ color, alpha: 0.78, width: 1.55 });
-        world.addChild(path);
-        drawArrowHead(world, from, to, color, 0.88);
-
-        const endpointMarker = new Graphics()
-            .circle(to.x, to.y, 4.2)
-            .fill({ color, alpha: 0.22 })
-            .stroke({ color, alpha: 0.96, width: 1.3 });
-        world.addChild(endpointMarker);
-
-        const label = new Text({
+    if (item.max_distance >= 0.5) {
+        const rangeLabel = new Text({
             text: (
-                `PROVISIONAL · ${movedDistance.toFixed(1)} ly · W${item.warp ?? "—"}`
-                + " · target movement unknown"
+                `INTERCEPT RANGE ENVELOPE · ≤${item.max_distance.toFixed(1)} ly`
+                + ` · W${item.warp ?? "—"} · direction unknown`
             ),
             style: {
-                fill: color,
+                fill: rangeColor,
                 fontFamily: "Inter, Arial, sans-serif",
                 fontSize: 9,
                 fontWeight: "700",
@@ -143,12 +137,12 @@ export function drawProvisionalInterceptPrediction({
             },
             resolution: 2,
         });
-        label.anchor.set(0.5, 1);
-        label.position.set(
-            (from.x + to.x) / 2,
-            (from.y + to.y) / 2 - 5,
+        rangeLabel.anchor.set(0.5, 1);
+        rangeLabel.position.set(
+            from.x,
+            from.y - item.max_distance - 5,
         );
-        world.addChild(label);
+        world.addChild(rangeLabel);
     }
 
     const sightingLabel = new Text({
@@ -157,7 +151,7 @@ export function drawProvisionalInterceptPrediction({
             + ` · ${sightingDistance.toFixed(1)} ly`
         ),
         style: {
-            fill: 0xf29bff,
+            fill: sightingColor,
             fontFamily: "Inter, Arial, sans-serif",
             fontSize: 9,
             fontWeight: "700",
