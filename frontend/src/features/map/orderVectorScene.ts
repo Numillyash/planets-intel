@@ -14,6 +14,7 @@ import {
     type MapBounds,
     type SelectedEntity,
 } from "./mapModel";
+import { drawProvisionalInterceptPrediction } from "./interceptProvisionalScene";
 import { getCachedMovementPrediction } from "./movementPredictionState";
 import {
     routeDistance,
@@ -336,6 +337,11 @@ export function drawOrderVectors({
 
             const predicted = predictionByShipId.get(ship.ship_id);
             if (predicted !== undefined) {
+                drawProvisionalInterceptPrediction({
+                    world,
+                    bounds,
+                    item: predicted,
+                });
                 drawPrediction(world, bounds, predicted);
             }
             continue;
