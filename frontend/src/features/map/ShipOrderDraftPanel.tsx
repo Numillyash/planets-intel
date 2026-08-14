@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
+import { getCombinedPrivateIntel } from "../../api/client";
 import {
     discardShipOrderDraft,
     getShipOrderDraft,
@@ -19,14 +20,21 @@ interface WaypointPickedDetail {
 }
 
 
-interface InterceptTargetPickedDetail {
+interface InterceptCandidate {
     shipId: number;
-    targetShipId: number;
+    name: string | null;
+    x: number;
+    y: number;
 }
 
 
 function waypointLabel(x: number | null, y: number | null): string {
     return x !== null && y !== null ? `${x}, ${y}` : "—";
+}
+
+
+function candidateLabel(candidate: InterceptCandidate): string {
+    return `${candidate.name ?? `Ship #${candidate.shipId}`} (#${candidate.shipId})`;
 }
 
 
@@ -55,6 +63,10 @@ export function ShipOrderDraftPanel({
         useState<ShipDraftMovementMode>("waypoint");
     const [interceptTargetShipId, setInterceptTargetShipId] =
         useState<number | null>(null);
+    const [interceptCandidates, setInterceptCandidates] =
+        useState<InterceptCandidate[]>([]);
+    const [ambiguousTargets, setAmbiguousTargets] =
+        useState<InterceptCandidate[]>([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [pickingWaypoint, setPickingWaypoint] = useState(false);
@@ -65,6 +77,8 @@ export function ShipOrderDraftPanel({
         let cancelled = false;
         setLoading(true);
         setError(null);
+        setInterceptCandidates([]);
+        setAmbiguousTargets([]);
 
         void getShipOrderDraft(gameId, linkedAccountId, turn, shipId)
             .then((value) => {
@@ -106,43 +120,72 @@ export function ShipOrderDraftPanel({
         const handleWaypoint = (event: Event) => {
             const detail = (event as CustomEvent<WaypointPickedDetail>).detail;
             if (!detail || detail.shipId !== shipId) return;
-            setWaypointX(detail.x);
-            setWaypointY(detail.y);
-            setPickingWaypoint(false);
+
+            if (!pickingInterceptTarget) {
+                setWaypointX(detail.x);
+                setWaypointY(detail.y);
+                setPickingWaypoint(false);
+                return;
+            }
+
+            const nearby = interceptCandidates
+                .map((candidate) => ({
+                    candidate,
+                    distance: Math.hypot(
+                        candidate.x - detail.x,
+                        candidate.y - detail.y,
+                    ),
+                }))
+                .filter((entry) => entry.distance <= 24)
+                .sort((left, right) =>
+                    left.distance - right.distance
+                    || left.candidate.shipId - right.candidate.shipId,
+                );
+
+            setPickingInterceptTarget(false);
+
+            if (nearby.length === 0) {
+                setAmbiguousTargets([]);
+                setError(
+                    "No visible ship was found near that map click. Pick the hull marker rather than empty space.",
+                );
+                return;
+            }
+
+            const bestDistance = nearby[0].distance;
+            const plausible = nearby
+                .filter((entry) => entry.distance <= bestDistance + 2.5)
+                .map((entry) => entry.candidate);
+
+            if (plausible.length === 1) {
+                setInterceptTargetShipId(plausible[0].shipId);
+                setAmbiguousTargets([]);
+                setError(null);
+                return;
+            }
+
+            setAmbiguousTargets(plausible);
+            setError(null);
         };
+
         const handleWaypointCancelled = (event: Event) => {
             const detail = (event as CustomEvent<{ shipId: number }>).detail;
-            if (detail?.shipId === shipId) setPickingWaypoint(false);
-        };
-        const handleInterceptTarget = (event: Event) => {
-            const detail = (event as CustomEvent<InterceptTargetPickedDetail>).detail;
-            if (!detail || detail.shipId !== shipId) return;
-            setInterceptTargetShipId(detail.targetShipId);
+            if (detail?.shipId !== shipId) return;
+            setPickingWaypoint(false);
             setPickingInterceptTarget(false);
-        };
-        const handleInterceptCancelled = (event: Event) => {
-            const detail = (event as CustomEvent<{ shipId: number }>).detail;
-            if (detail?.shipId === shipId) setPickingInterceptTarget(false);
         };
 
         window.addEventListener("intel-waypoint-picked", handleWaypoint);
         window.addEventListener("intel-waypoint-pick-cancelled", handleWaypointCancelled);
-        window.addEventListener("intel-intercept-target-picked", handleInterceptTarget);
-        window.addEventListener("intel-intercept-pick-cancelled", handleInterceptCancelled);
         return () => {
             window.removeEventListener("intel-waypoint-picked", handleWaypoint);
             window.removeEventListener("intel-waypoint-pick-cancelled", handleWaypointCancelled);
-            window.removeEventListener("intel-intercept-target-picked", handleInterceptTarget);
-            window.removeEventListener("intel-intercept-pick-cancelled", handleInterceptCancelled);
         };
-    }, [shipId]);
+    }, [interceptCandidates, pickingInterceptTarget, shipId]);
 
     useEffect(() => {
         return () => {
             window.dispatchEvent(new CustomEvent("intel-waypoint-pick-cancel", {
-                detail: { shipId },
-            }));
-            window.dispatchEvent(new CustomEvent("intel-intercept-pick-cancel", {
                 detail: { shipId },
             }));
         };
@@ -187,23 +230,17 @@ export function ShipOrderDraftPanel({
         }));
     }
 
-    function cancelWaypointPicker() {
+    function cancelMapPicker() {
         window.dispatchEvent(new CustomEvent("intel-waypoint-pick-cancel", {
             detail: { shipId },
         }));
         setPickingWaypoint(false);
-    }
-
-    function cancelInterceptPicker() {
-        window.dispatchEvent(new CustomEvent("intel-intercept-pick-cancel", {
-            detail: { shipId },
-        }));
         setPickingInterceptTarget(false);
     }
 
     function changeMovementMode(nextMode: ShipDraftMovementMode) {
-        cancelWaypointPicker();
-        cancelInterceptPicker();
+        cancelMapPicker();
+        setAmbiguousTargets([]);
         setMovementMode(nextMode);
         if (nextMode === "waypoint") {
             setInterceptTargetShipId(null);
@@ -212,23 +249,60 @@ export function ShipOrderDraftPanel({
 
     function toggleWaypointPicker() {
         if (pickingWaypoint) {
-            cancelWaypointPicker();
+            cancelMapPicker();
             return;
         }
-        cancelInterceptPicker();
+        cancelMapPicker();
+        setAmbiguousTargets([]);
         window.dispatchEvent(new CustomEvent("intel-waypoint-pick-start", {
             detail: { shipId },
         }));
         setPickingWaypoint(true);
     }
 
-    function toggleInterceptPicker() {
+    async function toggleInterceptPicker() {
         if (pickingInterceptTarget) {
-            cancelInterceptPicker();
+            cancelMapPicker();
             return;
         }
-        cancelWaypointPicker();
-        window.dispatchEvent(new CustomEvent("intel-intercept-pick-start", {
+
+        cancelMapPicker();
+        setError(null);
+        setAmbiguousTargets([]);
+
+        let candidates = interceptCandidates;
+        if (candidates.length === 0) {
+            try {
+                const intel = await getCombinedPrivateIntel(gameId, linkedAccountId);
+                candidates = (intel?.ships ?? [])
+                    .filter((ship) =>
+                        ship.ship_id !== shipId
+                        && ship.x !== null
+                        && ship.y !== null,
+                    )
+                    .map((ship) => ({
+                        shipId: ship.ship_id,
+                        name: ship.name,
+                        x: ship.x as number,
+                        y: ship.y as number,
+                    }));
+                setInterceptCandidates(candidates);
+            } catch (reason) {
+                setError(
+                    reason instanceof Error
+                        ? reason.message
+                        : "Failed to load visible intercept targets",
+                );
+                return;
+            }
+        }
+
+        if (candidates.length === 0) {
+            setError("No visible target ships are available in this snapshot.");
+            return;
+        }
+
+        window.dispatchEvent(new CustomEvent("intel-waypoint-pick-start", {
             detail: { shipId },
         }));
         setPickingInterceptTarget(true);
@@ -262,6 +336,7 @@ export function ShipOrderDraftPanel({
             setDraft(next);
             setMovementMode(next.movement_mode);
             setInterceptTargetShipId(next.intercept_target_ship_id);
+            setAmbiguousTargets([]);
             announceDraftChange("saved");
         } catch (reason) {
             setError(
@@ -290,8 +365,8 @@ export function ShipOrderDraftPanel({
             setWaypointY(upstreamWaypointY);
             setMovementMode("waypoint");
             setInterceptTargetShipId(null);
-            cancelWaypointPicker();
-            cancelInterceptPicker();
+            setAmbiguousTargets([]);
+            cancelMapPicker();
             announceDraftChange("discarded");
         } catch (reason) {
             setError(
@@ -390,6 +465,30 @@ export function ShipOrderDraftPanel({
                 )}
             </div>
 
+            {ambiguousTargets.length > 1 && (
+                <div className="order-draft-target-choice">
+                    <strong>Several ships are stacked near that click</strong>
+                    <span>Select the intended Intercept target:</span>
+                    <select
+                        aria-label="Intercept target candidate"
+                        defaultValue=""
+                        onChange={(event) => {
+                            const targetId = Number(event.target.value);
+                            if (!Number.isFinite(targetId) || targetId <= 0) return;
+                            setInterceptTargetShipId(targetId);
+                            setAmbiguousTargets([]);
+                        }}
+                    >
+                        <option disabled value="">Choose ship…</option>
+                        {ambiguousTargets.map((candidate) => (
+                            <option key={candidate.shipId} value={candidate.shipId}>
+                                {candidateLabel(candidate)}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+            )}
+
             <div className="order-draft-actions">
                 {movementMode === "waypoint" ? (
                     <button
@@ -410,7 +509,7 @@ export function ShipOrderDraftPanel({
                             + (pickingInterceptTarget ? " is-active" : "")
                         }
                         disabled={saving}
-                        onClick={toggleInterceptPicker}
+                        onClick={() => void toggleInterceptPicker()}
                         type="button"
                     >
                         {pickingInterceptTarget
@@ -449,13 +548,13 @@ export function ShipOrderDraftPanel({
 
             {pickingInterceptTarget && (
                 <p className="order-draft-map-hint">
-                    Click a visible ship on the Starmap. The source ship itself is not a valid target.
+                    Click the visible target ship on the Starmap. Dense stacks will ask you to choose the exact ship.
                 </p>
             )}
 
             {movementMode === "intercept" && interceptTargetShipId !== null && (
                 <p className="order-draft-provenance">
-                    Intercept target lock: Ship #{interceptTargetShipId}. The persistent map vector currently points to the factual target sighting; post-Move-Most prediction is added by the movement simulator layer.
+                    Intercept target lock: Ship #{interceptTargetShipId}. The persistent map vector points to the factual target sighting; post-Move-Most prediction belongs to the next movement-simulator layer.
                 </p>
             )}
 
