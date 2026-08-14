@@ -1,0 +1,110 @@
+.track-controls-shell {
+    position: absolute;
+    z-index: 6;
+    left: 12px;
+    bottom: 12px;
+    display: grid;
+    gap: 7px;
+    width: min(310px, calc(100% - 24px));
+    pointer-events: none;
+}
+
+.track-controls-toggle,
+.track-controls-panel {
+    pointer-events: auto;
+}
+
+.track-controls-toggle {
+    justify-self: start;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-height: 36px;
+    padding: 7px 10px;
+    border: 1px solid #31455f;
+    border-radius: 8px;
+    background: rgba(8, 15, 25, 0.93);
+    color: #e6f0ff;
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.3);
+    cursor: pointer;
+}
+
+.track-controls-toggle:hover,
+.track-controls-toggle.is-open {
+    border-color: #5e8fc2;
+    background: rgba(11, 24, 39, 0.97);
+}
+
+.track-controls-toggle strong {
+    font-size: 12px;
+}
+
+.track-controls-toggle span {
+    color: #8fa8c7;
+    font-size: 11px;
+    text-transform: capitalize;
+}
+
+.track-controls-panel {
+    display: grid;
+    gap: 12px;
+    padding: 12px;
+    border: 1px solid #31455f;
+    border-radius: 9px;
+    background: rgba(7, 14, 23, 0.97);
+    color: #e5eefb;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(7px);
+}
+
+.track-controls-heading {
+    display: grid;
+    gap: 3px;
+}
+
+.track-controls-heading strong {
+    font-size: 12px;
+}
+
+.track-controls-heading span,
+.track-controls-label,
+.track-controls-field > span {
+    color: #8fa8c7;
+    font-size: 10px;
+}
+
+.track-controls-group,
+.track-controls-field {
+    display: grid;
+    gap: 6px;
+}
+
+.track-controls-segmented {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px;
+}
+
+.track-controls-segmented button,
+.track-controls-field select {
+    min-height: 32px;
+    border: 1px solid #2d4058;
+    border-radius: 6px;
+    background: #0b1522;
+    color: #cbd9eb;
+}
+
+.track-controls-segmented button {
+    cursor: pointer;
+}
+
+.track-controls-segmented button:hover,
+.track-controls-segmented button.is-active {
+    border-color: #65a8e9;
+    color: #eef7ff;
+    background: #13263b;
+}
+
+.track-controls-field input[type="range"] {
+    width: 100%;
+}
