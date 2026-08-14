@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     planetsnu_api_base_url: str = "https://api.planets.nu"
     planetsnu_proxy_url: str | None = None
     planetsnu_hull_asset_base_url: str = "https://mobile.planets.nu/img/hulls"
+    planetsnu_planet_asset_base_url: str = "https://mobile.planets.nu/img/planets"
     private_asset_cache_dir: str = "/app/private_assets"
 
     credential_encryption_key: str | None = None
