@@ -29,6 +29,14 @@
     filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.8));
 }
 
+/* The original Nu hull PNGs are centered for the map/VCR presentation, but
+   read a few pixels low/right inside our compact 44px details thumbnail.
+   Keep this correction local to the header instead of modifying the shared
+   artwork or the Pixi position. */
+.operational-entity-icon-hull img {
+    transform: translate(-2px, -3px);
+}
+
 .operational-entity-icon-planet-artwork img {
     width: 52px;
     height: 52px;
