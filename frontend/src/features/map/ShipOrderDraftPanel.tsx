@@ -128,6 +128,18 @@ export function ShipOrderDraftPanel({
         waypointY,
     ]);
 
+    function announceDraftChange(action: "saved" | "discarded") {
+        window.dispatchEvent(new CustomEvent("intel-order-drafts-changed", {
+            detail: {
+                action,
+                gameId,
+                linkedAccountId,
+                turn,
+                shipId,
+            },
+        }));
+    }
+
     function toggleWaypointPicker() {
         if (pickingWaypoint) {
             window.dispatchEvent(new CustomEvent("intel-waypoint-pick-cancel", {
@@ -162,6 +174,7 @@ export function ShipOrderDraftPanel({
                 },
             );
             setDraft(next);
+            announceDraftChange("saved");
         } catch (reason) {
             setError(
                 reason instanceof Error
@@ -187,6 +200,7 @@ export function ShipOrderDraftPanel({
             setWarp(upstreamWarp ?? 0);
             setWaypointX(upstreamWaypointX);
             setWaypointY(upstreamWaypointY);
+            announceDraftChange("discarded");
         } catch (reason) {
             setError(
                 reason instanceof Error
