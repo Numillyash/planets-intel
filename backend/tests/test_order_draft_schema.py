@@ -18,6 +18,34 @@ class ShipOrderDraftSchemaTests(unittest.TestCase):
         )
         self.assertEqual((request.waypoint_x, request.waypoint_y), (1763, 2155))
 
+    def test_intercept_order_is_valid(self) -> None:
+        request = ShipOrderDraftUpsertRequest(
+            warp=9,
+            movement_mode="intercept",
+            intercept_target_ship_id=48,
+        )
+        self.assertEqual(request.movement_mode, "intercept")
+        self.assertEqual(request.intercept_target_ship_id, 48)
+
+    def test_waypoint_mode_can_be_saved_without_waypoint_change(self) -> None:
+        request = ShipOrderDraftUpsertRequest(movement_mode="waypoint")
+        self.assertEqual(request.movement_mode, "waypoint")
+
+    def test_intercept_without_target_is_rejected(self) -> None:
+        with self.assertRaises(ValidationError):
+            ShipOrderDraftUpsertRequest(movement_mode="intercept")
+
+    def test_intercept_target_without_mode_is_rejected(self) -> None:
+        with self.assertRaises(ValidationError):
+            ShipOrderDraftUpsertRequest(intercept_target_ship_id=48)
+
+    def test_waypoint_mode_with_intercept_target_is_rejected(self) -> None:
+        with self.assertRaises(ValidationError):
+            ShipOrderDraftUpsertRequest(
+                movement_mode="waypoint",
+                intercept_target_ship_id=48,
+            )
+
     def test_partial_waypoint_is_rejected(self) -> None:
         with self.assertRaises(ValidationError):
             ShipOrderDraftUpsertRequest(waypoint_x=1763)
