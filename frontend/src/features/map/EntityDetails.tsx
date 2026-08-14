@@ -13,6 +13,7 @@ import {
     OperationalPlanetPanel,
     type PlanetOperationalTab,
 } from "./OperationalPlanetPanel";
+import { usePlanetPostHostState } from "./planetPostHostState";
 import { PlayerTurnStatistics } from "./PlayerTurnStatistics";
 import { ShipDetails } from "./ShipDetails";
 import { StarbaseDetails } from "./StarbaseDetails";
@@ -106,6 +107,8 @@ function PlanetOperationalDetails({
     const [activeTab, setActiveTab] =
         useState<PlanetOperationalTab>("planet");
     const planet = selected.value;
+    const postHostState = usePlanetPostHostState(intel, planet.planet_id);
+    const effectiveOwnerId = postHostState?.ownerId ?? planet.owner_id;
 
     useEffect(() => {
         setActiveTab("planet");
@@ -126,9 +129,16 @@ function PlanetOperationalDetails({
                         <h3>{planet.name ?? `Planet ${planet.planet_id}`}</h3>
                         <p>
                             Planet #{planet.planet_id}
-                            {" · "}{playerName(planet.owner_id, players)}
+                            {" · "}{playerName(effectiveOwnerId, players)}
                             {" · "}{position}
                         </p>
+                        {postHostState !== null && postHostState.ownerId !== planet.owner_id && (
+                            <p className="operational-post-host-owner-note">
+                                Host-confirmed owner after VCR #{postHostState.vcrId};
+                                snapshot owner was {" "}
+                                {playerName(planet.owner_id, players)}.
+                            </p>
+                        )}
                     </div>
                 </div>
             </header>
@@ -158,6 +168,7 @@ function PlanetOperationalDetails({
                     onSelect={onSelect}
                     planet={planet}
                     players={players}
+                    postHostState={postHostState}
                     tab={activeTab}
                 />
 
