@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { privateHullAssetUrl } from "../../lib/privateAssets";
+import {
+    privateHullAssetUrl,
+    privatePlanetAssetUrl,
+} from "../../lib/privateAssets";
 import type { SelectedEntity } from "./mapModel";
 import { shipRole } from "./mapModel";
 import "./private-assets.css";
@@ -10,7 +13,9 @@ const MAX_ARTWORK_ATTEMPTS = 3;
 export function EntityIcon({ selected }: { selected: SelectedEntity }) {
     const source = selected.kind === "ship"
         ? privateHullAssetUrl(selected.value.hull_id, selected.value.payload)
-        : null;
+        : selected.kind === "planet"
+            ? privatePlanetAssetUrl(selected.value.payload)
+            : null;
     const [attempt, setAttempt] = useState(0);
     const [loaded, setLoaded] = useState(false);
     const [imageFailed, setImageFailed] = useState(false);
@@ -28,19 +33,34 @@ export function EntityIcon({ selected }: { selected: SelectedEntity }) {
         return `${source}${separator}retry=${attempt}`;
     }, [attempt, source]);
 
-    if (selected.kind === "ship" && requestSource !== null && !imageFailed) {
-        const role = shipRole(selected.value);
+    if (
+        (selected.kind === "ship" || selected.kind === "planet") &&
+        requestSource !== null &&
+        !imageFailed
+    ) {
+        const ship = selected.kind === "ship" ? selected.value : null;
+        const role = ship !== null ? shipRole(ship) : null;
+        const artworkKind = ship !== null ? "hull" : "planet-artwork";
         return (
             <span
                 aria-hidden="true"
-                className="operational-entity-icon operational-entity-icon-hull"
+                className={`operational-entity-icon operational-entity-icon-${artworkKind}`}
             >
-                <span
-                    className={
-                        `operational-entity-icon-hull-fallback is-${role}`
-                        + (loaded ? " is-hidden" : "")
-                    }
-                />
+                {ship !== null ? (
+                    <span
+                        className={
+                            `operational-entity-icon-hull-fallback is-${role}`
+                            + (loaded ? " is-hidden" : "")
+                        }
+                    />
+                ) : (
+                    <span
+                        className={
+                            "operational-entity-icon-planet-fallback"
+                            + (loaded ? " is-hidden" : "")
+                        }
+                    />
+                )}
                 <img
                     alt=""
                     draggable={false}
