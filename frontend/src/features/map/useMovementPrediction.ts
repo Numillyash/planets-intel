@@ -2,6 +2,10 @@ import { useEffect, useState } from "react";
 
 import { getDraftMovementPrediction } from "../../api/movementPrediction";
 import type { DraftMovementPredictionResponse } from "../../types/movementPrediction";
+import {
+    cacheMovementPrediction,
+    clearMovementPrediction,
+} from "./movementPredictionState";
 
 
 export function useMovementPrediction(
@@ -39,10 +43,14 @@ export function useMovementPrediction(
         let cancelled = false;
         void getDraftMovementPrediction(gameId, linkedAccountId, turn)
             .then((value) => {
-                if (!cancelled) setPrediction(value);
+                if (cancelled) return;
+                cacheMovementPrediction(value);
+                setPrediction(value);
             })
             .catch(() => {
-                if (!cancelled) setPrediction(null);
+                if (cancelled) return;
+                clearMovementPrediction(gameId, linkedAccountId, turn);
+                setPrediction(null);
             });
         return () => {
             cancelled = true;
