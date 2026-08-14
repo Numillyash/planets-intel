@@ -12,6 +12,7 @@ from app.models.private_observation_batch import PrivateObservationBatch
 from app.models.score_observation import ScoreObservation
 from app.models.session import AppSession
 from app.models.ship_observation import ShipObservation
+from app.models.ship_order_draft import ShipOrderDraft
 from app.models.starbase_observation import StarbaseObservation
 from app.models.stellar_cartography_observation import StellarCartographyObservation
 from app.models.user import AppUser
@@ -33,6 +34,7 @@ __all__ = [
     "PrivateObservationBatch",
     "ScoreObservation",
     "ShipObservation",
+    "ShipOrderDraft",
     "StarbaseObservation",
     "StellarCartographyObservation",
 ]
