@@ -14,7 +14,6 @@ import {
     type PlanetOperationalTab,
 } from "./OperationalPlanetPanel";
 import { usePlanetPostHostState } from "./planetPostHostState";
-import { PlayerTurnStatistics } from "./PlayerTurnStatistics";
 import { ShipDetails } from "./ShipDetails";
 import { StarbaseDetails } from "./StarbaseDetails";
 import { StellarFeatureDetails } from "./StellarFeatureDetails";
@@ -215,29 +214,20 @@ export function EntityDetails({
         );
     }
 
+    if (selected.kind === "ship") {
+        return (
+            <ShipDetails
+                intel={intel}
+                onSelect={onSelect}
+                players={players}
+                ship={selected.value}
+            />
+        );
+    }
+
     let details;
 
-    if (selected.kind === "ship") {
-        const ownerId = selected.value.owner_id;
-        details = (
-            <>
-                <ShipDetails
-                    intel={intel}
-                    onSelect={onSelect}
-                    players={players}
-                    ship={selected.value}
-                />
-                {ownerId !== null && ownerId > 0 && (
-                    <PlayerTurnStatistics
-                        gameId={intel.game_id}
-                        label={playerName(ownerId, players)}
-                        slotId={ownerId}
-                        toTurn={intel.turn}
-                    />
-                )}
-            </>
-        );
-    } else if (selected.kind === "starbase") {
+    if (selected.kind === "starbase") {
         details = (
             <StarbaseDetails
                 intel={intel}
