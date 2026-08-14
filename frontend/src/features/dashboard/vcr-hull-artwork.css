@@ -1,8 +1,8 @@
 .vcr-hull-artwork-shell {
     position: relative;
     display: flex;
-    width: 96px;
-    height: 64px;
+    width: 118px;
+    height: 76px;
     align-items: center;
     justify-content: center;
     overflow: visible;
@@ -10,8 +10,8 @@
 
 .vcr-hull-artwork {
     display: block;
-    width: 150px;
-    height: 100px;
+    width: 280px;
+    height: 180px;
     max-width: none;
     object-fit: contain;
     pointer-events: none;
@@ -25,16 +25,63 @@
     transform: scaleX(-1);
 }
 
+.vcr-hull-artwork-shell.is-planet-artwork .vcr-hull-artwork {
+    width: 78px;
+    height: 78px;
+    transform: none;
+    filter:
+        drop-shadow(0 0 2px rgba(220, 238, 255, 0.8))
+        drop-shadow(0 0 12px rgba(76, 147, 205, 0.42));
+}
+
 .vcr-combat-object.is-hit .vcr-hull-artwork {
     filter:
         drop-shadow(0 0 2px rgba(255, 239, 220, 0.95))
         drop-shadow(0 0 14px rgba(255, 72, 42, 0.95));
 }
 
-.vcr-hull-artwork-shell > .vcr-object-marker[hidden] {
+.vcr-hull-artwork-shell > .vcr-object-marker[hidden],
+.vcr-hull-artwork-shell > .vcr-hull-artwork[hidden] {
     display: none;
 }
 
 .vcr-hull-artwork-shell > .vcr-object-marker:not([hidden]) {
     display: block;
+}
+
+.vcr-torpedo-projectile {
+    position: absolute;
+    z-index: 4;
+    top: 50%;
+    display: block;
+    width: 34px;
+    height: 12px;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+}
+
+.vcr-torpedo-projectile > span {
+    position: absolute;
+    top: 50%;
+    right: 0;
+    width: 8px;
+    height: 4px;
+    border-radius: 50%;
+    background: #ffe98b;
+    box-shadow:
+        -7px 0 6px rgba(255, 184, 67, 0.85),
+        -16px 0 10px rgba(255, 105, 43, 0.45),
+        0 0 8px rgba(255, 241, 163, 0.95);
+    transform: translateY(-50%);
+}
+
+.vcr-torpedo-projectile.is-right {
+    transform: translate(-50%, -50%) scaleX(-1);
+}
+
+.vcr-torpedo-projectile.is-hit-course > span {
+    box-shadow:
+        -7px 0 6px rgba(255, 204, 76, 0.95),
+        -18px 0 12px rgba(255, 77, 47, 0.65),
+        0 0 11px rgba(255, 247, 188, 1);
 }
