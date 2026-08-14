@@ -20,6 +20,9 @@ class ShipMovementPrediction(BaseModel):
     target_ship_id: int | None
     target_x: float | None
     target_y: float | None
+    target_warp: int | None
+    target_speed_multiplier: float | None
+    target_standard_max_distance: float | None
     predicted_x: float | None
     predicted_y: float | None
     requested_distance: float | None
