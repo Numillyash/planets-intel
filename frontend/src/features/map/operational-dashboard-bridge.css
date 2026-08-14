@@ -2,6 +2,35 @@ body.operational-page-dashboard-open {
     overflow: auto;
 }
 
+body.operational-page-dashboard-open:has(.intel-map-panel) .app-shell {
+    position: relative;
+    inset: auto;
+    width: min(1500px, calc(100% - 40px));
+    height: auto;
+    min-height: 100vh;
+    margin: 0 auto;
+    padding: 36px 0 80px;
+    overflow: visible;
+}
+
+/* operational-shell-v2 keeps the old dashboard DOM hidden while the map is
+   active. When Dashboard is requested, restore those direct children without
+   changing the layout semantics of the individual widgets. */
+body.operational-page-dashboard-open:has(.intel-map-panel)
+    .app-shell > :not(.intel-map-panel) {
+    display: block !important;
+}
+
+body.operational-page-dashboard-open:has(.intel-map-panel)
+    .app-shell > .topbar {
+    display: flex !important;
+}
+
+body.operational-page-dashboard-open:has(.intel-map-panel)
+    .app-shell > .summary-grid {
+    display: grid !important;
+}
+
 body.operational-page-dashboard-open .intel-map-panel {
     opacity: 0;
     pointer-events: none;
