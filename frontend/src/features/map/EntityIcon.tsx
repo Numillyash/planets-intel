@@ -3,6 +3,7 @@ import { useState } from "react";
 import { privateHullAssetUrl } from "../../lib/privateAssets";
 import type { SelectedEntity } from "./mapModel";
 import { shipRole } from "./mapModel";
+import "./private-assets.css";
 
 export function EntityIcon({ selected }: { selected: SelectedEntity }) {
     const [imageFailed, setImageFailed] = useState(false);
