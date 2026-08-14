@@ -57,6 +57,16 @@ export interface HistoricalCombatEventSide {
     hull_id: number | null;
     has_starbase: boolean | null;
     sequence_status: HistoricalCombatOutcome | null;
+    /**
+     * Frontend-normalized alias of sequence_status used by map event UI.
+     * It remains derived from stored factual VCR order, not a stored fact.
+     */
+    combat_outcome: HistoricalCombatOutcome | null;
+    /**
+     * True only for the tracked ship when its enclosing historical track point
+     * has later structured host evidence confirming survival at the position.
+     */
+    post_host_confirmed: boolean;
 }
 
 export interface HistoricalCombatEvent {
