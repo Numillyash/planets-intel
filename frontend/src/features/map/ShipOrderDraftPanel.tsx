@@ -107,6 +107,14 @@ export function ShipOrderDraftPanel({
         };
     }, [shipId]);
 
+    useEffect(() => {
+        return () => {
+            window.dispatchEvent(new CustomEvent("intel-waypoint-pick-cancel", {
+                detail: { shipId },
+            }));
+        };
+    }, [shipId]);
+
     const changed = useMemo(() => {
         return warp !== (upstreamWarp ?? 0)
             || waypointX !== upstreamWaypointX
