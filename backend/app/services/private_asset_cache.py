@@ -10,21 +10,21 @@ from app.core.config import get_settings
 
 _PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 _MAX_DOWNLOAD_ATTEMPTS = 3
-_locks: dict[int, asyncio.Lock] = {}
+_locks: dict[str, asyncio.Lock] = {}
 
 
 class PrivateAssetError(RuntimeError):
     pass
 
 
-def _cache_path(hull_id: int) -> Path:
+def _cache_path(kind: str, name: str) -> Path:
     settings = get_settings()
     root = Path(settings.private_asset_cache_dir)
-    return root / "hulls" / f"{hull_id}.png"
+    return root / kind / f"{name}.png"
 
 
-def cached_hull_path(hull_id: int) -> Path | None:
-    path = _cache_path(hull_id)
+def _cached_png(kind: str, name: str) -> Path | None:
+    path = _cache_path(kind, name)
     if not path.is_file() or path.stat().st_size < len(_PNG_SIGNATURE):
         return None
     try:
@@ -36,7 +36,7 @@ def cached_hull_path(hull_id: int) -> Path | None:
     return path
 
 
-async def _download_hull_asset(url: str) -> httpx.Response:
+async def _download_png(url: str) -> httpx.Response:
     last_error: httpx.HTTPError | None = None
 
     for attempt in range(1, _MAX_DOWNLOAD_ATTEMPTS + 1):
@@ -59,26 +59,29 @@ async def _download_hull_asset(url: str) -> httpx.Response:
                 await asyncio.sleep(0.35 * attempt)
 
     raise PrivateAssetError(
-        f"Planets.nu hull asset download failed after {_MAX_DOWNLOAD_ATTEMPTS} attempts"
+        "Planets.nu private asset download failed after "
+        f"{_MAX_DOWNLOAD_ATTEMPTS} attempts"
     ) from last_error
 
 
-async def ensure_hull_asset(hull_id: int) -> Path | None:
-    cached = cached_hull_path(hull_id)
+async def _ensure_png(
+    *,
+    kind: str,
+    name: str,
+    url: str,
+) -> Path | None:
+    cached = _cached_png(kind, name)
     if cached is not None:
         return cached
 
-    lock = _locks.setdefault(hull_id, asyncio.Lock())
+    lock_key = f"{kind}/{name}"
+    lock = _locks.setdefault(lock_key, asyncio.Lock())
     async with lock:
-        cached = cached_hull_path(hull_id)
+        cached = _cached_png(kind, name)
         if cached is not None:
             return cached
 
-        settings = get_settings()
-        base_url = settings.planetsnu_hull_asset_base_url.rstrip("/")
-        url = f"{base_url}/{hull_id}.png"
-        response = await _download_hull_asset(url)
-
+        response = await _download_png(url)
         if response.status_code == 404:
             return None
 
@@ -86,18 +89,42 @@ async def ensure_hull_asset(hull_id: int) -> Path | None:
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
             raise PrivateAssetError(
-                f"Planets.nu hull asset returned HTTP {response.status_code}"
+                f"Planets.nu private asset returned HTTP {response.status_code}"
             ) from exc
 
         content = response.content
         if not content.startswith(_PNG_SIGNATURE):
             raise PrivateAssetError(
-                "Planets.nu hull asset response is not a PNG"
+                "Planets.nu private asset response is not a PNG"
             )
 
-        target = _cache_path(hull_id)
+        target = _cache_path(kind, name)
         target.parent.mkdir(parents=True, exist_ok=True)
         temporary = target.with_suffix(".png.tmp")
         temporary.write_bytes(content)
         temporary.replace(target)
         return target
+
+
+def cached_hull_path(hull_image_id: int) -> Path | None:
+    return _cached_png("hulls", str(hull_image_id))
+
+
+async def ensure_hull_asset(hull_image_id: int) -> Path | None:
+    settings = get_settings()
+    base_url = settings.planetsnu_hull_asset_base_url.rstrip("/")
+    return await _ensure_png(
+        kind="hulls",
+        name=str(hull_image_id),
+        url=f"{base_url}/{hull_image_id}.png",
+    )
+
+
+async def ensure_unknown_planet_asset() -> Path | None:
+    settings = get_settings()
+    base_url = settings.planetsnu_planet_asset_base_url.rstrip("/")
+    return await _ensure_png(
+        kind="planets",
+        name="unknown",
+        url=f"{base_url}/unknown.png",
+    )
