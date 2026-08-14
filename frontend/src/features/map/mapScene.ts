@@ -1,10 +1,11 @@
-import { Container, Graphics, Text } from "pixi.js";
+import { Container, Graphics, Sprite, Text } from "pixi.js";
 import type { PlanetObservationResponse } from "../../types/api";
 import type {
     MapStarbaseObservation,
     MapStellarCartographyObservation,
     PrivateIntelMapResponse,
 } from "../../types/intel";
+import { privateHullAssetUrl } from "../../lib/privateAssets";
 import { raceVisual } from "../../lib/races";
 import {
     PLANET_RADIUS,
@@ -339,6 +340,45 @@ function shipMarker(role: ShipRole, color: number): Graphics {
 }
 
 
+function addShipHullArtwork(
+    world: Container,
+    position: ShipVisualPosition,
+    isSelected: boolean,
+    onSelect: (entity: SelectedEntity) => void,
+): boolean {
+    const assetUrl = privateHullAssetUrl(position.ship.hull_id);
+    if (assetUrl === null) return false;
+
+    const group = new Container();
+    group.position.set(position.x, position.y);
+    group.eventMode = "static";
+    group.cursor = "pointer";
+    group.on("pointertap", (event) => {
+        event.stopPropagation();
+        onSelect({ kind: "ship", value: position.ship });
+    });
+
+    const ownerRing = new Graphics()
+        .circle(0, 0, isSelected ? 11 : 9)
+        .stroke({
+            color: isSelected ? 0xe8f3ff : ownerColor(position.ship.owner_id),
+            width: isSelected ? 1.7 : 1.25,
+            alpha: isSelected ? 0.96 : 0.9,
+        });
+
+    const sprite = Sprite.from(assetUrl);
+    sprite.anchor.set(0.5);
+    sprite.width = isSelected ? 38 : 32;
+    sprite.height = isSelected ? 38 : 32;
+    sprite.alpha = 0.98;
+    sprite.eventMode = "none";
+
+    group.addChild(ownerRing, sprite);
+    world.addChild(group);
+    return true;
+}
+
+
 function planetIsSelected(
     selected: SelectedEntity | null,
     planet: PlanetObservationResponse,
@@ -594,8 +634,9 @@ export function drawMapScene({
             selected?.kind === "ship" &&
             selected.value.ship_id === position.ship.ship_id
         );
+        const assetUrl = privateHullAssetUrl(position.ship.hull_id);
 
-        if (isSelected) {
+        if (isSelected && assetUrl === null) {
             const halo = new Graphics()
                 .circle(0, 0, 8)
                 .stroke({
@@ -612,6 +653,8 @@ export function drawMapScene({
             ownerColor(position.ship.owner_id),
         );
 
+        if (assetUrl !== null) marker.alpha = 0.14;
+
         marker.position.set(position.x, position.y);
         marker.eventMode = "static";
         marker.cursor = "pointer";
@@ -623,6 +666,10 @@ export function drawMapScene({
             });
         });
         world.addChild(marker);
+
+        if (assetUrl !== null) {
+            addShipHullArtwork(world, position, isSelected, onSelect);
+        }
 
         if (position.planetId !== null) {
             const shipLabel = new Text({
@@ -640,8 +687,8 @@ export function drawMapScene({
                 resolution: 2,
             });
             shipLabel.position.set(
-                position.x + 6,
-                position.y - 11,
+                position.x + 8,
+                position.y - 13,
             );
             world.addChild(shipLabel);
         }
