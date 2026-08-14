@@ -43,11 +43,24 @@ export function CombatEventPanel(props: Parameters<typeof VcrPanel>[0]) {
         setPageDashboardOpen(false);
     }
 
+    function returnToGameMenu() {
+        window.location.assign("/intelboard");
+    }
+
     return (
         <>
             <MapEventBridge />
 
             <div className="operational-map-hud">
+                <button
+                    aria-label="Return to game menu"
+                    className="operational-map-menu-button"
+                    onClick={returnToGameMenu}
+                    title="Game menu"
+                    type="button"
+                >
+                    <span aria-hidden="true">⌂</span>
+                </button>
                 <button
                     aria-label="Open dashboard"
                     className="operational-map-menu-button"
@@ -93,6 +106,13 @@ export function CombatEventPanel(props: Parameters<typeof VcrPanel>[0]) {
                         <strong>Intelligence</strong>
                     </div>
                     <div style={{ display: "flex", gap: 8 }}>
+                        <button
+                            className="operational-dashboard-map-button"
+                            onClick={returnToGameMenu}
+                            type="button"
+                        >
+                            Games
+                        </button>
                         <button
                             className="operational-dashboard-map-button"
                             onClick={openPageDashboard}
