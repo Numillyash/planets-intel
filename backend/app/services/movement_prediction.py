@@ -171,6 +171,9 @@ def _serialize_move_most(
         "target_ship_id": None,
         "target_x": None,
         "target_y": None,
+        "target_warp": None,
+        "target_speed_multiplier": None,
+        "target_standard_max_distance": None,
         "predicted_x": result.position.x if result.position is not None else None,
         "predicted_y": result.position.y if result.position is not None else None,
         "requested_distance": result.requested_distance,
@@ -191,8 +194,18 @@ def _serialize_intercept(
     result: InterceptResult,
     warp: int,
     speed_multiplier: float,
+    target_warp: int | None,
+    target_speed_multiplier: float | None,
     warnings: list[str],
 ) -> dict[str, Any]:
+    target_standard_max_distance = (
+        maximum_distance(
+            target_warp,
+            speed_multiplier=target_speed_multiplier,
+        )
+        if target_warp is not None and target_speed_multiplier is not None
+        else None
+    )
     return {
         "ship_id": draft.ship_id,
         "movement_mode": "intercept",
@@ -206,6 +219,9 @@ def _serialize_intercept(
         "target_ship_id": draft.intercept_target_ship_id,
         "target_x": float(target.x) if target is not None and target.x is not None else None,
         "target_y": float(target.y) if target is not None and target.y is not None else None,
+        "target_warp": target_warp,
+        "target_speed_multiplier": target_speed_multiplier,
+        "target_standard_max_distance": target_standard_max_distance,
         "predicted_x": result.position.x if result.position is not None else None,
         "predicted_y": result.position.y if result.position is not None else None,
         "requested_distance": result.requested_distance,
@@ -388,6 +404,16 @@ def get_draft_movement_prediction(
                     if draft.intercept_target_ship_id is not None
                     else None
                 )
+                target_warp = (
+                    int(target.warp)
+                    if target is not None and target.warp is not None
+                    else None
+                )
+                target_speed_multiplier = (
+                    _speed_multiplier(target, hull_names=hull_names)
+                    if target is not None
+                    else None
+                )
                 items_by_ship_id[order.ship_id] = _serialize_intercept(
                     draft=draft,
                     ship=ship,
@@ -395,6 +421,8 @@ def get_draft_movement_prediction(
                     result=intercept_results[order.ship_id],
                     warp=warp_by_ship_id[order.ship_id],
                     speed_multiplier=speed_by_ship_id[order.ship_id],
+                    target_warp=target_warp,
+                    target_speed_multiplier=target_speed_multiplier,
                     warnings=list(warnings),
                 )
 
