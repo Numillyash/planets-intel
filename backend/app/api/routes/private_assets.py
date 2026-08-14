@@ -1,3 +1,5 @@
+import re
+
 from fastapi import APIRouter, Depends, HTTPException, Path, status
 from fastapi.responses import FileResponse
 
@@ -6,11 +8,12 @@ from app.models.user import AppUser
 from app.services.private_asset_cache import (
     PrivateAssetError,
     ensure_hull_asset,
-    ensure_unknown_planet_asset,
+    ensure_planet_asset,
 )
 
 
 router = APIRouter(prefix="/private-assets")
+_PLANET_ASSET_NAME_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
 def _file_response(path) -> FileResponse:
@@ -49,14 +52,21 @@ async def get_hull_asset(
 
 
 @router.get(
-    "/planets/unknown.png",
+    "/planets/{planet_image_name}.png",
     include_in_schema=False,
 )
-async def get_unknown_planet_asset(
+async def get_planet_asset(
+    planet_image_name: str = Path(min_length=1, max_length=80),
     _user: AppUser = Depends(require_user),
 ) -> FileResponse:
+    if _PLANET_ASSET_NAME_RE.fullmatch(planet_image_name) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Planet image not available",
+        )
+
     try:
-        path = await ensure_unknown_planet_asset()
+        path = await ensure_planet_asset(planet_image_name)
     except PrivateAssetError as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
