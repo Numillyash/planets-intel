@@ -23,7 +23,7 @@ class ShipOrderDraftUpsertRequest(BaseModel):
 
         if (
             self.intercept_target_ship_id is not None
-            and self.movement_mode not in (None, "intercept")
+            and self.movement_mode != "intercept"
         ):
             raise ValueError("intercept_target_ship_id requires intercept movement")
 
