@@ -53,6 +53,11 @@
     line-height: 1.4;
 }
 
+.operational-entity-title-row .operational-post-host-owner-note {
+    margin-top: 5px;
+    color: #f0c979;
+}
+
 .operational-entity-kind {
     color: #7895b8;
     font-size: 0.64rem;
@@ -170,6 +175,10 @@
     font-size: 0.9rem;
 }
 
+.operational-resource-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .operational-section-heading {
     display: flex;
     align-items: baseline;
@@ -210,6 +219,21 @@
     color: #8ea7be;
     font-size: 0.72rem;
     line-height: 1.45;
+}
+
+.operational-owner-change-badge {
+    border-color: #9b7430 !important;
+    background: rgba(92, 65, 18, 0.42) !important;
+    color: #f2cd78 !important;
+}
+
+.operational-owner-change-callout {
+    border-color: #85642b;
+    background: rgba(87, 61, 18, 0.3);
+}
+
+.operational-owner-change-callout strong {
+    color: #f0ce83;
 }
 
 .operational-evidence-symbol {
