@@ -16,7 +16,9 @@ from app.models.game_rule_catalog import GameRuleCatalog
 
 
 _PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
-_HULL_NORMALIZATION_VERSION = "alpha-centroid-v2"
+_HULL_NORMALIZATION_VERSION = "alpha-centroid-v3"
+_HULL_VISIBLE_FRACTION = 0.58
+_HULL_VISUAL_CENTER_Y = 0.42
 _DOWNLOAD_TIMEOUT = httpx.Timeout(
     timeout=7.0,
     connect=4.0,
@@ -79,9 +81,16 @@ def _normalized_hull_png(content: bytes) -> bytes:
             if width <= 0 or height <= 0:
                 return content
 
+            # The classic Nu artwork files often devote most of their canvas
+            # to the ship itself. That makes a 22px Pixi sprite overflow a
+            # 14px owner ring and makes the 58px DOM thumbnail look ~130% too
+            # large. Normalize the visible hull to a stable fraction of the
+            # transparent square instead of compensating in every renderer.
             side = max(width, height)
-            padding = max(2, round(side * 0.08))
-            canvas_side = side + padding * 2
+            canvas_side = max(
+                side + 4,
+                round(side / _HULL_VISIBLE_FRACTION),
+            )
             canvas = Image.new(
                 "RGBA",
                 (canvas_side, canvas_side),
@@ -90,10 +99,7 @@ def _normalized_hull_png(content: bytes) -> bytes:
 
             centroid_x, centroid_y = _alpha_weighted_centroid(artwork)
             desired_x = canvas_side / 2.0
-            # Nu hulls read visually low when centered only by their alpha
-            # bounds. Keep their perceived body a little above mathematical
-            # center, matching the classic client's icon presentation.
-            desired_y = canvas_side * 0.45
+            desired_y = canvas_side * _HULL_VISUAL_CENTER_Y
 
             offset_x = round(desired_x - centroid_x)
             offset_y = round(desired_y - centroid_y)
