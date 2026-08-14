@@ -1,4 +1,5 @@
 const PRIVATE_ARTWORK_VERSION = 5;
+const NU_HULL_ARTWORK_BASE_URL = "https://mobile.planets.nu/img/hulls";
 
 function positiveImageId(value: unknown): number | null {
     if (typeof value === "number" && Number.isInteger(value) && value > 0) {
@@ -66,15 +67,12 @@ export function privateHullAssetUrl(
     const imageId = privateHullArtworkId(hullId, payload);
     if (imageId === null) return null;
 
-    const hint = payloadHullArtworkHint(payload);
-    const params = new URLSearchParams({
-        v: String(PRIVATE_ARTWORK_VERSION),
-    });
-    if (hint !== null && hint !== imageId) {
-        params.set("hint", String(hint));
-    }
-
-    return `/api/private-assets/hulls/${imageId}.png?${params.toString()}`;
+    // Hull artwork is intentionally loaded from the canonical Nu asset URL.
+    // The browser can reach these public static assets reliably, while the
+    // server-side cache may be blocked or throttled by the asset host. Using
+    // the original PNG also preserves the exact geometry used by Planets.nu
+    // instead of applying server-side crop/centroid transformations.
+    return `${NU_HULL_ARTWORK_BASE_URL}/${imageId}.png`;
 }
 
 export function privatePlanetArtworkName(
