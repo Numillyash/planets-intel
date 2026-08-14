@@ -143,6 +143,49 @@ class HistoricalTrackLifecycleTests(unittest.TestCase):
         self.assertEqual(segments[0]["hull_id"], 70)
         self.assertEqual(segments[1]["hull_id"], 92)
 
+    def test_defeated_same_hull_is_not_proof_of_new_identity(self):
+        track = {
+            "ship_id": 44,
+            "name": "CAPTURE-COMPATIBLE SHIP",
+            "owner_id": 8,
+            "hull_id": 70,
+            "first_turn": 9,
+            "last_turn": 10,
+            "points": [
+                {
+                    "turn": 9,
+                    "gap_from_previous": False,
+                    "evidence": "combat",
+                    "combat_outcome": "defeated",
+                    "post_host_confirmed": False,
+                    "combat_event": {
+                        "sides": [
+                            {
+                                "object_kind": "ship",
+                                "object_id": 44,
+                                "name": "CAPTURE-COMPATIBLE SHIP",
+                                "owner_id": 4,
+                                "hull_id": 70,
+                            }
+                        ],
+                    },
+                },
+                {
+                    "turn": 10,
+                    "gap_from_previous": False,
+                    "evidence": "scan",
+                    "combat_outcome": None,
+                    "post_host_confirmed": False,
+                    "combat_event": None,
+                },
+            ],
+        }
+
+        segments = _segment_track(track)
+
+        self.assertEqual(len(segments), 1)
+        self.assertEqual(len(segments[0]["points"]), 2)
+
 
 if __name__ == "__main__":
     unittest.main()
