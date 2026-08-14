@@ -467,6 +467,13 @@ def get_historical_ship_tracks(
                 "snapshot_turn": selected["snapshot_turn"],
                 "x": selected["x"],
                 "y": selected["y"],
+                # Keep identity evidence on each historical point. A ship_id can
+                # be reused later, so latest-track metadata is not enough to
+                # reconstruct where one physical ship lifecycle ended and the
+                # next began after another turn has arrived.
+                "name": selected["name"],
+                "owner_id": selected["owner_id"],
+                "hull_id": selected["hull_id"],
                 "linked_account_ids": source_ids,
                 "observer_names": source_names,
                 "evidence": selected["evidence"],
