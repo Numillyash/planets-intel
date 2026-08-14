@@ -15,6 +15,9 @@ export interface ShipMovementPrediction {
     target_ship_id: number | null;
     target_x: number | null;
     target_y: number | null;
+    target_warp: number | null;
+    target_speed_multiplier: number | null;
+    target_standard_max_distance: number | null;
     predicted_x: number | null;
     predicted_y: number | null;
     requested_distance: number | null;
