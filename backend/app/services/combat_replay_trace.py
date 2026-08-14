@@ -86,10 +86,10 @@ def get_combat_replay_trace(
             }
 
         return {
+            **trace,
             "game_id": game_id,
             "turn": turn,
             "vcr_id": vcr_id,
             "supported": True,
             "reason": None,
-            **trace,
         }
