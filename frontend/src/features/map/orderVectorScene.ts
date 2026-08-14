@@ -1,6 +1,10 @@
 import { Container, Graphics, Text } from "pixi.js";
 
 import type { ShipOrderDraft } from "../../types/orderDraft";
+import type {
+    DraftMovementPredictionResponse,
+    ShipMovementPrediction,
+} from "../../types/movementPrediction";
 import type { PrivateIntelMapResponse } from "../../types/intel";
 import {
     isCombinedPrivateIntel,
@@ -160,18 +164,83 @@ function drawVector({
 }
 
 
+function drawPrediction(
+    world: Container,
+    bounds: MapBounds,
+    item: ShipMovementPrediction,
+) {
+    if (
+        item.start_x === null
+        || item.start_y === null
+        || item.predicted_x === null
+        || item.predicted_y === null
+    ) {
+        return;
+    }
+
+    const route: MapPoint[] = [
+        { x: item.start_x, y: item.start_y },
+        { x: item.predicted_x, y: item.predicted_y },
+    ];
+    const distance = routeDistance(route);
+    if (distance < 0.5) return;
+
+    const from = rendered(route[0], bounds);
+    const to = rendered(route[1], bounds);
+    const color = item.phase === "intercept" ? 0xffa7ff : 0x76f0c0;
+    const alpha = item.certain ? 0.88 : 0.52;
+
+    const path = new Graphics()
+        .moveTo(from.x, from.y)
+        .lineTo(to.x, to.y)
+        .stroke({ color, alpha, width: 1.65 });
+    world.addChild(path);
+    drawArrowHead(world, from, to, color, alpha, 1.65, 6.5);
+
+    const endpoint = new Graphics()
+        .circle(to.x, to.y, 3.6)
+        .fill({ color, alpha: 0.28 })
+        .stroke({ color, alpha: 0.96, width: 1.2 });
+    world.addChild(endpoint);
+
+    const moved = item.moved_distance ?? distance;
+    const phaseLabel = item.phase === "intercept"
+        ? "PREDICTED INTERCEPT"
+        : "PREDICTED MOVE";
+    const label = new Text({
+        text: `${phaseLabel} · ${moved.toFixed(1)} ly · W${item.warp ?? "—"}`,
+        style: {
+            fill: color,
+            fontFamily: "Inter, Arial, sans-serif",
+            fontSize: 9,
+            fontWeight: "700",
+            stroke: { color: 0x060a10, width: 3 },
+        },
+        resolution: 2,
+    });
+    label.anchor.set(0.5, 1);
+    label.position.set(
+        (from.x + to.x) / 2,
+        (from.y + to.y) / 2 - 5,
+    );
+    world.addChild(label);
+}
+
+
 export function drawOrderVectors({
     world,
     intel,
     bounds,
     selected,
     drafts,
+    prediction,
 }: {
     world: Container;
     intel: PrivateIntelMapResponse;
     bounds: MapBounds;
     selected: SelectedEntity | null;
     drafts: ShipOrderDraft[];
+    prediction: DraftMovementPredictionResponse | null;
 }) {
     const primarySlotId = isCombinedPrivateIntel(intel)
         ? intel.primary_observer.player_slot_id
@@ -181,6 +250,9 @@ export function drawOrderVectors({
         : null;
     const draftByShipId = new Map(
         drafts.map((draft) => [draft.ship_id, draft]),
+    );
+    const predictionByShipId = new Map(
+        (prediction?.items ?? []).map((item) => [item.ship_id, item]),
     );
     const shipById = new Map(
         intel.ships.map((ship) => [ship.ship_id, ship]),
@@ -199,9 +271,6 @@ export function drawOrderVectors({
         const upstreamDistance = routeDistance(upstreamRoute);
         const selectedShip = selectedShipId === ship.ship_id;
 
-        // mapScene already renders the selected ship's factual trajectory with
-        // the stronger selection treatment. The dashed layer is the persistent
-        // cue for orders belonging to ships that are not currently selected.
         if (
             !selectedShip
             && upstreamRoute.length >= 2
@@ -229,59 +298,67 @@ export function drawOrderVectors({
         ) {
             const target = shipById.get(draft.intercept_target_ship_id);
             if (
-                target === undefined
-                || target.x === null
-                || target.y === null
+                target !== undefined
+                && target.x !== null
+                && target.y !== null
             ) {
-                continue;
+                const lockRoute: MapPoint[] = [
+                    { x: ship.x, y: ship.y },
+                    { x: target.x, y: target.y },
+                ];
+                const lockDistance = routeDistance(lockRoute);
+                if (lockDistance >= 0.5) {
+                    drawVector({
+                        world,
+                        route: lockRoute,
+                        bounds,
+                        color: draft.stale ? 0xffc766 : 0xf29bff,
+                        alpha: 0.76,
+                        width: 1.55,
+                        dashLength: 6,
+                        gapLength: 5,
+                        label: (
+                            `INTERCEPT LOCK · #${target.ship_id}`
+                            + ` · ${lockDistance.toFixed(1)} ly sighting`
+                        ),
+                    });
+                }
             }
 
-            const lockRoute: MapPoint[] = [
-                { x: ship.x, y: ship.y },
-                { x: target.x, y: target.y },
-            ];
-            const lockDistance = routeDistance(lockRoute);
-            if (lockDistance < 0.5) continue;
-
-            drawVector({
-                world,
-                route: lockRoute,
-                bounds,
-                color: draft.stale ? 0xffc766 : 0xf29bff,
-                alpha: 0.96,
-                width: 2.15,
-                dashLength: 6,
-                gapLength: 5,
-                label: (
-                    `INTERCEPT LOCK · #${target.ship_id}`
-                    + ` · ${lockDistance.toFixed(1)} ly sighting`
-                ),
-            });
+            const predicted = predictionByShipId.get(ship.ship_id);
+            if (predicted !== undefined) {
+                drawPrediction(world, bounds, predicted);
+            }
             continue;
         }
 
         const targetX = draft.waypoint_x ?? draft.upstream_waypoint_x;
         const targetY = draft.waypoint_y ?? draft.upstream_waypoint_y;
-        if (targetX === null || targetY === null) continue;
+        if (targetX !== null && targetY !== null) {
+            const draftRoute: MapPoint[] = [
+                { x: ship.x, y: ship.y },
+                { x: targetX, y: targetY },
+            ];
+            const distance = routeDistance(draftRoute);
+            if (distance >= 0.5) {
+                const color = draft.stale ? 0xffc766 : 0xa8eaff;
+                drawVector({
+                    world,
+                    route: draftRoute,
+                    bounds,
+                    color,
+                    alpha: 0.72,
+                    width: 1.55,
+                    dashLength: 10,
+                    gapLength: 5,
+                    label: `DRAFT · ${distance.toFixed(1)} ly · W${draft.warp ?? draft.upstream_warp ?? "—"}`,
+                });
+            }
+        }
 
-        const draftRoute: MapPoint[] = [
-            { x: ship.x, y: ship.y },
-            { x: targetX, y: targetY },
-        ];
-        const distance = routeDistance(draftRoute);
-        if (distance < 0.5) continue;
-
-        const color = draft.stale ? 0xffc766 : 0xa8eaff;
-        drawVector({
-            world,
-            route: draftRoute,
-            bounds,
-            color,
-            alpha: 0.96,
-            width: 2.15,
-            dashLength: 10,
-            gapLength: 5,
-            label: `DRAFT · ${distance.toFixed(1)} ly · W${draft.warp ?? draft.upstream_warp ?? "—"}`,
-        });
+        const predicted = predictionByShipId.get(ship.ship_id);
+        if (predicted !== undefined) {
+            drawPrediction(world, bounds, predicted);
+        }
     }
 }
