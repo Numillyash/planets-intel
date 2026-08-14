@@ -45,12 +45,47 @@ function CombatObjectArtwork({
     const assetUrl = side.is_planet
         ? privatePlanetAssetUrl()
         : privateHullAssetUrl(side.image_id ?? side.hull_id);
+    const [ready, setReady] = useState(false);
     const [loaded, setLoaded] = useState(false);
-    const [failed, setFailed] = useState(false);
 
     useEffect(() => {
+        let cancelled = false;
+        setReady(false);
         setLoaded(false);
-        setFailed(false);
+
+        if (assetUrl === null) {
+            return () => {
+                cancelled = true;
+            };
+        }
+
+        void (async () => {
+            for (let attempt = 1; attempt <= 3; attempt += 1) {
+                try {
+                    const response = await fetch(assetUrl, {
+                        credentials: "same-origin",
+                        cache: "force-cache",
+                        headers: { Accept: "image/png" },
+                    });
+                    if (!response.ok) {
+                        throw new Error(`Artwork HTTP ${response.status}`);
+                    }
+                    await response.blob();
+                    if (!cancelled) setReady(true);
+                    return;
+                } catch {
+                    if (attempt < 3) {
+                        await new Promise((resolve) => {
+                            window.setTimeout(resolve, attempt * 650);
+                        });
+                    }
+                }
+            }
+        })();
+
+        return () => {
+            cancelled = true;
+        };
     }, [assetUrl]);
 
     if (assetUrl === null) {
@@ -64,24 +99,20 @@ function CombatObjectArtwork({
                 + (side.is_planet ? " is-planet-artwork" : "")
             }
         >
-            <img
-                alt=""
-                className="vcr-hull-artwork"
-                draggable={false}
-                hidden={!loaded || failed}
-                onError={() => {
-                    setLoaded(false);
-                    setFailed(true);
-                }}
-                onLoad={() => {
-                    setFailed(false);
-                    setLoaded(true);
-                }}
-                src={assetUrl}
-            />
+            {ready && (
+                <img
+                    alt=""
+                    className="vcr-hull-artwork"
+                    draggable={false}
+                    hidden={!loaded}
+                    onError={() => setLoaded(false)}
+                    onLoad={() => setLoaded(true)}
+                    src={assetUrl}
+                />
+            )}
             <span
                 className="vcr-object-marker"
-                hidden={loaded && !failed}
+                hidden={ready && loaded}
             />
         </span>
     );
