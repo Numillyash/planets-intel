@@ -1,7 +1,9 @@
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Path
+from fastapi import APIRouter, Depends, HTTPException, Path, status
 
+from app.api.dependencies.auth import require_user
+from app.models.user import AppUser
 from app.planetsnu.client import PlanetsNuClient, PlanetsNuError
 from app.schemas.games import (
     GameDetailsResponse,
@@ -10,6 +12,7 @@ from app.schemas.games import (
     PlayerInfo,
     RelationInfo,
 )
+from app.services.rule_catalog_view import get_game_rule_catalog_view
 
 
 router = APIRouter(
@@ -104,6 +107,22 @@ def build_relation_info(
         conflict_level=raw["conflictlevel"],
         color=raw["color"],
     )
+
+
+@router.get(
+    "/{game_id}/rule-catalog",
+)
+def get_rule_catalog(
+    game_id: int = Path(gt=0),
+    _user: AppUser = Depends(require_user),
+) -> dict[str, Any]:
+    result = get_game_rule_catalog_view(game_id=game_id)
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Game rule catalog not found",
+        )
+    return result
 
 
 @router.get(
