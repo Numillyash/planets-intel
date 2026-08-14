@@ -3,6 +3,7 @@ import type { CombinedPrivateIntelResponse } from "../types/intel";
 import type {
     CombatEventsResponse,
     HistoricalBackfillTurnResponse,
+    HistoricalCombatEventSide,
     HistoricalIntelStatus,
     HistoricalShipTracksResponse,
 } from "../types/history";
@@ -73,6 +74,22 @@ export async function getHistoricalIntelStatus(
     return response.json() as Promise<HistoricalIntelStatus>;
 }
 
+function normalizeHistoricalSide(
+    side: HistoricalCombatEventSide,
+    trackedShipId: number,
+    pointPostHostConfirmed: boolean,
+): HistoricalCombatEventSide {
+    return {
+        ...side,
+        combat_outcome: side.sequence_status,
+        post_host_confirmed: (
+            side.object_kind === "ship"
+            && side.object_id === trackedShipId
+            && pointPostHostConfirmed
+        ),
+    };
+}
+
 export async function getHistoricalShipTracks(
     gameId: number,
     linkedAccountId: number,
@@ -91,7 +108,38 @@ export async function getHistoricalShipTracks(
             `Historical ship tracks failed: ${await parseErrorMessage(response)}`,
         );
     }
-    return response.json() as Promise<HistoricalShipTracksResponse>;
+
+    const payload = await response.json() as HistoricalShipTracksResponse;
+
+    return {
+        ...payload,
+        tracks: payload.tracks.map((track) => ({
+            ...track,
+            points: track.points.map((point) => {
+                if (point.combat_event === null) return point;
+
+                const event = point.combat_event;
+                return {
+                    ...point,
+                    combat_event: {
+                        ...event,
+                        sides: [
+                            normalizeHistoricalSide(
+                                event.sides[0],
+                                track.ship_id,
+                                point.post_host_confirmed,
+                            ),
+                            normalizeHistoricalSide(
+                                event.sides[1],
+                                track.ship_id,
+                                point.post_host_confirmed,
+                            ),
+                        ],
+                    },
+                };
+            }),
+        })),
+    };
 }
 
 export async function getHistoricalCombatEvents(
