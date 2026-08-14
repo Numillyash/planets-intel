@@ -4,11 +4,10 @@ import { createPortal } from "react-dom";
 import { CombatEventPanel as VcrPanel } from "./CombatEventPanelLegacy";
 import { HostEventPanel } from "./HostEventPanel";
 import { MapEventBridge } from "./MapEventBridge";
-import { PlayerActivityPanel } from "./PlayerActivityPanel";
 import "./operational-shell-v2.css";
 import "./operational-dashboard-bridge.css";
 
-type DashboardTab = "combat" | "host" | "activity";
+type DashboardTab = "combat" | "host";
 
 export function CombatEventPanel(props: Parameters<typeof VcrPanel>[0]) {
     const [intelOverlayOpen, setIntelOverlayOpen] = useState(false);
@@ -127,14 +126,7 @@ export function CombatEventPanel(props: Parameters<typeof VcrPanel>[0]) {
                         onClick={() => setActiveTab("host")}
                         type="button"
                     >
-                        Host events
-                    </button>
-                    <button
-                        className={activeTab === "activity" ? "is-active" : ""}
-                        onClick={() => setActiveTab("activity")}
-                        type="button"
-                    >
-                        Activity
+                        Reports
                     </button>
                 </nav>
 
@@ -155,16 +147,6 @@ export function CombatEventPanel(props: Parameters<typeof VcrPanel>[0]) {
                             gameId={props.gameId}
                             linkedAccountId={props.linkedAccountId}
                             turn={props.turn}
-                        />
-                    </section>
-                    <section
-                        className={
-                            `operational-dashboard-pane${activeTab === "activity" ? " is-active" : ""}`
-                        }
-                    >
-                        <PlayerActivityPanel
-                            gameId={props.gameId}
-                            throughTurn={props.turn}
                         />
                     </section>
                 </div>
