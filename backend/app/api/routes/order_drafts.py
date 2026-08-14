@@ -85,6 +85,8 @@ def save_ship_order_draft(
             warp=payload.warp,
             waypoint_x=payload.waypoint_x,
             waypoint_y=payload.waypoint_y,
+            movement_mode=payload.movement_mode,
+            intercept_target_ship_id=payload.intercept_target_ship_id,
         )
     except (OrderDraftAccessError, OrderDraftNotFound) as exc:
         _raise_service_error(exc)
