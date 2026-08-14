@@ -2,6 +2,7 @@ from datetime import datetime
 
 from sqlalchemy import (
     BigInteger,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
@@ -27,6 +28,10 @@ class ShipOrderDraft(Base):
             "turn",
             "ship_id",
             name="uq_ship_order_draft_identity",
+        ),
+        CheckConstraint(
+            "movement_mode IN ('waypoint', 'intercept')",
+            name="ck_ship_order_drafts_movement_mode",
         ),
         Index(
             "ix_ship_order_drafts_game_turn_account",
@@ -70,6 +75,15 @@ class ShipOrderDraft(Base):
     warp: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
     waypoint_x: Mapped[int | None] = mapped_column(Integer, nullable=True)
     waypoint_y: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    movement_mode: Mapped[str] = mapped_column(
+        String(16),
+        server_default="waypoint",
+        nullable=False,
+    )
+    intercept_target_ship_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        nullable=True,
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
