@@ -21,7 +21,7 @@ def _file_response(path) -> FileResponse:
         path,
         media_type="image/png",
         headers={
-            "Cache-Control": "private, max-age=604800, immutable",
+            "Cache-Control": "private, max-age=86400",
         },
     )
 
