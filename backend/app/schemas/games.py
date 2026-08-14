@@ -74,6 +74,8 @@ class PlayerInfo(BaseModel):
     starbases: int
 
     turn_ready: bool
+    active_advantages: str = ""
+    active_hulls: str = ""
 
 
 class RelationInfo(BaseModel):
