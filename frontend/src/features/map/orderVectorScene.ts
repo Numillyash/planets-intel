@@ -182,6 +182,9 @@ export function drawOrderVectors({
     const draftByShipId = new Map(
         drafts.map((draft) => [draft.ship_id, draft]),
     );
+    const shipById = new Map(
+        intel.ships.map((ship) => [ship.ship_id, ship]),
+    );
 
     for (const ship of intel.ships) {
         if (
@@ -219,6 +222,43 @@ export function drawOrderVectors({
 
         const draft = draftByShipId.get(ship.ship_id);
         if (draft === undefined) continue;
+
+        if (
+            draft.movement_mode === "intercept"
+            && draft.intercept_target_ship_id !== null
+        ) {
+            const target = shipById.get(draft.intercept_target_ship_id);
+            if (
+                target === undefined
+                || target.x === null
+                || target.y === null
+            ) {
+                continue;
+            }
+
+            const lockRoute: MapPoint[] = [
+                { x: ship.x, y: ship.y },
+                { x: target.x, y: target.y },
+            ];
+            const lockDistance = routeDistance(lockRoute);
+            if (lockDistance < 0.5) continue;
+
+            drawVector({
+                world,
+                route: lockRoute,
+                bounds,
+                color: draft.stale ? 0xffc766 : 0xf29bff,
+                alpha: 0.96,
+                width: 2.15,
+                dashLength: 6,
+                gapLength: 5,
+                label: (
+                    `INTERCEPT LOCK · #${target.ship_id}`
+                    + ` · ${lockDistance.toFixed(1)} ly sighting`
+                ),
+            });
+            continue;
+        }
 
         const targetX = draft.waypoint_x ?? draft.upstream_waypoint_x;
         const targetY = draft.waypoint_y ?? draft.upstream_waypoint_y;
