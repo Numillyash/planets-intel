@@ -13,7 +13,7 @@ from app.services.historical_intel import (
     get_combined_private_intel_turn,
 )
 from app.services.historical_status import historical_intel_status
-from app.services.historical_tracks import get_historical_ship_tracks
+from app.services.historical_track_lifecycle import get_historical_ship_tracks
 from app.services.host_events import get_accessible_host_events
 from app.services.loadout_inference import get_ship_loadout_inference
 from app.services.player_activity import get_player_activity_analysis
