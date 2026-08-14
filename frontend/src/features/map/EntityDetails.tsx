@@ -101,7 +101,7 @@ function PlanetOperationalDetails({
     selected: Extract<SelectedEntity, { kind: "planet" }>;
     intel: PrivateIntelMapResponse;
     players: PlayerInfo[];
-    onSelect: (entity: SelectedEntity) => void;
+    onSelect: (entity: SelectedEntity | null) => void;
 }) {
     const [activeTab, setActiveTab] =
         useState<PlanetOperationalTab>("planet");
@@ -164,7 +164,7 @@ function PlanetOperationalDetails({
             <div className="operational-entity-content">
                 <OperationalPlanetPanel
                     intel={intel}
-                    onSelect={onSelect}
+                    onSelect={(entity) => onSelect(entity)}
                     planet={planet}
                     players={players}
                     postHostState={postHostState}
@@ -188,8 +188,23 @@ export function EntityDetails({
     selected: SelectedEntity | null;
     intel: PrivateIntelMapResponse;
     players: PlayerInfo[];
-    onSelect: (entity: SelectedEntity) => void;
+    onSelect: (entity: SelectedEntity | null) => void;
 }) {
+    useEffect(() => {
+        if (selected === null) return;
+
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === "Escape") {
+                onSelect(null);
+            }
+        };
+
+        window.addEventListener("keydown", handleKeyDown);
+        return () => {
+            window.removeEventListener("keydown", handleKeyDown);
+        };
+    }, [onSelect, selected]);
+
     if (selected === null) {
         return (
             <div className="operational-empty-selection">
@@ -203,47 +218,50 @@ export function EntityDetails({
         );
     }
 
-    if (selected.kind === "planet") {
-        return (
-            <PlanetOperationalDetails
-                intel={intel}
-                onSelect={onSelect}
-                players={players}
-                selected={selected}
-            />
-        );
-    }
-
-    if (selected.kind === "ship") {
-        return (
-            <ShipDetails
-                intel={intel}
-                onSelect={onSelect}
-                players={players}
-                ship={selected.value}
-            />
-        );
-    }
-
-    if (selected.kind === "stellar") {
-        return (
-            <StellarFeatureDetails
-                feature={selected.value}
-                intel={intel}
-                onSelect={onSelect}
-                players={players}
-            />
-        );
-    }
-
-    return (
+    const content = selected.kind === "planet" ? (
+        <PlanetOperationalDetails
+            intel={intel}
+            onSelect={onSelect}
+            players={players}
+            selected={selected}
+        />
+    ) : selected.kind === "ship" ? (
+        <ShipDetails
+            intel={intel}
+            onSelect={(entity) => onSelect(entity)}
+            players={players}
+            ship={selected.value}
+        />
+    ) : selected.kind === "stellar" ? (
+        <StellarFeatureDetails
+            feature={selected.value}
+            intel={intel}
+            onSelect={(entity) => onSelect(entity)}
+            players={players}
+        />
+    ) : (
         <>
             <StarbaseDetails
                 intel={intel}
-                onSelect={onSelect}
+                onSelect={(entity) => onSelect(entity)}
                 starbase={selected.value}
             />
             <EntityProvenance intel={intel} selected={selected} />
         </>
+    );
+
+    return (
+        <div className="operational-entity-details-shell">
+            <button
+                aria-label="Close selected entity"
+                className="operational-entity-close"
+                onClick={() => onSelect(null)}
+                title="Close (Esc)"
+                type="button"
+            >
+                ×
+            </button>
+            {content}
+        </div>
     );
 }
