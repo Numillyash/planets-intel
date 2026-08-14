@@ -9,6 +9,7 @@ from app.core.config import get_settings
 
 
 _PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+_MAX_DOWNLOAD_ATTEMPTS = 3
 _locks: dict[int, asyncio.Lock] = {}
 
 
@@ -35,6 +36,33 @@ def cached_hull_path(hull_id: int) -> Path | None:
     return path
 
 
+async def _download_hull_asset(url: str) -> httpx.Response:
+    last_error: httpx.HTTPError | None = None
+
+    for attempt in range(1, _MAX_DOWNLOAD_ATTEMPTS + 1):
+        try:
+            async with httpx.AsyncClient(
+                timeout=httpx.Timeout(20.0, connect=10.0),
+                follow_redirects=True,
+                trust_env=False,
+            ) as client:
+                return await client.get(
+                    url,
+                    headers={
+                        "Referer": "https://planets.nu/",
+                        "User-Agent": "Mozilla/5.0",
+                    },
+                )
+        except (httpx.TimeoutException, httpx.NetworkError) as exc:
+            last_error = exc
+            if attempt < _MAX_DOWNLOAD_ATTEMPTS:
+                await asyncio.sleep(0.35 * attempt)
+
+    raise PrivateAssetError(
+        f"Planets.nu hull asset download failed after {_MAX_DOWNLOAD_ATTEMPTS} attempts"
+    ) from last_error
+
+
 async def ensure_hull_asset(hull_id: int) -> Path | None:
     cached = cached_hull_path(hull_id)
     if cached is not None:
@@ -49,19 +77,7 @@ async def ensure_hull_asset(hull_id: int) -> Path | None:
         settings = get_settings()
         base_url = settings.planetsnu_hull_asset_base_url.rstrip("/")
         url = f"{base_url}/{hull_id}.png"
-
-        async with httpx.AsyncClient(
-            timeout=20.0,
-            follow_redirects=True,
-            trust_env=False,
-        ) as client:
-            response = await client.get(
-                url,
-                headers={
-                    "Referer": "https://planets.nu/",
-                    "User-Agent": "Mozilla/5.0",
-                },
-            )
+        response = await _download_hull_asset(url)
 
         if response.status_code == 404:
             return None
