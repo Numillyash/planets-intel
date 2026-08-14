@@ -5,8 +5,9 @@ import {
     useRef,
     useState,
 } from "react";
-import { Application, Container, Graphics, Text } from "pixi.js";
+import { Application, Assets, Container, Graphics, Text } from "pixi.js";
 import { getHistoricalShipTracks } from "../../api/history";
+import { privateHullAssetUrl } from "../../lib/privateAssets";
 import type {
     CombatEventSummary,
     HistoricalCombatEvent,
@@ -74,6 +75,36 @@ function combatEventKind(event: HistoricalCombatEvent): string {
 }
 
 
+async function warmHullTexture(url: string): Promise<void> {
+    let lastError: unknown = null;
+
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+        try {
+            const response = await fetch(url, {
+                credentials: "same-origin",
+                cache: "force-cache",
+                headers: { Accept: "image/png" },
+            });
+            if (!response.ok) {
+                throw new Error(`Hull asset HTTP ${response.status}`);
+            }
+            await response.blob();
+            await Assets.load(url);
+            return;
+        } catch (reason) {
+            lastError = reason;
+            if (attempt < 3) {
+                await new Promise((resolve) => {
+                    window.setTimeout(resolve, attempt * 650);
+                });
+            }
+        }
+    }
+
+    throw lastError;
+}
+
+
 export function PixiMapCanvas({
     intel,
     labelMode,
@@ -96,7 +127,10 @@ export function PixiMapCanvas({
     const intelRef = useRef(intel);
     const boundsRef = useRef<MapBounds | null>(null);
     const lastFitGameIdRef = useRef<number | null>(null);
+    const loadedHullAssetUrlsRef = useRef<Set<string>>(new Set());
+    const loadingHullAssetUrlsRef = useRef<Set<string>>(new Set());
     const [appReadyRevision, setAppReadyRevision] = useState(0);
+    const [hullArtworkRevision, setHullArtworkRevision] = useState(0);
     const [historicalTracks, setHistoricalTracks] =
         useState<HistoricalShipTrack[]>([]);
     const [trackMode, setTrackMode] = useState<ShipTrackMode>("all");
@@ -132,6 +166,42 @@ export function PixiMapCanvas({
 
     intelRef.current = intel;
     boundsRef.current = bounds;
+
+    useEffect(() => {
+        let cancelled = false;
+        const urls = Array.from(new Set(
+            intel.ships
+                .map((ship) => privateHullAssetUrl(ship.hull_id, ship.payload))
+                .filter((value): value is string => value !== null),
+        ));
+
+        for (const url of urls) {
+            if (
+                loadedHullAssetUrlsRef.current.has(url) ||
+                loadingHullAssetUrlsRef.current.has(url)
+            ) {
+                continue;
+            }
+
+            loadingHullAssetUrlsRef.current.add(url);
+            void warmHullTexture(url)
+                .then(() => {
+                    if (cancelled) return;
+                    loadedHullAssetUrlsRef.current.add(url);
+                    setHullArtworkRevision((value) => value + 1);
+                })
+                .catch(() => {
+                    // Keep the geometric marker. A later game/snapshot can retry.
+                })
+                .finally(() => {
+                    loadingHullAssetUrlsRef.current.delete(url);
+                });
+        }
+
+        return () => {
+            cancelled = true;
+        };
+    }, [intel.game_id, intel.ships, intel.turn]);
 
     useEffect(() => {
         setSelectedCombatEvent(null);
@@ -477,6 +547,7 @@ export function PixiMapCanvas({
             labelMode,
             selected,
             onSelect,
+            loadedHullAssetUrls: loadedHullAssetUrlsRef.current,
         });
 
         drawCurrentCombatContacts({
@@ -505,6 +576,7 @@ export function PixiMapCanvas({
         bounds,
         fitViewRef,
         historicalTracks,
+        hullArtworkRevision,
         intel,
         labelMode,
         links,
@@ -618,31 +690,30 @@ export function PixiMapCanvas({
                                 key={side.side}
                                 style={{
                                     padding: "8px 9px",
-                                    border: "1px solid rgba(57, 71, 93, 0.72)",
-                                    borderRadius: 7,
-                                    background: "rgba(13, 20, 31, 0.86)",
+                                    border: "1px solid #26374d",
+                                    borderRadius: 6,
+                                    background: "#0b1420",
                                 }}
                             >
                                 <strong>{combatSideName(side)}</strong>
-                                <div style={{ color: "#91a9c8", fontSize: 12, marginTop: 3 }}>
+                                <div style={{ color: "#8ba1bd", marginTop: 3, fontSize: 12 }}>
                                     {side.object_kind === "ship"
-                                        ? `Ship${side.object_id !== null ? ` #${side.object_id}` : ""}${side.hull_id !== null ? ` · hull #${side.hull_id}` : ""}`
-                                        : `${side.has_starbase ? "Planet + starbase" : "Planet"}${side.object_id !== null ? ` #${side.object_id}` : ""}`}
-                                    {side.owner_id !== null ? ` · owner slot ${side.owner_id}` : ""}
+                                        ? `Ship ${side.object_id === null ? "?" : `#${side.object_id}`}`
+                                        : `Planet ${side.object_id === null ? "?" : `#${side.object_id}`}`}
+                                    {side.hull_id !== null ? ` · hull #${side.hull_id}` : ""}
+                                    {side.owner_id !== null ? ` · VCR owner slot ${side.owner_id}` : ""}
                                 </div>
                                 {side.object_kind === "ship" && (
-                                    <div
-                                        style={{
-                                            marginTop: 4,
-                                            fontSize: 12,
-                                            color: side.sequence_status === "defeated"
-                                                ? "#ff9999"
-                                                : side.sequence_status === "survived_to_later_combat"
-                                                    ? "#82e6b1"
-                                                    : "#c8d4e4",
-                                        }}
-                                    >
-                                        {combatOutcomeLabel(side.sequence_status)}
+                                    <div style={{ marginTop: 4, fontSize: 12 }}>
+                                        {side.post_host_confirmed ? (
+                                            <span style={{ color: "#82e6b1" }}>
+                                                Survived host · directly observed afterwards
+                                            </span>
+                                        ) : (
+                                            <span style={{ color: side.combat_outcome === "defeated" ? "#ff8b99" : "#e8c778" }}>
+                                                {combatOutcomeLabel(side.combat_outcome)}
+                                            </span>
+                                        )}
                                     </div>
                                 )}
                             </div>
@@ -652,89 +723,18 @@ export function PixiMapCanvas({
                     {combatHasDerivedSequence && (
                         <div
                             style={{
-                                color: "#91a9c8",
-                                fontSize: 11,
-                                lineHeight: 1.45,
                                 marginTop: 9,
+                                paddingTop: 8,
+                                borderTop: "1px solid #28384c",
+                                color: "#8da3be",
+                                fontSize: 11,
                             }}
                         >
-                            Sequence status is derived only from later VCRs on the same turn
-                            at the same coordinates. Stored factual combat observations are unchanged.
+                            Combat sequence status is derived only from stored factual VCR order at the same position.
                         </div>
                     )}
                 </div>
             )}
-
-            <div
-                style={{
-                    position: "absolute",
-                    zIndex: 4,
-                    top: 52,
-                    right: 12,
-                    display: "flex",
-                    flexWrap: "wrap",
-                    justifyContent: "flex-end",
-                    gap: 8,
-                    maxWidth: "72%",
-                    padding: "7px 9px",
-                    border: "1px solid rgba(57, 71, 93, 0.72)",
-                    borderRadius: 8,
-                    background: "rgba(8, 13, 21, 0.88)",
-                    backdropFilter: "blur(5px)",
-                }}
-            >
-                <label className="intel-label-control">
-                    <span>Trails</span>
-                    <select
-                        className="secondary-button"
-                        onChange={(event) =>
-                            setTrackMode(event.target.value as ShipTrackMode)
-                        }
-                        value={trackMode}
-                    >
-                        <option value="all">All ships</option>
-                        <option value="selected">Selected ship</option>
-                        <option value="off">Off</option>
-                    </select>
-                </label>
-                <label className="intel-label-control">
-                    <span>History</span>
-                    <select
-                        className="secondary-button"
-                        onChange={(event) => {
-                            const value = event.target.value;
-                            setTrackLookbackTurns(
-                                value === "all" ? null : Number(value),
-                            );
-                        }}
-                        value={trackLookbackTurns === null ? "all" : String(trackLookbackTurns)}
-                    >
-                        <option value="1">1 turn back</option>
-                        <option value="3">3 turns back</option>
-                        <option value="5">5 turns back</option>
-                        <option value="10">10 turns back</option>
-                        <option value="20">20 turns back</option>
-                        <option value="all">All stored</option>
-                    </select>
-                </label>
-                <label className="intel-label-control">
-                    <span>Fade</span>
-                    <select
-                        className="secondary-button"
-                        onChange={(event) =>
-                            setTrackFadePercent(Number(event.target.value))
-                        }
-                        value={trackFadePercent}
-                    >
-                        <option value={0}>0% / turn</option>
-                        <option value={10}>10% / turn</option>
-                        <option value={20}>20% / turn</option>
-                        <option value={30}>30% / turn</option>
-                        <option value={40}>40% / turn</option>
-                        <option value={50}>50% / turn</option>
-                    </select>
-                </label>
-            </div>
         </>
     );
 }
