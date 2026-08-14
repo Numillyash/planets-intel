@@ -11,6 +11,7 @@ import {
     logout,
 } from "./api/client";
 import { DashboardApp } from "./features/dashboard/DashboardApp";
+import { IntelboardGamePicker } from "./features/dashboard/IntelboardGamePicker";
 import type { CurrentUserResponse } from "./types/api";
 import "./styles.css";
 
@@ -164,6 +165,11 @@ function App() {
     }
 
     if (!user) return <LoginScreen onLogin={handleLogin} />;
+
+    const gamePickerRoute = /^\/intelboard\/?$/i.test(window.location.pathname);
+    if (gamePickerRoute) {
+        return <IntelboardGamePicker onLogout={handleLogout} user={user} />;
+    }
 
     return <DashboardApp onLogout={handleLogout} user={user} />;
 }
