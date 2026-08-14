@@ -47,9 +47,6 @@ def _lifecycle_break(
     previous: dict[str, Any],
     current: dict[str, Any],
 ) -> bool:
-    if bool(current.get("gap_from_previous")):
-        return True
-
     # VCR defeat is the strongest lifecycle boundary we currently have.
     # If a later host report directly confirms survival at the same position,
     # do not close the lifecycle; otherwise a later appearance of the numeric
@@ -174,6 +171,6 @@ def get_historical_ship_tracks(
         **result,
         "tracks": tracks,
         "track_identity_policy": (
-            "split_on_gap_defeat_or_observed_hull_change"
+            "split_on_defeat_or_observed_hull_change"
         ),
     }
