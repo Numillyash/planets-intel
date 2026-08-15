@@ -9,7 +9,19 @@ import "./operational-dashboard-bridge.css";
 
 type DashboardTab = "combat" | "host";
 
-export function CombatEventPanel(props: Parameters<typeof VcrPanel>[0]) {
+interface FocusTarget {
+    x: number | null;
+    y: number | null;
+}
+
+interface CombatEventPanelProps {
+    gameId: number;
+    linkedAccountId: number;
+    turn: number;
+    onFocus: (event: FocusTarget) => void;
+}
+
+export function CombatEventPanel(props: CombatEventPanelProps) {
     const [intelOverlayOpen, setIntelOverlayOpen] = useState(false);
     const [pageDashboardOpen, setPageDashboardOpen] = useState(false);
     const [activeTab, setActiveTab] = useState<DashboardTab>("combat");
@@ -166,6 +178,10 @@ export function CombatEventPanel(props: Parameters<typeof VcrPanel>[0]) {
                         <HostEventPanel
                             gameId={props.gameId}
                             linkedAccountId={props.linkedAccountId}
+                            onFocus={(event) => {
+                                props.onFocus(event);
+                                setIntelOverlayOpen(false);
+                            }}
                             turn={props.turn}
                         />
                     </section>
