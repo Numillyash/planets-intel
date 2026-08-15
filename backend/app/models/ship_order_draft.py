@@ -85,6 +85,13 @@ class ShipOrderDraft(Base):
         nullable=True,
     )
 
+    # Semantic local orders. Mission is intentionally stored by stable display
+    # name rather than guessed Nu numeric id until write-back mapping is
+    # verified endpoint-by-endpoint.
+    friendly_code: Mapped[str | None] = mapped_column(String(3), nullable=True)
+    mission: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    primary_enemy_id: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
