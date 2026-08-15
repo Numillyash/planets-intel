@@ -27,15 +27,22 @@ class PlanetsNuClient:
     ) -> Any:
         url = f"{self.base_url}/{path.lstrip('/')}"
 
-        async with httpx.AsyncClient(
-            timeout=30.0,
-            follow_redirects=True,
-            trust_env=False,
-        ) as client:
-            response = await client.get(
-                url,
-                params=params,
-            )
+        try:
+            async with httpx.AsyncClient(
+                timeout=30.0,
+                follow_redirects=True,
+                proxy=self.proxy_url,
+                trust_env=False,
+            ) as client:
+                response = await client.get(
+                    url,
+                    params=params,
+                )
+        except httpx.RequestError as exc:
+            raise PlanetsNuError(
+                "Planets.nu request failed: "
+                f"{exc.__class__.__name__}"
+            ) from exc
 
         try:
             response.raise_for_status()
@@ -60,17 +67,23 @@ class PlanetsNuClient:
     ) -> Any:
         url = f"{self.base_url}/{path.lstrip('/')}"
 
-        async with httpx.AsyncClient(
-            timeout=30.0,
-            follow_redirects=True,
-            proxy=self.proxy_url if use_proxy else None,
-            trust_env=False,
-        ) as client:
-            response = await client.post(
-                url,
-                data=data,
-                headers=headers,
-            )
+        try:
+            async with httpx.AsyncClient(
+                timeout=30.0,
+                follow_redirects=True,
+                proxy=self.proxy_url if use_proxy else None,
+                trust_env=False,
+            ) as client:
+                response = await client.post(
+                    url,
+                    data=data,
+                    headers=headers,
+                )
+        except httpx.RequestError as exc:
+            raise PlanetsNuError(
+                "Planets.nu request failed: "
+                f"{exc.__class__.__name__}"
+            ) from exc
 
         try:
             response.raise_for_status()
