@@ -1,6 +1,6 @@
 """Add raw observer-specific private message observations.
 
-Revision ID: 0014_private_message_observations
+Revision ID: 0014_private_messages
 Revises: 0013_entity_order_drafts
 """
 
@@ -8,7 +8,7 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision = "0014_private_message_observations"
+revision = "0014_private_messages"
 down_revision = "0013_entity_order_drafts"
 branch_labels = None
 depends_on = None
