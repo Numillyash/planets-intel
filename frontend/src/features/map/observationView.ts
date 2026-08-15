@@ -54,6 +54,7 @@ export interface ShipFacts {
     duranium: number | null;
     tritanium: number | null;
     molybdenum: number | null;
+    ammo: number | null;
     torpedoes: number | null;
     fighters: number | null;
     waypointX: number | null;
@@ -179,6 +180,32 @@ export function planetFacts(planet: PlanetObservationResponse): PlanetFacts {
 
 export function shipFacts(ship: ShipObservationResponse): ShipFacts {
     const payload = ship.payload;
+    const bays = nonNegativeFactNumber(payload, "bays", "fighterbays", "baycount");
+    const tubes = nonNegativeFactNumber(payload, "tubes", "torpedotubes", "tube_count");
+    const ammo = nonNegativeFactNumber(payload, "ammo");
+    const explicitFighters = nonNegativeFactNumber(payload, "fighters");
+    const explicitTorpedoes = nonNegativeFactNumber(payload, "torpedoes", "torps");
+    const torpedoId = positiveFactNumber(payload, "torpedoid", "torpedo_id");
+
+    // Nu uses one generic ``ammo`` field in private ship rows. Keep it as a
+    // first-class factual value, and only give it semantic meaning when the
+    // available armament evidence is unambiguous. Positive generic ammo on a
+    // non-torpedo combat ship is fighter stock; a known torpedo weapon means
+    // the same generic counter is torpedo stock. Hidden enemy ammo has already
+    // been removed by the backend factual read model.
+    const torpedoArmed = (tubes !== null && tubes > 0) || torpedoId !== null;
+    const fighterArmed = bays !== null && bays > 0;
+    const semanticTorpedoes = explicitTorpedoes
+        ?? (ammo !== null && torpedoArmed && !fighterArmed ? ammo : null);
+    const semanticFighters = explicitFighters
+        ?? (
+            ammo !== null
+            && ammo > 0
+            && !torpedoArmed
+                ? ammo
+                : null
+        );
+
     return {
         friendlyCode: factString(payload, "friendlycode", "friendly_code", "fcode"),
         hullName: factString(payload, "hullname", "hull_name"),
@@ -186,9 +213,9 @@ export function shipFacts(ship: ShipObservationResponse): ShipFacts {
         engineId: positiveFactNumber(payload, "engineid", "engine_id"),
         beams: nonNegativeFactNumber(payload, "beams", "beamcount", "beam_count"),
         beamName: factString(payload, "beamname", "beam_name"),
-        tubes: nonNegativeFactNumber(payload, "tubes", "torpedotubes", "tube_count"),
+        tubes,
         torpedoName: factString(payload, "torpedoname", "torpedo_name"),
-        bays: nonNegativeFactNumber(payload, "bays", "fighterbays", "baycount"),
+        bays,
         damage: nonNegativeFactNumber(payload, "damage"),
         crew: nonNegativeFactNumber(payload, "crew"),
         mission: firstDisplayValue(payload, ["missionname", "mission_name"], ["mission"], "Mission"),
@@ -199,8 +226,9 @@ export function shipFacts(ship: ShipObservationResponse): ShipFacts {
         duranium: nonNegativeFactNumber(payload, "duranium"),
         tritanium: nonNegativeFactNumber(payload, "tritanium"),
         molybdenum: nonNegativeFactNumber(payload, "molybdenum"),
-        torpedoes: nonNegativeFactNumber(payload, "torpedoes", "torps"),
-        fighters: nonNegativeFactNumber(payload, "fighters"),
+        ammo,
+        torpedoes: semanticTorpedoes,
+        fighters: semanticFighters,
         waypointX: nonNegativeFactNumber(payload, "waypointx", "targetx", "waypoint_x"),
         waypointY: nonNegativeFactNumber(payload, "waypointy", "targety", "waypoint_y"),
     };
