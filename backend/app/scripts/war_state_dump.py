@@ -27,6 +27,7 @@ SHIP_KEYS = (
     "clan",
     "megacredit",
     "fighter",
+    "ammo",
     "torp",
     "tube",
     "beam",
@@ -272,6 +273,11 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 "position": [ship.x, ship.y],
                 "warp": ship.warp,
                 "info_turn": ship.info_turn,
+                "ammo": (
+                    ship.payload.get("ammo")
+                    if isinstance(ship.payload, dict)
+                    else None
+                ),
                 "state": compact_payload(ship.payload, SHIP_KEYS),
             }
             for ship in own_ships
@@ -374,6 +380,11 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                     "warp": ship.warp,
                     "info_turn": ship.info_turn,
                     "observer_batch_turn": batch.turn,
+                    "ammo": (
+                        ship.payload.get("ammo")
+                        if isinstance(ship.payload, dict)
+                        else None
+                    ),
                     "state": compact_payload(ship.payload, SHIP_KEYS),
                 }
             )
