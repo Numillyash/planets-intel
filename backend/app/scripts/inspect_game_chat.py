@@ -50,8 +50,47 @@ def _value_label(value: Any) -> str:
     return str(value)
 
 
+def _positive_int(value: Any) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        return None
+    return value
+
+
 def _api_failed(payload: Any) -> bool:
     return isinstance(payload, dict) and payload.get("success") is False
+
+
+def activity_request_candidates(
+    *,
+    api_key: str,
+    planets_account_id: int | None,
+    game_id: int,
+    player_id: int,
+) -> list[tuple[str, dict[str, Any]]]:
+    candidates: list[tuple[str, dict[str, Any]]] = []
+    if planets_account_id is not None:
+        candidates.append(
+            (
+                "apikey+accountid+gameid+playerid",
+                {
+                    "apikey": api_key,
+                    "accountid": planets_account_id,
+                    "gameid": game_id,
+                    "playerid": player_id,
+                },
+            )
+        )
+    candidates.append(
+        (
+            "apikey+gameid+playerid",
+            {
+                "apikey": api_key,
+                "gameid": game_id,
+                "playerid": player_id,
+            },
+        )
+    )
+    return candidates
 
 
 def print_collection(name: str, records: list[dict[str, Any]]) -> None:
@@ -109,32 +148,22 @@ async def probe_ingame_activity(
     api_key: str,
     planets_account_id: int | None,
     game_id: int,
+    player_id: int,
 ) -> None:
     common_headers = {
         "Origin": "https://planets.nu",
         "Referer": "https://planets.nu/",
         "User-Agent": "Mozilla/5.0",
     }
-    candidates: list[tuple[str, dict[str, Any]]] = []
-    if planets_account_id is not None:
-        candidates.append(
-            (
-                "apikey+accountid+gameid",
-                {
-                    "apikey": api_key,
-                    "accountid": planets_account_id,
-                    "gameid": game_id,
-                },
-            )
-        )
-    candidates.extend(
-        [
-            ("apikey+gameid", {"apikey": api_key, "gameid": game_id}),
-            ("apikey", {"apikey": api_key}),
-        ]
+    candidates = activity_request_candidates(
+        api_key=api_key,
+        planets_account_id=planets_account_id,
+        game_id=game_id,
+        player_id=player_id,
     )
 
     print("\n===== /ACCOUNT/INGAMEACTIVITY PROBE =====")
+    print(f"observer_player_id: {player_id}")
     for label, data in candidates:
         print(f"\n--- attempt: {label} ---")
         print("request fields: " + ", ".join(
@@ -195,22 +224,32 @@ async def run() -> None:
             raise SystemExit("loadturn response has no rst object")
 
         game = rst.get("game") if isinstance(rst.get("game"), dict) else {}
+        player = rst.get("player") if isinstance(rst.get("player"), dict) else {}
+        player_id = _positive_int(player.get("id"))
+
         print(f"linked_account_id: {account.id}")
         print(f"planets_account_id: {account.planets_account_id}")
         print(f"username: {account.planets_username}")
         print(f"game_id: {args.game_id}")
         print(f"requested_turn: {args.turn}")
         print(f"returned_turn: {game.get('turn')}")
+        print(f"observer_player_id: {player_id}")
 
         print_collection("messages", _dict_records(rst.get("messages")))
         print_collection("mymessages", _dict_records(rst.get("mymessages")))
 
         if not args.no_activity:
+            if player_id is None:
+                raise SystemExit(
+                    "loadturn response has no valid rst.player.id required by "
+                    "/account/ingameactivity"
+                )
             await probe_ingame_activity(
                 client,
                 api_key=api_key,
                 planets_account_id=account.planets_account_id,
                 game_id=args.game_id,
+                player_id=player_id,
             )
     finally:
         del api_key
