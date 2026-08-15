@@ -135,6 +135,57 @@ class MovementInterceptTests(unittest.TestCase):
         self.assertEqual(results[20].position, Point(80, 0))
         self.assertEqual(results[10].position, Point(80, 0))
 
+    def test_chained_interceptor_uses_targets_post_move_transform(self):
+        def snap_to_planet(position: Point, moved: float) -> Point:
+            self.assertGreater(moved, 0.0)
+            self.assertEqual(position, Point(80, 0))
+            return Point(83, 0)
+
+        results = resolve_intercepts(
+            [
+                InterceptOrder(
+                    ship_id=10,
+                    origin=Point(0, 0),
+                    target_ship_id=20,
+                    max_distance=100,
+                ),
+                InterceptOrder(
+                    ship_id=20,
+                    origin=Point(40, 0),
+                    target_ship_id=90,
+                    max_distance=100,
+                    post_move_transform=snap_to_planet,
+                ),
+            ],
+            prior_final_positions={90: Point(80, 0)},
+            mode=InterceptMode.CHAINED,
+        )
+
+        self.assertEqual(results[20].pre_final_position, Point(80, 0))
+        self.assertEqual(results[20].position, Point(83, 0))
+        self.assertEqual(results[10].target_position, Point(83, 0))
+        self.assertEqual(results[10].position, Point(83, 0))
+
+    def test_unresolved_post_move_transform_fails_closed(self):
+        result = resolve_intercepts(
+            [
+                InterceptOrder(
+                    ship_id=10,
+                    origin=Point(0, 0),
+                    target_ship_id=50,
+                    max_distance=81,
+                    post_move_transform=lambda _position, _moved: None,
+                )
+            ],
+            prior_final_positions={50: Point(60, 0)},
+            mode=InterceptMode.CLASSIC,
+        )[10]
+
+        self.assertEqual(result.status, InterceptStatus.UNRESOLVED_POST_MOVE)
+        self.assertIsNone(result.position)
+        self.assertEqual(result.pre_final_position, Point(60, 0))
+        self.assertFalse(result.certain)
+
     def test_chained_invalid_target_can_anchor_following_ship(self):
         results = resolve_intercepts(
             [
