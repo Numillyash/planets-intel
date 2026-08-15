@@ -17,11 +17,13 @@ import { PlayersTable } from "../players/PlayersTable";
 import { MilitaryScoreChart } from "../statistics/MilitaryScoreChart";
 import { AdvantagesPanel } from "./AdvantagesPanel";
 import { DiplomacyPanel } from "./DiplomacyPanel";
+import { MilitaryAttributionPanel } from "./MilitaryAttributionPanel";
 import { StarbaseListPanel } from "./StarbaseListPanel";
 import { StarshipListPanel } from "./StarshipListPanel";
 import { TimeMachinePanel } from "./TimeMachinePanel";
 import { VcrDashboardPanel } from "./VcrDashboardPanel";
 import "./game-dashboard.css";
+import "./military-attribution.css";
 
 type GameDashboardTab =
     | "dashboard"
@@ -301,6 +303,13 @@ export function GameDashboard({
                             latestScores={latestScores}
                             players={game.players}
                         />
+                        {history !== null && (
+                            <MilitaryAttributionPanel
+                                game={game}
+                                history={history}
+                                linkedAccountId={selectedAccount.id}
+                            />
+                        )}
                         <PlayerActivityPanel
                             embedded
                             gameId={game.game.id}
