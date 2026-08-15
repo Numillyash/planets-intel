@@ -60,13 +60,25 @@
 }
 
 .order-draft-row select,
+.order-draft-row input,
 .order-draft-target-choice select {
+    box-sizing: border-box;
+    width: 100%;
     min-width: 0;
     border: 1px solid #35516d;
     border-radius: 6px;
     padding: 7px 8px;
     background: #111e2d;
     color: #e6f0fc;
+    font: inherit;
+}
+
+.order-draft-row input:focus,
+.order-draft-row select:focus,
+.order-draft-target-choice select:focus {
+    border-color: #62b8ff;
+    outline: none;
+    box-shadow: 0 0 0 1px rgba(98, 184, 255, 0.18);
 }
 
 .order-draft-waypoint-value {
