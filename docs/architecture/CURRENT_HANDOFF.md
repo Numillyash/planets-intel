@@ -2,30 +2,37 @@
 
 Updated: 2026-08-15
 
-This file is the exact session/runtime handoff for starting a completely fresh development chat. Read this file together with `docs/architecture/PROJECT_STATE.md`, then inspect the current Git branch before changing code.
+This file is the exact session/runtime handoff for starting a completely fresh development chat. Read it together with `docs/architecture/PROJECT_STATE.md`, then inspect the actual current GitHub branch HEAD and server checkout before changing or deploying code.
 
 ## Repository / deployment
 
 - Repository: `Numillyash/planets-intel`
 - Active branch: `feature/operational-ui`
-- GitHub branch HEAD at handoff creation: `0a76549e1ce68ff42f25c656fc7a9059be8dd5fd` (`fix: make Planets.nu artwork fetching resilient`).
+- GitHub branch HEAD immediately before this handoff update: `52fc51e04a159dea3121198d16c7b419badb3ff1` (`feat: reconcile VCR fighter losses with military delta`).
 - Server checkout: `/opt/planets-intel`
 - Backend health: `http://127.0.0.1:18080/api/health`
 - Docker Compose services include `backend` and `postgres`.
-- The production backend image also builds/copies the frontend, so `docker compose build backend` validates and deploys frontend changes too.
+- The production backend image also builds/copies the React/Vite frontend, so `docker compose build backend` validates frontend TypeScript/Vite compilation as well as the backend image.
 - Old Git on server: prefer `git symbolic-ref --quiet --short HEAD` instead of `git branch --show-current`.
 
-### Important deployment gap at handoff
+### Current deployment gap
 
-The last runtime behavior shown in chat corresponds to the code around `384dfca` (the hull source list still had only `mobile/app/play`, and the Military panel did not yet show the later VCR fighter-evidence section). GitHub `feature/operational-ui` is **5 commits ahead** of `384dfca`:
+The last explicitly shown runtime behavior still corresponds to code around `384dfca`: the deployed hull source list contained only `mobile/app/play`, and the Military panel did not yet contain the newer VCR attribution/reconciliation UI.
+
+GitHub `feature/operational-ui` is materially ahead of that runtime. Important commits after the last deployed behavior include:
 
 1. `18e7e5e` — attach factual VCR equipment evidence to combat events.
 2. `4b8c92b` — type VCR combat equipment evidence in frontend history models.
 3. `f8f95cf` — show VCR fighter evidence in scoreboard.
 4. `e82a23f` — surface combat fighter evidence in scoreboard.
 5. `0a76549` — make Planets.nu artwork fetching resilient.
+6. `29af36e` — capture IntelBoard handoff.
+7. `a72272f` — refresh project state for clean handoff.
+8. `c91d677` — add final clean-chat bootstrap.
+9. `8664605` — classify VCR fighter deltas for military analysis.
+10. `52fc51e` — reconcile review-confirmed VCR fighter losses with turn-to-turn Military attribution while suppressing snapshot overlap.
 
-Therefore, a new chat must first verify server HEAD and pull/rebuild before assuming any of these five commits are deployed.
+No GitHub Actions workflow/status was available for `52fc51e`; therefore the newest frontend changes are **not build-validated yet**. The next server deploy must run `docker compose build backend` before the new behavior is considered runtime-validated.
 
 Recommended first command block:
 
@@ -42,7 +49,7 @@ docker compose ps
 curl -fsS http://127.0.0.1:18080/api/health && echo
 ```
 
-If the working tree is clean and HEAD is behind, update with:
+If the working tree is clean and HEAD is behind:
 
 ```bash
 git pull --ff-only origin feature/operational-ui
@@ -60,7 +67,7 @@ curl -fsS http://127.0.0.1:18080/api/health && echo
 
 ### Upstream outage fallback
 
-Planets.nu public API was unavailable through the configured route during the last session. The dashboard originally failed with `Planets.nu game list is unavailable` / `No games available` even though canonical data already existed locally.
+Planets.nu public API was unavailable through the configured route during the previous runtime session. The dashboard originally failed with `Planets.nu game list is unavailable` / `No games available` even though canonical data already existed locally.
 
 This was fixed so the account game list falls back to canonical DB membership (`PlanetsAccount -> GamePlayerSlot -> Game`). It was verified live while upstream was unavailable:
 
@@ -74,7 +81,7 @@ UPSTREAM: UNAVAILABLE
 #683335 | Ceros Sector | T1  | canonical-cache
 ```
 
-`/games/{id}` was also given a canonical fallback using `Game`, `GameRuleCatalog.settings`, `GamePlayerSlot`, latest `ScoreObservation` and latest `PlayerTurnActivityObservation`. It was verified for game `682909`:
+`/games/{id}` also has a canonical fallback using `Game`, `GameRuleCatalog.settings`, `GamePlayerSlot`, latest `ScoreObservation` and latest `PlayerTurnActivityObservation`. It was verified for game `682909`:
 
 ```text
 SOURCE: canonical-cache
@@ -97,7 +104,7 @@ Do not fabricate missing cached fields. If a value is not persisted canonically,
 
 ### Ammo / hidden-loadout semantics
 
-This is a hard invariant now:
+Hard invariant:
 
 ```text
 known zero != unknown
@@ -112,7 +119,7 @@ Verified combined factual view in game `682909` for observer `helping die`:
 #63 owner=7 hull=94 ammo=UNKNOWN fighters=UNKNOWN source=None
 ```
 
-The frontend was visually verified:
+The frontend was visually verified before the newest commits:
 
 - Own Super Star Destroyer shows `Fighter bays 3`, `Fighters 45`.
 - Enemy Rush shows `Fighter bays 10`, but does **not** show `Fighters 0`.
@@ -121,13 +128,13 @@ Rules:
 
 - Generic Nu `ammo` is a factual value on an observer's own ship.
 - For an enemy private ship row, `ammo=0` can be an undisclosed placeholder and must not become factual zero.
-- Only interpret generic `ammo` semantically as fighters/torpedoes when the hull/equipment catalog proves the ammunition type.
-- VCR combat equipment is separate factual evidence at combat time. It must not overwrite current ship state.
+- Only interpret generic `ammo` as fighters/torpedoes when hull/equipment knowledge proves the ammunition type.
+- VCR combat equipment is a separate combat-time evidence layer. It must not overwrite current ship state.
 - Combined/shared intel must preserve source/provenance before deciding whether ammo is disclosed.
 
 ### Military Δ intelligence — last deployed screenshot
 
-For Rebel player `tusilat`, T11 -> T12:
+For Rebel player `tusilat`, T11 -> T12, the last deployed screenshot showed:
 
 ```text
 Public Δ Military:      +29,004
@@ -152,9 +159,36 @@ Newly observed combat hulls shown:
 
 The panel correctly states that newly observed does not prove newly built and hull-only floors exclude engines, weapons and ammunition.
 
-GitHub now contains the five later commits listed above that attach factual VCR equipment evidence and surface VCR fighter evidence in the Scoreboard. These changes were not yet runtime-validated in the shown screenshot. First validate them after deployment before changing attribution logic further.
+## VCR equipment and Military attribution now in GitHub
 
-### Relevant game / tactical test data
+Raw accessible VCR observations expose immutable combat-start equipment through normalized event-side `combat_equipment`, including beams, launchers, fighter bays, torpedo/fighter counts, shield, damage, crew, mass and race ID. The read layer is scoped to accessible linked accounts and does not mutate canonical observations.
+
+Two additional commits now implement the next attribution step:
+
+### `8664605` — classify in-host fighter deltas
+
+`CombatFighterEvidencePanel` now distinguishes:
+
+- **review-confirmed in-host delta**: combat-start VCR fighter count plus `analyst_confirmed_vcr_review` post-combat fighter state;
+- **deterministic-replay delta**: derived replay result, displayed separately and explicitly not factual;
+- unresolved rows where no post-combat fighter state exists.
+
+The panel aggregates review-confirmed and replay-only fighter/Military deltas by owner. Absolute VCR combat-start loads remain combat-time evidence only and never become current ship loadout.
+
+### `52fc51e` — reconcile VCR fighter loss with score attribution
+
+`MilitaryAttributionPanel` now fetches combat events for the exact public-score turn and applies a conservative overlap rule:
+
+1. If a carrier has factual fighter counts in both previous and current combined snapshots, its turn-to-turn fighter delta already contains any combat loss. Any review-confirmed VCR fighter delta for that ship is marked **overlap** and contributes `0` additional Military.
+2. If no directly comparable turn snapshot exists for that ship, an `analyst_confirmed_vcr_review` combat-start -> post-combat fighter delta is time-compatible with that host and is added to `Confirmed factual Δ` at `125 Military / fighter`.
+3. `deterministic_vcr_replay` is never included in `Confirmed factual Δ`; it remains explanatory/derived evidence.
+4. VCR absolute combat-start fighter count is never treated as a previous-turn or current-turn loadout fact.
+
+The Scoreboard now contains a `Combat fighter Δ reconciliation` section that states whether each analyst-confirmed VCR side was counted or suppressed as snapshot overlap.
+
+This logic is present in GitHub but **has not yet been built or visually validated on `/opt/planets-intel`**.
+
+### Relevant tactical test data
 
 Primary live test game: `682909`, Chanda M Sector, Turn 12.
 
@@ -162,7 +196,7 @@ Important players:
 
 - `helping die` — Evil Empire, slot 5.
 - `tusilat` — Rebels, slot 7.
-- `georgul` — Birds, slot 3; this account is no longer the tactical focus, but remains a useful linked observer/intel source.
+- `georgul` — Birds, slot 3; useful linked observer/intel source.
 
 Confirmed Evil Empire fighter stock used to validate ammo semantics:
 
@@ -177,17 +211,9 @@ Total confirmed current EE fighters in those facts: 90.
 
 User-provided external combat simulation result (not yet verified by our battle engine): a minimally equipped Gorbie vs Rush was approximately 50% at 80 fighters, 75% at 90, 95% at 100. Keep this as analyst/user input, not a canonical game fact.
 
-## VCR equipment evidence now in GitHub
-
-The current branch now attaches immutable combat-start equipment from raw accessible `CombatObservation.payload` into normalized combat event sides as `combat_equipment`. Fields include beam ID/count, launcher count, bay count, torpedo ID/count, fighters, shield, damage, crew, mass and race ID, with evidence basis `vcr_combat_observation`.
-
-The read layer is explicitly scoped by accessible linked accounts and selects the freshest accessible raw VCR observation. It does not mutate stored observations and does not convert combat-time state into current ship state.
-
-Frontend types and Scoreboard UI were added to expose this evidence. The next validation should specifically check whether known VCR fighter counts explain part of `tusilat`'s +29,004 Military without contaminating the current carrier-load factual lower bound.
-
 ## Planets.nu artwork state
 
-Hull #69 successfully cached on the last server run:
+Hull #69 successfully cached on the last shown server run:
 
 ```text
 RESULT: OK
@@ -196,16 +222,16 @@ CACHE: /app/private_assets/hulls/69.png
 
 Hull #94 failed under the then-deployed downloader because all `mobile/app/play` candidates timed out.
 
-The current GitHub HEAD `0a76549` changes the artwork downloader substantially:
+GitHub code from `0a76549` onward changes the artwork downloader substantially:
 
-- tries direct CDN route first and configured proxy second;
+- direct public route first and configured proxy second;
 - adds `https://planets.nu/...` hull and planet sources;
-- keeps current `hulls3d/{id}_p.png` portraits before classic artwork;
+- keeps `hulls3d/{id}_p.png` portraits before classic artwork;
 - limits concurrent artwork source attempts with a semaphore of 2;
 - increases timeout/read budget;
-- distinguishes direct vs proxy errors.
+- distinguishes direct vs proxy failures.
 
-This HEAD is not yet runtime-validated in the handoff. After deploy, re-test hulls 69 and 94 before doing more asset work.
+The resilient downloader is still not runtime-validated in the shown handoff. After deploying current branch HEAD, re-test hulls 69 and 94 before making additional asset changes.
 
 Useful diagnostic:
 
@@ -235,7 +261,7 @@ PY
 
 ## War-state diagnostic
 
-`backend/app/scripts/war_state_dump.py` exists for compact factual game snapshots. It is preferable to screenshots/console dumps for tactical analysis.
+`backend/app/scripts/war_state_dump.py` exists for compact factual game snapshots and is preferable to screenshots/large console dumps for tactical analysis.
 
 Typical invocation:
 
@@ -253,21 +279,26 @@ echo "SAVED: $OUT"
 
 ## Immediate next actions
 
-Do these in order in a fresh chat:
+Do these in order in a fresh chat or after reconnecting to the server:
 
-1. Inspect server branch/HEAD/dirty state and compare with `origin/feature/operational-ui`.
-2. If safe, deploy current GitHub HEAD and verify build + health.
-3. Re-test hull #94 with the new resilient artwork downloader.
-4. Open Scoreboard -> Military Δ intelligence for `tusilat`; validate the new VCR fighter-evidence UI now present in GitHub.
-5. Check that VCR evidence remains explicitly combat-time evidence and does not turn Rush #63 current fighters from UNKNOWN into a fabricated current count.
-6. Decide how much of VCR evidence can contribute to turn-delta attribution. Only directly time-compatible evidence should enter `Confirmed factual Δ`; otherwise present it as explanatory evidence beside the unattributed remainder.
-7. Once attribution is sound, return to Battle Planner / movement fuel / Tow work according to `PROJECT_STATE.md`.
+1. Inspect `/opt/planets-intel` branch/HEAD/dirty state and compare with `origin/feature/operational-ui`.
+2. If safe, fast-forward to the actual GitHub HEAD, run `docker compose build backend`, recreate backend and verify health.
+3. Re-test hull #94 using the resilient downloader.
+4. Open `Scoreboard -> Military Δ intelligence` for `tusilat`, T11 -> T12, and validate the new VCR sections from `8664605` and `52fc51e`.
+5. Verify all four invariants in the live UI:
+   - Rush #63 current fighters remain `UNKNOWN` unless a genuine current factual observation exists;
+   - VCR combat-start fighters are labelled combat-time evidence only;
+   - deterministic replay fighter changes are derived and never enter `Confirmed factual Δ`;
+   - analyst-confirmed VCR fighter delta is counted only when no comparable T11/T12 fighter snapshot already covers that ship.
+6. If no analyst-confirmed post-combat fighter state exists for the relevant `tusilat` VCRs, do **not** expect VCR fighter points in Confirmed factual Δ; validate the classification UI first and decide whether the relevant combat state should be analyst-reviewed.
+7. Once runtime validation is clean, return to Battle Planner / movement fuel / Tow work according to `PROJECT_STATE.md`.
 
 ## New-chat rule
 
-Do not reconstruct project state from old chat memory. Treat GitHub as source of truth. In a fresh chat, explicitly read:
+Do not reconstruct implementation state from old chat memory. Treat GitHub as source of truth. A fresh chat should explicitly read:
 
+- `docs/architecture/NEW_CHAT_START.md`
 - `docs/architecture/PROJECT_STATE.md`
 - `docs/architecture/CURRENT_HANDOFF.md`
 
-Then inspect the actual current branch HEAD and only after that make changes.
+Then inspect the actual branch HEAD and the real server checkout before making further changes.
