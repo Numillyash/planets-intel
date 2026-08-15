@@ -66,8 +66,7 @@ def get_cached_game_details_payload(
     """Build a conservative loadinfo-shaped view from canonical storage.
 
     This is an availability fallback only. Fields that are not persisted as
-    canonical facts (relations, schedule, next-host text, descriptions) are
-    deliberately left empty instead of being invented.
+    canonical facts remain empty/null instead of receiving placeholder values.
     """
     with SessionLocal() as session:
         game = session.get(Game, game_id)
@@ -95,8 +94,6 @@ def get_cached_game_details_payload(
         settings = dict(catalog.settings or {})
         current_turn = game.current_turn
 
-    # Some older persisted catalogs did not redundantly store the current
-    # turn inside settings. It is canonical in games.current_turn.
     settings.setdefault("turn", current_turn)
 
     scores = _latest_scores(game_id, current_turn)
@@ -107,32 +104,25 @@ def get_cached_game_details_payload(
         score = scores.get(slot.slot_id)
         activity = activities.get(slot.slot_id)
 
-        # Public score rows normally cover every slot. If one is absent, keep
-        # the game usable but mark counts with conservative zero placeholders;
-        # callers can distinguish the whole response by source=canonical-cache.
-        planets = score.planets if score is not None else 0
-        ships = (
-            score.capital_ships + score.freighters
-            if score is not None
-            else 0
-        )
-        starbases = score.starbases if score is not None else 0
-
         players.append(
             {
                 "id": slot.slot_id,
-                "accountid": slot.account_id or 0,
+                "accountid": slot.account_id,
                 "username": slot.username,
                 "raceid": slot.race_id,
                 "status": slot.status,
-                "turnstatus": 0,
-                "planets": planets,
-                "ships": ships,
-                "starbases": starbases,
+                "turnstatus": None,
+                "planets": score.planets if score is not None else None,
+                "ships": (
+                    score.capital_ships + score.freighters
+                    if score is not None
+                    else None
+                ),
+                "starbases": score.starbases if score is not None else None,
                 "turnready": (
                     activity.turn_ready
                     if activity is not None
-                    else False
+                    else None
                 ),
                 "activeadvantages": "",
                 "activehulls": "",
@@ -146,8 +136,8 @@ def get_cached_game_details_payload(
             "description": "",
             "shortdescription": "",
             "nexthost": "",
-            "turnsperweek": 0,
-            "wincondition": 0,
+            "turnsperweek": None,
+            "wincondition": None,
         },
         "settings": settings,
         "players": players,
