@@ -31,10 +31,16 @@ export function CombatEventPanel(props: CombatEventPanelProps) {
             setActiveTab("combat");
             setIntelOverlayOpen(true);
         };
+        const openHostEvidence = () => {
+            setActiveTab("host");
+            setIntelOverlayOpen(true);
+        };
 
         window.addEventListener("dashboard-event-select", openCombatEvidence);
+        window.addEventListener("dashboard-host-event-select", openHostEvidence);
         return () => {
             window.removeEventListener("dashboard-event-select", openCombatEvidence);
+            window.removeEventListener("dashboard-host-event-select", openHostEvidence);
         };
     }, []);
 
