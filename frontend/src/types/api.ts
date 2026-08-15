@@ -8,10 +8,10 @@ export interface GameInfo {
     turn: number;
     slots: number;
     next_host: string;
-    turns_per_week: number;
+    turns_per_week: number | null;
     is_private: boolean;
     is_custom: boolean;
-    win_condition_id: number;
+    win_condition_id: number | null;
 }
 
 export interface GameSettings {
@@ -50,15 +50,15 @@ export interface GameSettings {
 
 export interface PlayerInfo {
     slot_id: number;
-    account_id: number;
+    account_id: number | null;
     username: string;
     race_id: number;
     status: number;
-    turn_status: number;
-    planets: number;
-    ships: number;
-    starbases: number;
-    turn_ready: boolean;
+    turn_status: number | null;
+    planets: number | null;
+    ships: number | null;
+    starbases: number | null;
+    turn_ready: boolean | null;
     active_advantages: string;
     active_hulls: string;
 }
