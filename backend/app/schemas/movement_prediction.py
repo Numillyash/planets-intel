@@ -23,11 +23,18 @@ class ShipMovementPrediction(BaseModel):
     target_warp: int | None
     target_speed_multiplier: float | None
     target_standard_max_distance: float | None
+    pre_well_x: float | None
+    pre_well_y: float | None
+    warp_well_status: str | None
+    warp_well_planet_id: int | None
+    warp_well_planet_name: str | None
+    warp_well_pull_distance: float | None
     predicted_x: float | None
     predicted_y: float | None
     requested_distance: float | None
     max_distance: float | None
     moved_distance: float | None
+    displacement_distance: float | None
     warp: int | None
     speed_multiplier: float
     reason: str
