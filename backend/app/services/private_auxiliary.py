@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.services.host_events import persist_safe_host_events
 from app.services.player_activity import persist_private_ready_activity
+from app.services.private_messages import persist_private_message_observations
 
 
 def _dict_list(rst: dict[str, Any], name: str) -> list[dict[str, Any]]:
@@ -27,6 +28,12 @@ def persist_private_auxiliary_observations(
     mymessages = _dict_list(rst, "mymessages")
     players = _dict_list(rst, "players")
 
+    private_messages = persist_private_message_observations(
+        session,
+        batch_id=batch_id,
+        messages=messages,
+        mymessages=mymessages,
+    )
     host_events = persist_safe_host_events(
         session,
         batch_id=batch_id,
@@ -44,6 +51,7 @@ def persist_private_auxiliary_observations(
     )
 
     return {
+        "private_messages_inserted": private_messages,
         "host_events_inserted": host_events,
         "player_ready_observations_inserted": ready_events,
     }
