@@ -229,9 +229,11 @@ function calculateAttribution(
             && old.owner_id === slotId
             && old.hull_id === ship.hull_id;
         const oldFact = sameLifecycle ? shipFighterFact(old, hulls) : null;
-        const comparable = fact.fighters !== null && oldFact?.fighters !== null;
+        const comparable = fact.fighters !== null
+            && oldFact !== null
+            && oldFact.fighters !== null;
         const deltaFighters = comparable
-            ? fact.fighters! - oldFact!.fighters!
+            ? fact.fighters! - oldFact.fighters!
             : null;
         const deltaScore = deltaFighters === null
             ? null
