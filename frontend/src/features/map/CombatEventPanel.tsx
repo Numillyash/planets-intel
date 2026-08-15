@@ -18,7 +18,7 @@ interface CombatEventPanelProps {
     gameId: number;
     linkedAccountId: number;
     turn: number;
-    onFocus: (event: FocusTarget) => void;
+    onFocus(event: FocusTarget): void;
 }
 
 export function CombatEventPanel(props: CombatEventPanelProps) {
