@@ -34,6 +34,8 @@ export interface HostEventItem {
     turn: number;
     planet_id: number | null;
     starbase_id: number | null;
+    ship_id: number | null;
+    ship_name: string | null;
     x: number | null;
     y: number | null;
     summary: string;
