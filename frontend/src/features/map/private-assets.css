@@ -27,10 +27,6 @@
     filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.8));
 }
 
-/* Hull artwork in the 44px entity header must fit inside the thumbnail.
-   Do not reuse starmap sizing or compensate with a positional transform:
-   Nu hull canvases have different aspect ratios and the old 58px image was
-   being cropped by the 44px container. */
 .operational-entity-icon-hull img {
     width: 40px;
     height: 40px;
@@ -75,18 +71,54 @@
 .operational-entity-icon-hull-fallback.is-freighter {
     clip-path: polygon(16% 22%, 84% 22%, 100% 50%, 84% 78%, 16% 78%, 0 50%);
 }
-
 .operational-entity-icon-hull-fallback.is-torpedo {
     clip-path: polygon(50% 0, 92% 88%, 50% 70%, 8% 88%);
 }
-
 .operational-entity-icon-hull-fallback.is-carrier {
     clip-path: polygon(50% 0, 100% 30%, 84% 88%, 50% 100%, 16% 88%, 0 30%);
 }
-
 .operational-entity-icon-hull-fallback.is-hidden,
 .operational-entity-icon-planet-fallback.is-hidden {
     opacity: 0;
+}
+
+/* Starbases do not expose a stable public artwork id like hulls/planets.
+   Give them a dedicated Planets-style station glyph instead of the generic dot. */
+.operational-entity-icon-starbase {
+    display: grid;
+    place-items: center;
+    border: 1px solid #d7b86a;
+    border-radius: 8px;
+    background: radial-gradient(circle, #243443 0 22%, #111a25 23% 100%);
+    box-shadow: 0 0 14px rgba(219, 181, 86, 0.16);
+}
+
+.operational-entity-icon-starbase .operational-entity-icon-core {
+    position: relative;
+    width: 24px;
+    height: 24px;
+    border: 2px solid #e5c56e;
+    border-radius: 4px;
+    background: rgba(106, 132, 153, 0.22);
+    transform: rotate(45deg);
+}
+
+.operational-entity-icon-starbase .operational-entity-icon-core::before,
+.operational-entity-icon-starbase .operational-entity-icon-core::after {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    background: #d9e6ef;
+    content: "";
+    transform: translate(-50%, -50%);
+}
+.operational-entity-icon-starbase .operational-entity-icon-core::before {
+    width: 18px;
+    height: 3px;
+}
+.operational-entity-icon-starbase .operational-entity-icon-core::after {
+    width: 3px;
+    height: 18px;
 }
 
 .operational-entity-details-shell {
