@@ -95,6 +95,35 @@ export type CombatEventResultStatus =
     | "planet_held_post_host"
     | "planet_owner_changed_post_host";
 
+export interface CombatEquipmentEvidence {
+    beam_id: number | null;
+    beam_count: number | null;
+    launcher_count: number | null;
+    bay_count: number | null;
+    torpedo_id: number | null;
+    torpedoes: number | null;
+    fighters: number | null;
+    shield: number | null;
+    damage: number | null;
+    crew: number | null;
+    mass: number | null;
+    race_id: number | null;
+    evidence_basis: "vcr_combat_observation" | string;
+    combat_start_torpedoes?: number | null;
+    combat_start_fighters?: number | null;
+    replay_post_combat_torpedoes?: number | null;
+    replay_post_combat_fighters?: number | null;
+    replay_post_combat_shield?: number | null;
+    replay_post_combat_damage?: number | null;
+    replay_post_combat_crew?: number | null;
+    replay_engine?: string | null;
+    replay_basis?: string | null;
+    post_combat_torpedoes?: number | null;
+    post_combat_fighters?: number | null;
+    post_combat_source?: string | null;
+    replay_matches_analyst?: boolean | null;
+}
+
 export interface CombatEventSideSummary {
     side: "left" | "right";
     object_kind: "ship" | "planet";
@@ -108,6 +137,7 @@ export interface CombatEventSideSummary {
     result_basis: string | null;
     result_sources: CombatEventSource[];
     post_host_owner_id: number | null;
+    combat_equipment?: CombatEquipmentEvidence | null;
 }
 
 export interface CombatEventSummary {
