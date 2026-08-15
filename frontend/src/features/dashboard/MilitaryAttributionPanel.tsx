@@ -66,10 +66,6 @@ function formatSigned(value: number): string {
     return `${rounded > 0 ? "+" : ""}${rounded.toLocaleString()}`;
 }
 
-function shipFighters(ship: MapShipObservation): number | null {
-    return integerField(ship.payload, "fighters");
-}
-
 function planetDefense(planet: MapPlanetObservation): number | null {
     return integerField(planet.payload, "defense", "defenseposts", "defense_posts");
 }
@@ -101,6 +97,26 @@ function hullMap(catalog: GameRuleCatalogResponse | null) {
         if (id !== null && Number.isInteger(id)) result.set(id, hull);
     }
     return result;
+}
+
+function shipFighters(
+    ship: MapShipObservation,
+    hulls: Map<number, Record<string, unknown>>,
+): number | null {
+    const explicit = integerField(ship.payload, "fighters");
+    if (explicit !== null) return explicit;
+    if (ship.hull_id === null) return null;
+
+    const hull = hulls.get(ship.hull_id);
+    if (hull === undefined) return null;
+    const bays = recordNumber(hull, "fighterbays", "bays");
+    if (bays === null || bays <= 0) return null;
+
+    // Nu private ship payloads expose one generic combat-ammo count. Combined
+    // intel only preserves that field when the source observer owns the ship,
+    // so a remaining ammo value is factual and may be interpreted as fighters
+    // once the hull catalog proves the ship has fighter bays.
+    return integerField(ship.payload, "ammo");
 }
 
 function hullMilitaryFloor(hull: Record<string, unknown> | undefined): number | null {
@@ -154,7 +170,7 @@ function calculateAttribution(
 
     for (const ship of current.ships) {
         if (ship.owner_id !== slotId) continue;
-        const fighters = shipFighters(ship);
+        const fighters = shipFighters(ship, hulls);
         if (fighters !== null) currentObservedMobileFighters += fighters;
 
         const old = previousShips.get(ship.ship_id);
@@ -163,7 +179,7 @@ function calculateAttribution(
             || old.owner_id !== slotId
             || old.hull_id !== ship.hull_id
         ) continue;
-        const oldFighters = shipFighters(old);
+        const oldFighters = shipFighters(old, hulls);
         if (fighters === null || oldFighters === null) continue;
         mobileFighterDelta += (fighters - oldFighters) * MOBILE_FIGHTER_SCORE;
         comparableShipFighterRecords += 1;
@@ -239,7 +255,7 @@ function calculateAttribution(
                 hullId: ship.hull_id,
                 hullName: recordString(hull ?? {}, "name") ?? (ship.hull_id === null ? "Unknown hull" : `Hull #${ship.hull_id}`),
                 hullFloor: hullMilitaryFloor(hull),
-                fighters: shipFighters(ship),
+                fighters: shipFighters(ship, hulls),
             };
         });
 
