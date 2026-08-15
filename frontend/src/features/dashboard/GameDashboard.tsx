@@ -16,6 +16,7 @@ import {
 import { PlayersTable } from "../players/PlayersTable";
 import { MilitaryScoreChart } from "../statistics/MilitaryScoreChart";
 import { AdvantagesPanel } from "./AdvantagesPanel";
+import { CombatFighterEvidencePanel } from "./CombatFighterEvidencePanel";
 import { DiplomacyPanel } from "./DiplomacyPanel";
 import { MilitaryAttributionPanel } from "./MilitaryAttributionPanel";
 import { StarbaseListPanel } from "./StarbaseListPanel";
@@ -169,16 +170,20 @@ export function GameDashboard({
                             >
                                 <span>Turn status</span>
                                 <strong>
-                                    {myPlayer?.turn_ready ? "Ready" : "Open"}
+                                    {myPlayer?.turn_ready === null || myPlayer === null
+                                        ? "—"
+                                        : myPlayer.turn_ready
+                                            ? "Ready"
+                                            : "Open"}
                                 </strong>
                             </button>
                             <div className="summary-card">
                                 <span>Schedule</span>
-                                <strong>{game.schedule}</strong>
+                                <strong>{game.schedule || "—"}</strong>
                             </div>
                             <div className="summary-card">
                                 <span>Next host</span>
-                                <strong>{game.time_to_host}</strong>
+                                <strong>{game.time_to_host || "—"}</strong>
                             </div>
                         </section>
 
@@ -190,6 +195,7 @@ export function GameDashboard({
                                         Observer {selectedAccount.planets_username}
                                         {" · "}Turn {game.game.turn}
                                         {" · "}{game.game.status_name}
+                                        {game.source === "canonical-cache" ? " · cached game metadata" : ""}
                                     </p>
                                 </div>
                                 <button
@@ -310,6 +316,11 @@ export function GameDashboard({
                                 linkedAccountId={selectedAccount.id}
                             />
                         )}
+                        <CombatFighterEvidencePanel
+                            game={game}
+                            linkedAccountId={selectedAccount.id}
+                            turn={game.game.turn}
+                        />
                         <PlayerActivityPanel
                             embedded
                             gameId={game.game.id}
@@ -372,9 +383,11 @@ export function GameDashboard({
                                     <div key={key}>
                                         <span>{key.split("_").join(" ")}</span>
                                         <strong>
-                                            {typeof value === "boolean"
-                                                ? (value ? "Yes" : "No")
-                                                : String(value)}
+                                            {value === null
+                                                ? "—"
+                                                : typeof value === "boolean"
+                                                    ? (value ? "Yes" : "No")
+                                                    : String(value)}
                                         </strong>
                                     </div>
                                 ))}
