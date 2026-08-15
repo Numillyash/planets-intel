@@ -77,9 +77,10 @@ export function ShipDetails({
     const showBeams = role !== "freighter" && facts.beams !== null && facts.beams > 0;
     const showTubes = (role === "torpedo" || role === "warship") && facts.tubes !== null && facts.tubes > 0;
     const showBays = (role === "carrier" || role === "warship") && facts.bays !== null && facts.bays > 0;
-    const hasArmament = showBeams || showTubes || showBays;
     const showTorpedoes = showTubes && facts.torpedoes !== null;
     const showFighters = showBays && facts.fighters !== null;
+    const showGenericAmmo = facts.ammo !== null && !showTorpedoes && !showFighters;
+    const hasArmament = showBeams || showTubes || showBays || showGenericAmmo;
 
     const plannedRoute = shipPlannedRoute(ship);
     const historyRoute = shipHistoryRoute(ship);
@@ -132,6 +133,17 @@ export function ShipDetails({
             : "position unknown"
     );
     const hullLabel = facts.hullName ?? `Hull #${ship.hull_id ?? "—"}`;
+
+    const armamentFacts = (
+        <dl className="intel-fact-list">
+            {showBeams && <FactRow label="Beams" value={facts.beams ?? "—"} />}
+            {showTubes && <FactRow label="Tubes" value={facts.tubes ?? "—"} />}
+            {showBays && <FactRow label="Fighter bays" value={facts.bays ?? "—"} />}
+            {showTorpedoes && <FactRow label="Torpedoes" value={formatInteger(facts.torpedoes)} />}
+            {showFighters && <FactRow label="Fighters" value={formatInteger(facts.fighters)} />}
+            {showGenericAmmo && <FactRow label="Ammo" value={formatInteger(facts.ammo)} />}
+        </dl>
+    );
 
     return (
         <div className="operational-entity-panel">
@@ -212,13 +224,7 @@ export function ShipDetails({
 
                         {hasArmament && (
                             <DetailSection title="Armament">
-                                <dl className="intel-fact-list">
-                                    {showBeams && <FactRow label="Beams" value={facts.beams ?? "—"} />}
-                                    {showTubes && <FactRow label="Tubes" value={facts.tubes ?? "—"} />}
-                                    {showBays && <FactRow label="Fighter bays" value={facts.bays ?? "—"} />}
-                                    {showTorpedoes && <FactRow label="Torpedoes" value={formatInteger(facts.torpedoes)} />}
-                                    {showFighters && <FactRow label="Fighters" value={formatInteger(facts.fighters)} />}
-                                </dl>
+                                {armamentFacts}
                             </DetailSection>
                         )}
                     </div>
@@ -235,6 +241,9 @@ export function ShipDetails({
                                 <div><span>Duranium</span><strong>{formatInteger(facts.duranium)}</strong></div>
                                 <div><span>Tritanium</span><strong>{formatInteger(facts.tritanium)}</strong></div>
                                 <div><span>Molybdenum</span><strong>{formatInteger(facts.molybdenum)}</strong></div>
+                                {facts.ammo !== null && (
+                                    <div><span>Ammo</span><strong>{formatInteger(facts.ammo)}</strong></div>
+                                )}
                             </div>
                         </DetailSection>
                     </div>
@@ -357,13 +366,7 @@ export function ShipDetails({
 
                         {hasArmament && (
                             <DetailSection title="Observed armament">
-                                <dl className="intel-fact-list">
-                                    {showBeams && <FactRow label="Beams" value={facts.beams ?? "—"} />}
-                                    {showTubes && <FactRow label="Tubes" value={facts.tubes ?? "—"} />}
-                                    {showBays && <FactRow label="Fighter bays" value={facts.bays ?? "—"} />}
-                                    {showTorpedoes && <FactRow label="Torpedoes" value={formatInteger(facts.torpedoes)} />}
-                                    {showFighters && <FactRow label="Fighters" value={formatInteger(facts.fighters)} />}
-                                </dl>
+                                {armamentFacts}
                             </DetailSection>
                         )}
                     </div>
