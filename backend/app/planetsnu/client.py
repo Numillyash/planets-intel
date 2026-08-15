@@ -20,6 +20,52 @@ class PlanetsNuClient:
         self.base_url = settings.planetsnu_api_base_url.rstrip("/")
         self.proxy_url = settings.planetsnu_proxy_url or None
 
+    async def _request(
+        self,
+        method: str,
+        url: str,
+        *,
+        params: dict[str, Any] | None = None,
+        data: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+        use_proxy: bool = False,
+    ) -> httpx.Response:
+        """Perform a request, retrying direct after a proxy transport failure.
+
+        The fallback is deliberately limited to transport failures. HTTP status
+        errors and API-level errors are handled by the caller and must not be
+        retried through another path, because the server already answered.
+        """
+
+        primary_proxy = self.proxy_url if use_proxy else None
+        attempts: list[str | None] = [primary_proxy]
+        if primary_proxy is not None:
+            attempts.append(None)
+
+        failures: list[str] = []
+        for proxy in attempts:
+            try:
+                async with httpx.AsyncClient(
+                    timeout=30.0,
+                    follow_redirects=True,
+                    proxy=proxy,
+                    trust_env=False,
+                ) as client:
+                    return await client.request(
+                        method,
+                        url,
+                        params=params,
+                        data=data,
+                        headers=headers,
+                    )
+            except httpx.RequestError as exc:
+                route = "proxy" if proxy is not None else "direct"
+                failures.append(f"{route} {exc.__class__.__name__}")
+
+        raise PlanetsNuError(
+            "Planets.nu request failed: " + "; ".join(failures)
+        )
+
     async def get(
         self,
         path: str,
@@ -27,22 +73,12 @@ class PlanetsNuClient:
     ) -> Any:
         url = f"{self.base_url}/{path.lstrip('/')}"
 
-        try:
-            async with httpx.AsyncClient(
-                timeout=30.0,
-                follow_redirects=True,
-                proxy=self.proxy_url,
-                trust_env=False,
-            ) as client:
-                response = await client.get(
-                    url,
-                    params=params,
-                )
-        except httpx.RequestError as exc:
-            raise PlanetsNuError(
-                "Planets.nu request failed: "
-                f"{exc.__class__.__name__}"
-            ) from exc
+        response = await self._request(
+            "GET",
+            url,
+            params=params,
+            use_proxy=self.proxy_url is not None,
+        )
 
         try:
             response.raise_for_status()
@@ -67,23 +103,13 @@ class PlanetsNuClient:
     ) -> Any:
         url = f"{self.base_url}/{path.lstrip('/')}"
 
-        try:
-            async with httpx.AsyncClient(
-                timeout=30.0,
-                follow_redirects=True,
-                proxy=self.proxy_url if use_proxy else None,
-                trust_env=False,
-            ) as client:
-                response = await client.post(
-                    url,
-                    data=data,
-                    headers=headers,
-                )
-        except httpx.RequestError as exc:
-            raise PlanetsNuError(
-                "Planets.nu request failed: "
-                f"{exc.__class__.__name__}"
-            ) from exc
+        response = await self._request(
+            "POST",
+            url,
+            data=data,
+            headers=headers,
+            use_proxy=use_proxy,
+        )
 
         try:
             response.raise_for_status()
