@@ -1,4 +1,5 @@
 import asyncio
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
@@ -26,11 +27,166 @@ class PrivateSyncTransportError(PrivateSyncError):
     pass
 
 
+@dataclass(frozen=True)
+class ResolvedObserverIdentity:
+    player_slot_id: int
+    planets_account_id: int
+    username: str
+    source: str
+
+
 def _record_game_id(raw: dict[str, Any]) -> int | None:
     value = raw.get("gameid")
     if isinstance(value, bool) or not isinstance(value, int):
         return None
     return value
+
+
+def _positive_int(value: Any) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        return None
+    return value
+
+
+def _is_unknown_player_sentinel(player: dict[str, Any]) -> bool:
+    return (
+        player.get("id") == 0
+        and player.get("accountid") == 0
+        and isinstance(player.get("username"), str)
+        and player["username"].strip().casefold() == "unknown"
+    )
+
+
+def _resolve_observer_identity(
+    *,
+    game_id: int,
+    player: dict[str, Any],
+    expected_planets_account_id: int | None,
+    planets_username: str,
+) -> ResolvedObserverIdentity:
+    """Resolve the authenticated observer without accepting ambiguous payloads.
+
+    Active players normally identify themselves directly in rst.player. A dead
+    player can instead receive Planets.nu's all-zero/"unknown" sentinel. In that
+    one explicit case we fall back only to an already verified linked account
+    and one unique canonical game slot for the same account + username.
+    """
+
+    raw_slot_id = _positive_int(player.get("id"))
+    raw_account_id = _positive_int(player.get("accountid"))
+    raw_username = player.get("username")
+
+    if _is_unknown_player_sentinel(player):
+        if expected_planets_account_id is None:
+            raise PrivateSyncError(
+                "private turn uses unknown player sentinel and linked account "
+                "has no verified Planets.nu account id"
+            )
+
+        with SessionLocal() as session:
+            candidates = list(
+                session.execute(
+                    select(GamePlayerSlot).where(
+                        GamePlayerSlot.game_id == game_id,
+                        GamePlayerSlot.account_id == expected_planets_account_id,
+                    )
+                ).scalars().all()
+            )
+
+        username_key = planets_username.strip().casefold()
+        candidates = [
+            slot
+            for slot in candidates
+            if slot.username.strip().casefold() == username_key
+        ]
+        if len(candidates) != 1:
+            raise PrivateSyncError(
+                "private turn uses unknown player sentinel but canonical "
+                "observer slot is not uniquely verified"
+            )
+
+        slot = candidates[0]
+        return ResolvedObserverIdentity(
+            player_slot_id=slot.slot_id,
+            planets_account_id=expected_planets_account_id,
+            username=planets_username,
+            source="canonical_slot_for_unknown_player",
+        )
+
+    if raw_slot_id is None:
+        raise PrivateSyncError("private turn has invalid player id")
+    if raw_account_id is None:
+        raise PrivateSyncError("private turn has invalid account id")
+    if not isinstance(raw_username, str):
+        raise PrivateSyncError("private turn has invalid username")
+    if raw_username.strip().casefold() != planets_username.strip().casefold():
+        raise PrivateSyncError(
+            "private turn username does not match linked Planets.nu account"
+        )
+    if (
+        expected_planets_account_id is not None
+        and raw_account_id != expected_planets_account_id
+    ):
+        raise PrivateSyncError(
+            "private turn belongs to a different Planets.nu account"
+        )
+
+    with SessionLocal() as session:
+        slot = session.execute(
+            select(GamePlayerSlot).where(
+                GamePlayerSlot.game_id == game_id,
+                GamePlayerSlot.slot_id == raw_slot_id,
+            )
+        ).scalar_one_or_none()
+
+    if slot is None:
+        raise PrivateSyncError(
+            "observer player slot is not present in canonical database; "
+            "run public sync first"
+        )
+    if slot.account_id != raw_account_id:
+        raise PrivateSyncError(
+            "canonical player slot account id does not match authenticated private turn"
+        )
+    if slot.username.strip().casefold() != raw_username.strip().casefold():
+        raise PrivateSyncError(
+            "canonical player slot username does not match authenticated private turn"
+        )
+
+    return ResolvedObserverIdentity(
+        player_slot_id=raw_slot_id,
+        planets_account_id=raw_account_id,
+        username=raw_username,
+        source="loadturn_player",
+    )
+
+
+def _payload_with_resolved_player_slot(
+    payload: dict[str, Any],
+    *,
+    player_slot_id: int,
+) -> dict[str, Any]:
+    """Build a persistence view with canonical batch provenance only.
+
+    persist_private_turn reads rst.player.id solely to stamp the observation
+    batch source slot. Entity payloads remain untouched. This avoids recording
+    source_player_slot_id=0 when Planets.nu returns its dead-player sentinel.
+    """
+
+    rst = payload.get("rst")
+    if not isinstance(rst, dict):
+        return payload
+    player = rst.get("player")
+    if not isinstance(player, dict) or player.get("id") == player_slot_id:
+        return payload
+
+    normalized_player = dict(player)
+    normalized_player["id"] = player_slot_id
+    normalized_rst = dict(rst)
+    normalized_rst["player"] = normalized_player
+    normalized_payload = dict(payload)
+    normalized_payload["rst"] = normalized_rst
+    return normalized_payload
 
 
 async def sync_private_game(
@@ -91,106 +247,68 @@ async def sync_private_game(
                 f"3 transport attempts ({error_name})"
             ) from last_transport_error
 
-        if turn is None:
-            probe_rst = payload.get("rst")
-            probe_player = (
-                probe_rst.get("player")
-                if isinstance(probe_rst, dict)
-                and isinstance(probe_rst.get("player"), dict)
-                else None
-            )
-            probe_player_id = (
-                probe_player.get("id") if isinstance(probe_player, dict) else None
-            )
-            if (
-                isinstance(probe_player_id, int)
-                and not isinstance(probe_player_id, bool)
-                and probe_player_id > 0
-            ):
-                try:
-                    ingame_activity = await load_ingame_activity(
-                        client,
-                        api_key=api_key,
-                        game_id=game_id,
-                        player_id=probe_player_id,
-                        planets_account_id=expected_planets_account_id,
-                    )
-                    ingame_activity_seen = len(ingame_activity)
-                    game_activity.extend(ingame_activity)
-                except PlanetsNuError as exc:
-                    game_activity_error = str(exc)
+        rst = payload.get("rst")
+        if not isinstance(rst, dict):
+            raise PrivateSyncError("private turn has no rst object")
 
-                try:
-                    private_activity = await load_private_activity(
-                        client,
-                        api_key=api_key,
-                        game_id=game_id,
-                        player_id=probe_player_id,
-                        planets_account_id=expected_planets_account_id,
-                    )
-                    private_for_game = [
-                        raw
-                        for raw in private_activity
-                        if _record_game_id(raw) == game_id
-                    ]
-                    private_activity_seen = len(private_for_game)
-                    game_activity.extend(private_for_game)
-                except PlanetsNuError as exc:
-                    private_activity_error = str(exc)
-            else:
-                game_activity_error = (
-                    "loadturn has no valid player id for activity endpoints"
+        game_payload = rst.get("game")
+        if not isinstance(game_payload, dict):
+            raise PrivateSyncError("private turn has no game object")
+
+        returned_turn = game_payload.get("turn")
+        if isinstance(returned_turn, bool) or not isinstance(returned_turn, int):
+            raise PrivateSyncError("private turn has invalid game turn")
+        if turn is not None and returned_turn != turn:
+            raise PrivateSyncError(
+                "Planets.nu returned a different historical turn "
+                f"(requested {turn}, got {returned_turn})"
+            )
+
+        player = rst.get("player")
+        if not isinstance(player, dict):
+            raise PrivateSyncError("private turn has no player object")
+
+        identity = _resolve_observer_identity(
+            game_id=game_id,
+            player=player,
+            expected_planets_account_id=expected_planets_account_id,
+            planets_username=planets_username,
+        )
+
+        if turn is None:
+            try:
+                ingame_activity = await load_ingame_activity(
+                    client,
+                    api_key=api_key,
+                    game_id=game_id,
+                    player_id=identity.player_slot_id,
+                    planets_account_id=identity.planets_account_id,
                 )
+                ingame_activity_seen = len(ingame_activity)
+                game_activity.extend(ingame_activity)
+            except PlanetsNuError as exc:
+                game_activity_error = str(exc)
+
+            try:
+                private_activity = await load_private_activity(
+                    client,
+                    api_key=api_key,
+                    game_id=game_id,
+                    player_id=identity.player_slot_id,
+                    planets_account_id=identity.planets_account_id,
+                )
+                private_for_game = [
+                    raw
+                    for raw in private_activity
+                    if _record_game_id(raw) == game_id
+                ]
+                private_activity_seen = len(private_for_game)
+                game_activity.extend(private_for_game)
+            except PlanetsNuError as exc:
+                private_activity_error = str(exc)
 
     finally:
         del api_key
-
-    rst = payload.get("rst")
-    if not isinstance(rst, dict):
-        raise PrivateSyncError("private turn has no rst object")
-
-    game_payload = rst.get("game")
-    if not isinstance(game_payload, dict):
-        raise PrivateSyncError("private turn has no game object")
-
-    returned_turn = game_payload.get("turn")
-    if isinstance(returned_turn, bool) or not isinstance(returned_turn, int):
-        raise PrivateSyncError("private turn has invalid game turn")
-    if turn is not None and returned_turn != turn:
-        raise PrivateSyncError(
-            "Planets.nu returned a different historical turn "
-            f"(requested {turn}, got {returned_turn})"
-        )
-
-    player = rst.get("player")
-    if not isinstance(player, dict):
-        raise PrivateSyncError("private turn has no player object")
-
-    source_player_slot_id = player.get("id")
-    source_account_id = player.get("accountid")
-    source_username = player.get("username")
-
-    if isinstance(source_player_slot_id, bool) or not isinstance(source_player_slot_id, int):
-        raise PrivateSyncError("private turn has invalid player id")
-    if (
-        isinstance(source_account_id, bool)
-        or not isinstance(source_account_id, int)
-        or source_account_id <= 0
-    ):
-        raise PrivateSyncError("private turn has invalid account id")
-    if not isinstance(source_username, str):
-        raise PrivateSyncError("private turn has invalid username")
-    if source_username.strip().casefold() != planets_username.strip().casefold():
-        raise PrivateSyncError(
-            "private turn username does not match linked Planets.nu account"
-        )
-    if (
-        expected_planets_account_id is not None
-        and source_account_id != expected_planets_account_id
-    ):
-        raise PrivateSyncError(
-            "private turn belongs to a different Planets.nu account"
-        )
 
     with SessionLocal() as session:
         game_exists = session.execute(
@@ -201,28 +319,12 @@ async def sync_private_game(
                 "game is not present in canonical database; run public sync first"
             )
 
-        slot = session.execute(
-            select(GamePlayerSlot).where(
-                GamePlayerSlot.game_id == game_id,
-                GamePlayerSlot.slot_id == source_player_slot_id,
-            )
-        ).scalar_one_or_none()
-        if slot is None:
-            raise PrivateSyncError(
-                "observer player slot is not present in canonical database; "
-                "run public sync first"
-            )
-        if slot.account_id != source_account_id:
-            raise PrivateSyncError(
-                "canonical player slot account id does not match authenticated private turn"
-            )
-
         account = session.execute(
             select(PlanetsAccount).where(PlanetsAccount.id == linked_account_id)
         ).scalar_one()
         if account.planets_account_id is None:
-            account.planets_account_id = source_account_id
-        elif account.planets_account_id != source_account_id:
+            account.planets_account_id = identity.planets_account_id
+        elif account.planets_account_id != identity.planets_account_id:
             raise PrivateSyncError("linked account id changed during sync")
 
         account.last_verified_at = datetime.now(timezone.utc)
@@ -234,11 +336,15 @@ async def sync_private_game(
             turn=returned_turn,
             rst=rst,
         )
+        persistence_payload = _payload_with_resolved_player_slot(
+            payload,
+            player_slot_id=identity.player_slot_id,
+        )
         result = persist_private_turn(
             session,
             game_id=game_id,
             observer_planets_account_id=linked_account_id,
-            payload=payload,
+            payload=persistence_payload,
         )
         auxiliary = persist_private_auxiliary_observations(
             session,
@@ -264,8 +370,9 @@ async def sync_private_game(
 
     response = {
         "linked_account_id": linked_account_id,
-        "planets_account_id": source_account_id,
-        "planets_username": planets_username,
+        "planets_account_id": identity.planets_account_id,
+        "planets_username": identity.username,
+        "observer_identity_source": identity.source,
         "requested_turn": turn,
         "ingame_activity_seen": ingame_activity_seen,
         "private_activity_seen": private_activity_seen,
