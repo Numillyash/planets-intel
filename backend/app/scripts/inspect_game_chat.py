@@ -40,6 +40,14 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Skip activity-feed probes.",
     )
+    parser.add_argument(
+        "--activity-only",
+        action="store_true",
+        help=(
+            "Skip detailed rst.messages/rst.mymessages output and print only "
+            "activity-feed sources."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -252,8 +260,9 @@ async def run() -> None:
         print(f"returned_turn: {game.get('turn')}")
         print(f"observer_player_id: {player_id}")
 
-        print_collection("messages", _dict_records(rst.get("messages")))
-        print_collection("mymessages", _dict_records(rst.get("mymessages")))
+        if not args.activity_only:
+            print_collection("messages", _dict_records(rst.get("messages")))
+            print_collection("mymessages", _dict_records(rst.get("mymessages")))
         print_raw_payload("LOADTURN TOP-LEVEL ACTIVITY", loadturn.get("activity"))
 
         if not args.no_activity:
