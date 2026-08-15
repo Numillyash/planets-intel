@@ -49,6 +49,13 @@ export interface HostEventsResponse {
     events: HostEventItem[];
 }
 
+export type GameActivityKind =
+    | "system"
+    | "diplomacy"
+    | "private_message"
+    | "player_message"
+    | "unclassified";
+
 export interface GameActivityItem {
     activity_id: number;
     activity_type: number | null;
@@ -63,6 +70,10 @@ export interface GameActivityItem {
     target_type: number | null;
     message: string | null;
     date_added: string | null;
+    kind: GameActivityKind;
+    thread_root_id: number | null;
+    conversation_with_id: number | null;
+    conversation_with_name: string | null;
 }
 
 export interface GameActivityResponse {
