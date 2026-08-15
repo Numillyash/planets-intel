@@ -319,7 +319,17 @@ def cached_hull_path(hull_image_id: int) -> Path | None:
 def _hull_sources(image_id: int) -> list[str]:
     settings = get_settings()
     configured = settings.planetsnu_hull_asset_base_url.rstrip("/")
+
+    # The current Planets.nu client uses the 3D portrait artwork for the ship
+    # survey/card whenever a 3D model exists:
+    #   https://mobile.planets.nu/img/hulls3d/{id}_p.png
+    # Classic /img/hulls/{id}.png remains a valid fallback and is still used
+    # when the account enables classic pictures or for hulls without 3D art.
+    # Try the exact current-client portrait first, then the legacy sources.
     return [
+        f"https://mobile.planets.nu/img/hulls3d/{image_id}_p.png",
+        f"https://app.planets.nu/img/hulls3d/{image_id}_p.png",
+        f"https://play.planets.nu/img/hulls3d/{image_id}_p.png",
         f"{configured}/{image_id}.png",
         f"https://mobile.planets.nu/img/hulls/{image_id}.png",
         f"https://app.planets.nu/img/hulls/{image_id}.png",
