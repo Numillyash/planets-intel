@@ -24,12 +24,12 @@ function readableMessage(value: string | null): string {
 }
 
 
-function chronological(items: GameActivityItem[]): GameActivityItem[] {
+function newestFirst(items: GameActivityItem[]): GameActivityItem[] {
     return [...items].sort((left, right) => {
         const leftDate = left.date_added ?? "";
         const rightDate = right.date_added ?? "";
-        if (leftDate !== rightDate) return leftDate.localeCompare(rightDate);
-        return left.activity_id - right.activity_id;
+        if (leftDate !== rightDate) return rightDate.localeCompare(leftDate);
+        return right.activity_id - left.activity_id;
     });
 }
 
@@ -124,7 +124,7 @@ export function CommunicationsPanel(props: {
                 key,
                 kind: "private" as const,
                 label: group.label,
-                items: chronological(group.items),
+                items: newestFirst(group.items),
                 latestSortKey: newestKey(group.items),
             }))
             .sort((left, right) => right.latestSortKey.localeCompare(left.latestSortKey));
@@ -134,7 +134,7 @@ export function CommunicationsPanel(props: {
                 key: "general",
                 kind: "general",
                 label: "General",
-                items: chronological(general),
+                items: newestFirst(general),
                 latestSortKey: newestKey(general),
             },
             ...privateChannels,
@@ -142,7 +142,7 @@ export function CommunicationsPanel(props: {
                 key: "activity",
                 kind: "activity",
                 label: "Activity",
-                items: chronological(activity),
+                items: newestFirst(activity),
                 latestSortKey: newestKey(activity),
             },
         ];
@@ -272,7 +272,14 @@ export function CommunicationsPanel(props: {
                             )}
 
                             {selectedChannel?.items.map((item) => (
-                                <article className="dashboard-report-item" key={item.activity_id}>
+                                <article
+                                    className="dashboard-report-item"
+                                    key={item.activity_id}
+                                    style={item.parent_id ? {
+                                        marginLeft: 24,
+                                        borderLeftWidth: 3,
+                                    } : undefined}
+                                >
                                     <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
                                         <strong>
                                             {selectedChannel.kind === "activity"
