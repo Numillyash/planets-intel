@@ -9,6 +9,7 @@ from app.models.planet_observation import PlanetObservation
 from app.models.planet_order_draft import PlanetOrderDraft
 from app.models.planets_account import PlanetsAccount
 from app.models.player_turn_activity_observation import PlayerTurnActivityObservation
+from app.models.private_message_observation import PrivateMessageObservation
 from app.models.private_observation_batch import PrivateObservationBatch
 from app.models.score_observation import ScoreObservation
 from app.models.session import AppSession
@@ -34,6 +35,7 @@ __all__ = [
     "PlanetOrderDraft",
     "PlanetsAccount",
     "PlayerTurnActivityObservation",
+    "PrivateMessageObservation",
     "PrivateObservationBatch",
     "ScoreObservation",
     "ShipObservation",
