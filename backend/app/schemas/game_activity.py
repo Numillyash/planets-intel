@@ -1,4 +1,15 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field
+
+
+ActivityKind = Literal[
+    "system",
+    "diplomacy",
+    "private_message",
+    "player_message",
+    "unclassified",
+]
 
 
 class GameActivityItemResponse(BaseModel):
@@ -15,6 +26,10 @@ class GameActivityItemResponse(BaseModel):
     target_type: int | None
     message: str | None
     date_added: str | None
+    kind: ActivityKind
+    thread_root_id: int | None = None
+    conversation_with_id: int | None = None
+    conversation_with_name: str | None = None
 
 
 class GameActivityResponse(BaseModel):
