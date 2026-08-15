@@ -10,6 +10,19 @@ COMMON_HEADERS = {
 }
 
 
+def _parse_activity(payload: Any, label: str) -> list[dict[str, Any]]:
+    if not isinstance(payload, dict):
+        raise PlanetsNuError(f"Planets.nu {label} response is not an object")
+    if payload.get("success") is False:
+        raise PlanetsNuError(str(payload.get("error", f"Planets.nu {label} failed")))
+    activity = payload.get("activity")
+    if not isinstance(activity, list):
+        raise PlanetsNuError(f"Planets.nu {label} response has no activity list")
+    if not all(isinstance(item, dict) for item in activity):
+        raise PlanetsNuError(f"Planets.nu {label} contains invalid records")
+    return activity
+
+
 async def load_ingame_activity(
     client: PlanetsNuClient,
     *,
@@ -18,8 +31,6 @@ async def load_ingame_activity(
     player_id: int,
     planets_account_id: int | None,
 ) -> list[dict[str, Any]]:
-    """Load the observer-visible in-game activity feed from Planets.nu."""
-
     data: dict[str, Any] = {
         "apikey": api_key,
         "gameid": game_id,
@@ -34,23 +45,29 @@ async def load_ingame_activity(
         headers=COMMON_HEADERS,
         use_proxy=True,
     )
-    if not isinstance(payload, dict):
-        raise PlanetsNuError(
-            "Planets.nu ingameactivity response is not an object"
-        )
-    if payload.get("success") is False:
-        raise PlanetsNuError(
-            str(payload.get("error", "Planets.nu ingameactivity failed"))
-        )
+    return _parse_activity(payload, "ingameactivity")
 
-    activity = payload.get("activity")
-    if not isinstance(activity, list):
-        raise PlanetsNuError(
-            "Planets.nu ingameactivity response has no activity list"
-        )
-    if not all(isinstance(item, dict) for item in activity):
-        raise PlanetsNuError(
-            "Planets.nu ingameactivity contains invalid records"
-        )
 
-    return activity
+async def load_private_activity(
+    client: PlanetsNuClient,
+    *,
+    api_key: str,
+    game_id: int,
+    player_id: int,
+    planets_account_id: int | None,
+) -> list[dict[str, Any]]:
+    data: dict[str, Any] = {
+        "apikey": api_key,
+        "gameid": game_id,
+        "playerid": player_id,
+    }
+    if planets_account_id is not None:
+        data["accountid"] = planets_account_id
+
+    payload = await client.post_form(
+        "account/privateactivity",
+        data=data,
+        headers=COMMON_HEADERS,
+        use_proxy=True,
+    )
+    return _parse_activity(payload, "privateactivity")
