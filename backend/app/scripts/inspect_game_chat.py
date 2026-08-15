@@ -9,6 +9,13 @@ from app.planetsnu.client import PlanetsNuClient, PlanetsNuError
 from app.scripts.inspect_private_events import resolve_account, sanitize
 
 
+COMMON_HEADERS = {
+    "Origin": "https://planets.nu",
+    "Referer": "https://planets.nu/",
+    "User-Agent": "Mozilla/5.0",
+}
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
@@ -31,7 +38,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--no-activity",
         action="store_true",
-        help="Skip the /account/ingameactivity probe.",
+        help="Skip activity-feed probes.",
     )
     return parser.parse_args()
 
@@ -93,6 +100,30 @@ def activity_request_candidates(
     return candidates
 
 
+def private_activity_request_candidates(
+    *,
+    api_key: str,
+    planets_account_id: int | None,
+    game_id: int,
+    player_id: int,
+) -> list[tuple[str, dict[str, Any]]]:
+    candidates = activity_request_candidates(
+        api_key=api_key,
+        planets_account_id=planets_account_id,
+        game_id=game_id,
+        player_id=player_id,
+    )
+    if planets_account_id is not None:
+        candidates.append(
+            (
+                "apikey+accountid",
+                {"apikey": api_key, "accountid": planets_account_id},
+            )
+        )
+    candidates.append(("apikey", {"apikey": api_key}))
+    return candidates
+
+
 def print_collection(name: str, records: list[dict[str, Any]]) -> None:
     print(f"\n===== LOADTURN {name.upper()} ({len(records)}) =====")
     type_counts = Counter(
@@ -123,8 +154,8 @@ def print_collection(name: str, records: list[dict[str, Any]]) -> None:
         )
 
 
-def print_activity_payload(payload: Any) -> None:
-    print("\n===== /ACCOUNT/INGAMEACTIVITY RAW RESPONSE =====")
+def print_raw_payload(title: str, payload: Any) -> None:
+    print(f"\n===== {title} =====")
     print(f"python_type: {type(payload).__name__}")
     if isinstance(payload, dict):
         print("top_level_keys: " + ", ".join(sorted(str(key) for key in payload)))
@@ -142,28 +173,14 @@ def print_activity_payload(payload: Any) -> None:
     )
 
 
-async def probe_ingame_activity(
+async def probe_endpoint(
     client: PlanetsNuClient,
     *,
-    api_key: str,
-    planets_account_id: int | None,
-    game_id: int,
-    player_id: int,
+    endpoint: str,
+    title: str,
+    candidates: list[tuple[str, dict[str, Any]]],
 ) -> None:
-    common_headers = {
-        "Origin": "https://planets.nu",
-        "Referer": "https://planets.nu/",
-        "User-Agent": "Mozilla/5.0",
-    }
-    candidates = activity_request_candidates(
-        api_key=api_key,
-        planets_account_id=planets_account_id,
-        game_id=game_id,
-        player_id=player_id,
-    )
-
-    print("\n===== /ACCOUNT/INGAMEACTIVITY PROBE =====")
-    print(f"observer_player_id: {player_id}")
+    print(f"\n===== {title} PROBE =====")
     for label, data in candidates:
         print(f"\n--- attempt: {label} ---")
         print("request fields: " + ", ".join(
@@ -171,21 +188,21 @@ async def probe_ingame_activity(
             for key, value in data.items()
         ))
         try:
-            activity = await client.post_form(
-                "account/ingameactivity",
+            payload = await client.post_form(
+                endpoint,
                 data=data,
-                headers=common_headers,
+                headers=COMMON_HEADERS,
                 use_proxy=True,
             )
         except PlanetsNuError as exc:
             print(f"transport_or_http_error: {exc}")
             continue
 
-        if _api_failed(activity):
+        if _api_failed(payload):
             print("api_error:")
             print(
                 json.dumps(
-                    sanitize(activity),
+                    sanitize(payload),
                     ensure_ascii=False,
                     indent=2,
                     sort_keys=True,
@@ -195,10 +212,10 @@ async def probe_ingame_activity(
             continue
 
         print(f"accepted_request_shape: {label}")
-        print_activity_payload(activity)
+        print_raw_payload(f"{title} RAW RESPONSE", payload)
         return
 
-    print("\nNo candidate request shape produced a successful activity payload.")
+    print("\nNo candidate request shape produced a successful payload.")
 
 
 async def run() -> None:
@@ -237,19 +254,35 @@ async def run() -> None:
 
         print_collection("messages", _dict_records(rst.get("messages")))
         print_collection("mymessages", _dict_records(rst.get("mymessages")))
+        print_raw_payload("LOADTURN TOP-LEVEL ACTIVITY", loadturn.get("activity"))
 
         if not args.no_activity:
             if player_id is None:
                 raise SystemExit(
                     "loadturn response has no valid rst.player.id required by "
-                    "/account/ingameactivity"
+                    "activity endpoints"
                 )
-            await probe_ingame_activity(
+            await probe_endpoint(
                 client,
-                api_key=api_key,
-                planets_account_id=account.planets_account_id,
-                game_id=args.game_id,
-                player_id=player_id,
+                endpoint="account/ingameactivity",
+                title="/ACCOUNT/INGAMEACTIVITY",
+                candidates=activity_request_candidates(
+                    api_key=api_key,
+                    planets_account_id=account.planets_account_id,
+                    game_id=args.game_id,
+                    player_id=player_id,
+                ),
+            )
+            await probe_endpoint(
+                client,
+                endpoint="account/privateactivity",
+                title="/ACCOUNT/PRIVATEACTIVITY",
+                candidates=private_activity_request_candidates(
+                    api_key=api_key,
+                    planets_account_id=account.planets_account_id,
+                    game_id=args.game_id,
+                    player_id=player_id,
+                ),
             )
     finally:
         del api_key
