@@ -1,5 +1,5 @@
-const PRIVATE_ARTWORK_VERSION = 5;
 const NU_HULL_ARTWORK_BASE_URL = "https://mobile.planets.nu/img/hulls";
+const NU_PLANET_ARTWORK_BASE_URL = "https://mobile.planets.nu/img/planets";
 
 function positiveImageId(value: unknown): number | null {
     if (typeof value === "number" && Number.isInteger(value) && value > 0) {
@@ -32,7 +32,7 @@ function safePlanetArtworkName(value: unknown): string | null {
     const trimmed = value.trim();
     if (!trimmed) return null;
 
-    const match = trimmed.match(/(?:^|\/)([A-Za-z0-9_-]+)(?:\.png)?(?:$|\?)/);
+    const match = trimmed.match(/(?:^|\/)([A-Za-z0-9_-]+)(?:\.png)?(?:$|[?#])/);
     return match?.[1] ?? null;
 }
 
@@ -66,12 +66,6 @@ export function privateHullAssetUrl(
 ): string | null {
     const imageId = privateHullArtworkId(hullId, payload);
     if (imageId === null) return null;
-
-    // Hull artwork is intentionally loaded from the canonical Nu asset URL.
-    // The browser can reach these public static assets reliably, while the
-    // server-side cache may be blocked or throttled by the asset host. Using
-    // the original PNG also preserves the exact geometry used by Planets.nu
-    // instead of applying server-side crop/centroid transformations.
     return `${NU_HULL_ARTWORK_BASE_URL}/${imageId}.png`;
 }
 
@@ -91,5 +85,8 @@ export function privatePlanetAssetUrl(
     payload?: Record<string, unknown> | null,
 ): string {
     const artwork = privatePlanetArtworkName(payload) ?? "unknown";
-    return `/api/private-assets/planets/${encodeURIComponent(artwork)}.png?v=${PRIVATE_ARTWORK_VERSION}`;
+    // Like hull artwork, planet PNGs are public Nu static assets. Loading them
+    // directly avoids a server-side timeout turning every planet into the
+    // generic fallback orb.
+    return `${NU_PLANET_ARTWORK_BASE_URL}/${encodeURIComponent(artwork)}.png`;
 }
