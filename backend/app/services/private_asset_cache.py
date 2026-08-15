@@ -20,13 +20,14 @@ _HULL_NORMALIZATION_VERSION = "alpha-centroid-v3"
 _HULL_VISIBLE_FRACTION = 0.58
 _HULL_VISUAL_CENTER_Y = 0.42
 _DOWNLOAD_TIMEOUT = httpx.Timeout(
-    timeout=7.0,
+    timeout=10.0,
     connect=4.0,
-    read=5.0,
+    read=8.0,
     write=5.0,
     pool=4.0,
 )
 _locks: dict[str, asyncio.Lock] = {}
+_download_gate = asyncio.Semaphore(2)
 
 
 class PrivateAssetError(RuntimeError):
@@ -202,13 +203,17 @@ def _catalog_hull_image_id(hull_id: int) -> int | None:
     return None
 
 
-async def _fetch_png(url: str) -> bytes | None:
-    settings = get_settings()
+async def _fetch_png_once(
+    url: str,
+    *,
+    proxy_url: str | None,
+) -> bytes | None:
+    route = "direct" if proxy_url is None else "proxy"
     try:
         async with httpx.AsyncClient(
             timeout=_DOWNLOAD_TIMEOUT,
             follow_redirects=True,
-            proxy=settings.planetsnu_proxy_url or None,
+            proxy=proxy_url,
             trust_env=False,
         ) as client:
             response = await client.get(
@@ -221,7 +226,7 @@ async def _fetch_png(url: str) -> bytes | None:
             )
     except (httpx.TimeoutException, httpx.NetworkError) as exc:
         raise PrivateAssetError(
-            f"Planets.nu private asset source timed out: {url}"
+            f"Planets.nu private asset {route} request failed: {url}"
         ) from exc
 
     if response.status_code == 404:
@@ -231,16 +236,44 @@ async def _fetch_png(url: str) -> bytes | None:
         response.raise_for_status()
     except httpx.HTTPStatusError as exc:
         raise PrivateAssetError(
-            f"Planets.nu private asset returned HTTP "
+            f"Planets.nu private asset {route} returned HTTP "
             f"{response.status_code}: {url}"
         ) from exc
 
     content = response.content
     if not content.startswith(_PNG_SIGNATURE):
         raise PrivateAssetError(
-            f"Planets.nu private asset response is not a PNG: {url}"
+            f"Planets.nu private asset {route} response is not a PNG: {url}"
         )
     return content
+
+
+async def _fetch_png(url: str) -> bytes | None:
+    """Fetch public artwork without making the configured proxy a hard dependency.
+
+    Static hull/planet PNGs carry no account credentials.  Try the direct CDN
+    route first because the API proxy can be capacity-limited, then fall back to
+    PLANETSNU_PROXY_URL when configured.  Limit total parallel source attempts
+    so one missing hull cannot saturate the proxy with six simultaneous waits.
+    """
+    settings = get_settings()
+    configured_proxy = settings.planetsnu_proxy_url or None
+    routes: list[str | None] = [None]
+    if configured_proxy is not None:
+        routes.append(configured_proxy)
+
+    errors: list[PrivateAssetError] = []
+    async with _download_gate:
+        for proxy_url in routes:
+            try:
+                return await _fetch_png_once(
+                    url,
+                    proxy_url=proxy_url,
+                )
+            except PrivateAssetError as exc:
+                errors.append(exc)
+
+    raise PrivateAssetError("; ".join(str(error) for error in errors))
 
 
 def _unique_urls(urls: list[str]) -> list[str]:
@@ -323,17 +356,15 @@ def _hull_sources(image_id: int) -> list[str]:
     configured = settings.planetsnu_hull_asset_base_url.rstrip("/")
 
     # The current Planets.nu client uses the 3D portrait artwork for the ship
-    # survey/card whenever a 3D model exists:
-    #   https://mobile.planets.nu/img/hulls3d/{id}_p.png
-    # Classic /img/hulls/{id}.png remains a valid fallback and is still used
-    # when the account enables classic pictures or for hulls without 3D art.
-    # Try the exact current-client portrait first, then the legacy sources.
+    # survey/card whenever a 3D model exists. Classic artwork remains fallback.
     return [
         f"https://mobile.planets.nu/img/hulls3d/{image_id}_p.png",
+        f"https://planets.nu/img/hulls3d/{image_id}_p.png",
         f"https://app.planets.nu/img/hulls3d/{image_id}_p.png",
         f"https://play.planets.nu/img/hulls3d/{image_id}_p.png",
         f"{configured}/{image_id}.png",
         f"https://mobile.planets.nu/img/hulls/{image_id}.png",
+        f"https://planets.nu/img/hulls/{image_id}.png",
         f"https://app.planets.nu/img/hulls/{image_id}.png",
         f"https://play.planets.nu/img/hulls/{image_id}.png",
     ]
@@ -408,6 +439,7 @@ def _planet_sources(planet_image_name: str) -> list[str]:
     return [
         f"{configured}/{planet_image_name}.png",
         f"https://mobile.planets.nu/img/planets/{planet_image_name}.png",
+        f"https://planets.nu/img/planets/{planet_image_name}.png",
         f"https://app.planets.nu/img/planets/{planet_image_name}.png",
         f"https://play.planets.nu/img/planets/{planet_image_name}.png",
     ]
