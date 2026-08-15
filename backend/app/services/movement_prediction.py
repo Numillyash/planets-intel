@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from typing import Any
 
 from sqlalchemy import select
@@ -7,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
 from app.models.game_rule_catalog import GameRuleCatalog
+from app.models.planet_observation import PlanetObservation
 from app.models.planets_account import PlanetsAccount
 from app.models.private_observation_batch import PrivateObservationBatch
 from app.models.ship_observation import ShipObservation
@@ -23,6 +25,12 @@ from app.services.movement_move_most import (
     MoveMostResult,
     maximum_distance,
     resolve_move_most_order,
+)
+from app.services.movement_warp_well import (
+    PlanetWarpWell,
+    WarpWellResult,
+    WarpWellStatus,
+    resolve_warp_well,
 )
 
 
@@ -138,7 +146,7 @@ def _common_warnings(
 ) -> list[str]:
     warnings = [
         (
-            "Geometry preview only: tow resolution, warp wells, mine impacts, "
+            "Geometry preview only: tow resolution, mine impacts, "
             "hyperjump/chunnel and other Host movement substeps are not yet applied."
         )
     ]
@@ -149,21 +157,53 @@ def _common_warnings(
     return warnings
 
 
+def _displacement(
+    ship: ShipObservation,
+    position: Point | None,
+) -> float | None:
+    if ship.x is None or ship.y is None or position is None:
+        return None
+    return math.hypot(position.x - float(ship.x), position.y - float(ship.y))
+
+
+def _warp_well_reason(
+    base_reason: str,
+    well: WarpWellResult | None,
+) -> str:
+    if well is None:
+        return base_reason
+    if well.status == WarpWellStatus.CAPTURED:
+        label = well.planet_name or f"planet #{well.planet_id}"
+        return f"{base_reason} Planetary warp well pulls the ship into orbit of {label}."
+    if well.status == WarpWellStatus.UNRESOLVED_MULTIPLE:
+        return f"{base_reason} {well.reason}"
+    return base_reason
+
+
 def _serialize_move_most(
     *,
     draft: ShipOrderDraft,
     ship: ShipObservation,
     result: MoveMostResult,
+    warp_well: WarpWellResult | None,
     warp: int,
     speed_multiplier: float,
     warnings: list[str],
 ) -> dict[str, Any]:
+    final_position = (
+        warp_well.position
+        if warp_well is not None
+        else result.position
+    )
+    certain = result.certain and (
+        warp_well.certain if warp_well is not None else True
+    )
     return {
         "ship_id": draft.ship_id,
         "movement_mode": "waypoint",
         "phase": "move_most",
         "status": result.status.value,
-        "certain": result.certain,
+        "certain": certain,
         "start_x": float(ship.x) if ship.x is not None else None,
         "start_y": float(ship.y) if ship.y is not None else None,
         "waypoint_x": result.waypoint.x if result.waypoint is not None else None,
@@ -174,14 +214,29 @@ def _serialize_move_most(
         "target_warp": None,
         "target_speed_multiplier": None,
         "target_standard_max_distance": None,
-        "predicted_x": result.position.x if result.position is not None else None,
-        "predicted_y": result.position.y if result.position is not None else None,
+        "pre_well_x": result.position.x if result.position is not None else None,
+        "pre_well_y": result.position.y if result.position is not None else None,
+        "warp_well_status": (
+            warp_well.status.value if warp_well is not None else None
+        ),
+        "warp_well_planet_id": (
+            warp_well.planet_id if warp_well is not None else None
+        ),
+        "warp_well_planet_name": (
+            warp_well.planet_name if warp_well is not None else None
+        ),
+        "warp_well_pull_distance": (
+            warp_well.distance_to_planet if warp_well is not None else None
+        ),
+        "predicted_x": final_position.x if final_position is not None else None,
+        "predicted_y": final_position.y if final_position is not None else None,
         "requested_distance": result.requested_distance,
         "max_distance": result.max_distance,
         "moved_distance": result.moved_distance,
+        "displacement_distance": _displacement(ship, final_position),
         "warp": warp,
         "speed_multiplier": speed_multiplier,
-        "reason": result.reason,
+        "reason": _warp_well_reason(result.reason, warp_well),
         "warnings": warnings,
     }
 
@@ -192,6 +247,7 @@ def _serialize_intercept(
     ship: ShipObservation,
     target: ShipObservation | None,
     result: InterceptResult,
+    warp_well: WarpWellResult | None,
     warp: int,
     speed_multiplier: float,
     target_warp: int | None,
@@ -222,6 +278,28 @@ def _serialize_intercept(
         "target_warp": target_warp,
         "target_speed_multiplier": target_speed_multiplier,
         "target_standard_max_distance": target_standard_max_distance,
+        "pre_well_x": (
+            result.pre_final_position.x
+            if result.pre_final_position is not None
+            else None
+        ),
+        "pre_well_y": (
+            result.pre_final_position.y
+            if result.pre_final_position is not None
+            else None
+        ),
+        "warp_well_status": (
+            warp_well.status.value if warp_well is not None else None
+        ),
+        "warp_well_planet_id": (
+            warp_well.planet_id if warp_well is not None else None
+        ),
+        "warp_well_planet_name": (
+            warp_well.planet_name if warp_well is not None else None
+        ),
+        "warp_well_pull_distance": (
+            warp_well.distance_to_planet if warp_well is not None else None
+        ),
         "predicted_x": result.position.x if result.position is not None else None,
         "predicted_y": result.position.y if result.position is not None else None,
         "requested_distance": result.requested_distance,
@@ -230,9 +308,10 @@ def _serialize_intercept(
             speed_multiplier=speed_multiplier,
         ),
         "moved_distance": result.moved_distance,
+        "displacement_distance": _displacement(ship, result.position),
         "warp": warp,
         "speed_multiplier": speed_multiplier,
-        "reason": result.reason,
+        "reason": _warp_well_reason(result.reason, warp_well),
         "warnings": warnings,
     }
 
@@ -244,12 +323,11 @@ def get_draft_movement_prediction(
     game_id: int,
     turn: int,
 ) -> dict[str, Any]:
-    """Predict the geometry of saved local movement drafts.
+    """Predict geometry for saved local movement drafts.
 
-    The service deliberately predicts only orders represented by our local
-    semantic draft domain. It does not infer enemy movement or numeric Nu
-    missions. A visible Intercept target whose post-Move-Most location cannot
-    be derived from another saved local draft remains unresolved.
+    The current pipeline resolves ordinary Move Most geometry, verified
+    planetary warp-well capture, and then Classic/Chained Intercept. It does
+    not infer enemy orders or unsupported movement such as Tow/HYP/Chunnel.
     """
 
     with SessionLocal() as session:
@@ -267,6 +345,14 @@ def get_draft_movement_prediction(
             )
         ).scalars().all()
         ships_by_id = {ship.ship_id: ship for ship in ships}
+
+        planets = session.execute(
+            select(PlanetObservation).where(
+                PlanetObservation.batch_id == batch.id,
+                PlanetObservation.x.is_not(None),
+                PlanetObservation.y.is_not(None),
+            )
+        ).scalars().all()
 
         drafts = session.execute(
             select(ShipOrderDraft)
@@ -287,6 +373,7 @@ def get_draft_movement_prediction(
         hull_names = _hull_name_by_id(catalog)
         settings = catalog.settings if catalog is not None else {}
         unlimited_fuel = bool(settings.get("unlimitedfuel", False))
+        gravity_wells_enabled = bool(settings.get("gravitywells", True))
         intercept_mode = (
             InterceptMode.CHAINED
             if bool(settings.get("chainedintercept", False))
@@ -294,8 +381,34 @@ def get_draft_movement_prediction(
         )
         warnings = _common_warnings(unlimited_fuel=unlimited_fuel)
 
+        planet_wells = [
+            PlanetWarpWell(
+                planet_id=int(planet.planet_id),
+                name=planet.name,
+                position=Point(float(planet.x), float(planet.y)),
+            )
+            for planet in planets
+            if planet.x is not None and planet.y is not None
+        ] if gravity_wells_enabled else []
+
+        def resolve_ship_well(
+            *,
+            ship_id: int,
+            position: Point,
+            warp: int,
+            moved_distance: float,
+        ) -> WarpWellResult | None:
+            if not gravity_wells_enabled:
+                return None
+            return resolve_warp_well(
+                ship_id=ship_id,
+                pre_well_position=position,
+                warp=warp,
+                moved_distance=moved_distance,
+                planets=planet_wells,
+            )
+
         draft_by_ship_id = {draft.ship_id: draft for draft in drafts}
-        move_most_results: dict[int, MoveMostResult] = {}
         speed_by_ship_id: dict[int, float] = {}
         warp_by_ship_id: dict[int, int] = {}
         known_post_move_positions: dict[int, Point] = {}
@@ -344,13 +457,30 @@ def get_draft_movement_prediction(
                     speed_multiplier=multiplier,
                 )
             )
-            move_most_results[draft.ship_id] = result
-            if result.position is not None:
-                known_post_move_positions[draft.ship_id] = result.position
+
+            warp_well = (
+                resolve_ship_well(
+                    ship_id=draft.ship_id,
+                    position=result.position,
+                    warp=warp,
+                    moved_distance=float(result.moved_distance or 0.0),
+                )
+                if result.position is not None
+                else None
+            )
+            final_position = (
+                warp_well.position
+                if warp_well is not None
+                else result.position
+            )
+            if final_position is not None:
+                known_post_move_positions[draft.ship_id] = final_position
+
             items_by_ship_id[draft.ship_id] = _serialize_move_most(
                 draft=draft,
                 ship=ship,
                 result=result,
+                warp_well=warp_well,
                 warp=warp,
                 speed_multiplier=multiplier,
                 warnings=list(warnings),
@@ -373,6 +503,22 @@ def get_draft_movement_prediction(
             )
             warp_by_ship_id[draft.ship_id] = warp
             speed_by_ship_id[draft.ship_id] = multiplier
+
+            def post_move_transform(
+                position: Point,
+                moved_distance: float,
+                *,
+                ship_id: int = draft.ship_id,
+                ship_warp: int = warp,
+            ) -> Point | None:
+                well = resolve_ship_well(
+                    ship_id=ship_id,
+                    position=position,
+                    warp=ship_warp,
+                    moved_distance=moved_distance,
+                )
+                return well.position if well is not None else position
+
             intercept_orders.append(
                 InterceptOrder(
                     ship_id=draft.ship_id,
@@ -387,6 +533,7 @@ def get_draft_movement_prediction(
                         if draft.intercept_target_ship_id is not None
                         else False
                     ),
+                    post_move_transform=post_move_transform,
                 )
             )
 
@@ -414,11 +561,23 @@ def get_draft_movement_prediction(
                     if target is not None
                     else None
                 )
+                intercept_result = intercept_results[order.ship_id]
+                intercept_well = (
+                    resolve_ship_well(
+                        ship_id=order.ship_id,
+                        position=intercept_result.pre_final_position,
+                        warp=warp_by_ship_id[order.ship_id],
+                        moved_distance=float(intercept_result.moved_distance or 0.0),
+                    )
+                    if intercept_result.pre_final_position is not None
+                    else None
+                )
                 items_by_ship_id[order.ship_id] = _serialize_intercept(
                     draft=draft,
                     ship=ship,
                     target=target,
-                    result=intercept_results[order.ship_id],
+                    result=intercept_result,
+                    warp_well=intercept_well,
                     warp=warp_by_ship_id[order.ship_id],
                     speed_multiplier=speed_by_ship_id[order.ship_id],
                     target_warp=target_warp,
