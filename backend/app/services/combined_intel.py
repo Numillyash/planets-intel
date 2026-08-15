@@ -13,7 +13,10 @@ from app.models.starbase_observation import StarbaseObservation
 from app.models.stellar_cartography_observation import (
     StellarCartographyObservation,
 )
-from app.services.payload_safety import sanitize_observation_payload
+from app.services.payload_safety import (
+    sanitize_observation_payload,
+    sanitize_ship_observation_payload,
+)
 
 
 @dataclass
@@ -36,8 +39,7 @@ def _load_latest_snapshot(
         select(PrivateObservationBatch)
         .where(
             PrivateObservationBatch.game_id == game_id,
-            PrivateObservationBatch.observer_planets_account_id
-            == account.id,
+            PrivateObservationBatch.observer_planets_account_id == account.id,
         )
         .order_by(
             PrivateObservationBatch.turn.desc(),
@@ -57,7 +59,6 @@ def _load_latest_snapshot(
             .order_by(PlanetObservation.planet_id)
         ).scalars().all()
     )
-
     ships = list(
         session.execute(
             select(ShipObservation)
@@ -65,7 +66,6 @@ def _load_latest_snapshot(
             .order_by(ShipObservation.ship_id)
         ).scalars().all()
     )
-
     starbases = list(
         session.execute(
             select(StarbaseObservation)
@@ -73,7 +73,6 @@ def _load_latest_snapshot(
             .order_by(StarbaseObservation.starbase_id)
         ).scalars().all()
     )
-
     stellar_cartography = list(
         session.execute(
             select(StellarCartographyObservation)
@@ -100,11 +99,8 @@ def _entity_freshness(
     item,
 ) -> tuple[int, int, Any, int]:
     effective_turn = (
-        item.info_turn
-        if item.info_turn is not None
-        else snapshot.batch.turn
+        item.info_turn if item.info_turn is not None else snapshot.batch.turn
     )
-
     return (
         effective_turn,
         snapshot.batch.turn,
@@ -116,18 +112,12 @@ def _entity_freshness(
 def _sorted_entries(entries):
     return sorted(
         entries,
-        key=lambda entry: _entity_freshness(
-            entry[0],
-            entry[1],
-        ),
+        key=lambda entry: _entity_freshness(entry[0], entry[1]),
         reverse=True,
     )
 
 
-def _provenance(
-    snapshot: _Snapshot,
-    item,
-) -> dict[str, Any]:
+def _provenance(snapshot: _Snapshot, item) -> dict[str, Any]:
     return {
         "linked_account_id": snapshot.account.id,
         "planets_username": snapshot.account.planets_username,
@@ -139,38 +129,57 @@ def _provenance(
     }
 
 
-def _first_known(
-    entries,
-    attribute: str,
-) -> tuple[Any, int | None]:
+def _first_known(entries, attribute: str) -> tuple[Any, int | None]:
     for snapshot, item in _sorted_entries(entries):
         value = getattr(item, attribute)
         if value is not None:
             return value, snapshot.account.id
-
     return None, None
 
 
-def _merge_payload(
-    entries,
-) -> tuple[dict[str, Any], dict[str, int]]:
+def _merge_payload(entries) -> tuple[dict[str, Any], dict[str, int]]:
     merged: dict[str, Any] = {}
     field_sources: dict[str, int] = {}
 
     for snapshot, item in _sorted_entries(entries):
-        payload = sanitize_observation_payload(
-            item.payload
+        payload = sanitize_observation_payload(item.payload)
+        if not isinstance(payload, dict):
+            continue
+        for key, value in payload.items():
+            if value is None or key in merged:
+                continue
+            merged[key] = value
+            field_sources[f"payload.{key}"] = snapshot.account.id
+
+    return merged, field_sources
+
+
+def _merge_ship_payload(
+    entries: list[tuple[_Snapshot, ShipObservation]],
+) -> tuple[dict[str, Any], dict[str, int]]:
+    """Merge ship payloads without turning hidden ammo into factual zeroes.
+
+    Each source account may contribute generic private ammo only for a ship that
+    source actually owns. This preserves legitimate multi-account sharing while
+    keeping an enemy row's zero placeholder out of the factual union. VCR and
+    deterministic replay ammunition remain separate evidence layers.
+    """
+    merged: dict[str, Any] = {}
+    field_sources: dict[str, int] = {}
+
+    for snapshot, item in _sorted_entries(entries):
+        payload = sanitize_ship_observation_payload(
+            item.payload,
+            observer_slot_id=snapshot.batch.source_player_slot_id,
+            owner_id=item.owner_id,
         )
         if not isinstance(payload, dict):
             continue
-
         for key, value in payload.items():
-            if value is None:
+            if value is None or key in merged:
                 continue
-
-            if key not in merged:
-                merged[key] = value
-                field_sources[f"payload.{key}"] = snapshot.account.id
+            merged[key] = value
+            field_sources[f"payload.{key}"] = snapshot.account.id
 
     return merged, field_sources
 
@@ -181,17 +190,11 @@ def _base_fields(
 ) -> tuple[dict[str, Any], dict[str, int]]:
     values: dict[str, Any] = {}
     field_sources: dict[str, int] = {}
-
     for attribute in attributes:
-        value, source_account_id = _first_known(
-            entries,
-            attribute,
-        )
+        value, source_account_id = _first_known(entries, attribute)
         values[attribute] = value
-
         if source_account_id is not None:
             field_sources[attribute] = source_account_id
-
     return values, field_sources
 
 
@@ -212,31 +215,20 @@ def _merge_planets(
     snapshots: list[_Snapshot],
 ) -> list[dict[str, Any]]:
     grouped: dict[int, list[tuple[_Snapshot, PlanetObservation]]] = {}
-
     for snapshot in snapshots:
         for item in snapshot.planets:
-            grouped.setdefault(item.planet_id, []).append(
-                (snapshot, item)
-            )
+            grouped.setdefault(item.planet_id, []).append((snapshot, item))
 
     result: list[dict[str, Any]] = []
-
     for planet_id in sorted(grouped):
         entries = grouped[planet_id]
         values, field_sources = _base_fields(
             entries,
-            (
-                "owner_id",
-                "info_turn",
-                "name",
-                "x",
-                "y",
-            ),
+            ("owner_id", "info_turn", "name", "x", "y"),
         )
         payload, payload_sources = _merge_payload(entries)
         field_sources.update(payload_sources)
         selected_source, provenance = _common_entity_metadata(entries)
-
         result.append(
             {
                 "planet_id": planet_id,
@@ -247,7 +239,6 @@ def _merge_planets(
                 "provenance": provenance,
             }
         )
-
     return result
 
 
@@ -255,33 +246,20 @@ def _merge_ships(
     snapshots: list[_Snapshot],
 ) -> list[dict[str, Any]]:
     grouped: dict[int, list[tuple[_Snapshot, ShipObservation]]] = {}
-
     for snapshot in snapshots:
         for item in snapshot.ships:
-            grouped.setdefault(item.ship_id, []).append(
-                (snapshot, item)
-            )
+            grouped.setdefault(item.ship_id, []).append((snapshot, item))
 
     result: list[dict[str, Any]] = []
-
     for ship_id in sorted(grouped):
         entries = grouped[ship_id]
         values, field_sources = _base_fields(
             entries,
-            (
-                "owner_id",
-                "info_turn",
-                "hull_id",
-                "name",
-                "x",
-                "y",
-                "warp",
-            ),
+            ("owner_id", "info_turn", "hull_id", "name", "x", "y", "warp"),
         )
-        payload, payload_sources = _merge_payload(entries)
+        payload, payload_sources = _merge_ship_payload(entries)
         field_sources.update(payload_sources)
         selected_source, provenance = _common_entity_metadata(entries)
-
         result.append(
             {
                 "ship_id": ship_id,
@@ -292,7 +270,6 @@ def _merge_ships(
                 "provenance": provenance,
             }
         )
-
     return result
 
 
@@ -300,29 +277,20 @@ def _merge_starbases(
     snapshots: list[_Snapshot],
 ) -> list[dict[str, Any]]:
     grouped: dict[int, list[tuple[_Snapshot, StarbaseObservation]]] = {}
-
     for snapshot in snapshots:
         for item in snapshot.starbases:
-            grouped.setdefault(item.starbase_id, []).append(
-                (snapshot, item)
-            )
+            grouped.setdefault(item.starbase_id, []).append((snapshot, item))
 
     result: list[dict[str, Any]] = []
-
     for starbase_id in sorted(grouped):
         entries = grouped[starbase_id]
         values, field_sources = _base_fields(
             entries,
-            (
-                "planet_id",
-                "race_id",
-                "info_turn",
-            ),
+            ("planet_id", "race_id", "info_turn"),
         )
         payload, payload_sources = _merge_payload(entries)
         field_sources.update(payload_sources)
         selected_source, provenance = _common_entity_metadata(entries)
-
         result.append(
             {
                 "starbase_id": starbase_id,
@@ -333,7 +301,6 @@ def _merge_starbases(
                 "provenance": provenance,
             }
         )
-
     return result
 
 
@@ -344,30 +311,21 @@ def _merge_stellar_cartography(
         tuple[str, int],
         list[tuple[_Snapshot, StellarCartographyObservation]],
     ] = {}
-
     for snapshot in snapshots:
         for item in snapshot.stellar_cartography:
             key = (item.feature_type, item.feature_id)
             grouped.setdefault(key, []).append((snapshot, item))
 
     result: list[dict[str, Any]] = []
-
     for feature_type, feature_id in sorted(grouped):
         entries = grouped[(feature_type, feature_id)]
         values, field_sources = _base_fields(
             entries,
-            (
-                "name",
-                "info_turn",
-                "x",
-                "y",
-                "radius",
-            ),
+            ("name", "info_turn", "x", "y", "radius"),
         )
         payload, payload_sources = _merge_payload(entries)
         field_sources.update(payload_sources)
         selected_source, provenance = _common_entity_metadata(entries)
-
         result.append(
             {
                 "feature_type": feature_type,
@@ -379,8 +337,69 @@ def _merge_stellar_cartography(
                 "provenance": provenance,
             }
         )
-
     return result
+
+
+def _combined_result(
+    *,
+    game_id: int,
+    primary_account: PlanetsAccount,
+    primary_snapshot: _Snapshot,
+    snapshots: list[_Snapshot],
+) -> dict[str, Any]:
+    planets = _merge_planets(snapshots)
+    ships = _merge_ships(snapshots)
+    starbases = _merge_starbases(snapshots)
+    stellar_cartography = _merge_stellar_cartography(snapshots)
+
+    feature_counts = {
+        "nebula": 0,
+        "ion_storm": 0,
+        "star_cluster": 0,
+    }
+    for item in stellar_cartography:
+        feature_type = item["feature_type"]
+        if feature_type in feature_counts:
+            feature_counts[feature_type] += 1
+
+    return {
+        "mode": "combined",
+        "aggregation_policy": "freshest_field_union",
+        "game_id": game_id,
+        "turn": max(snapshot.batch.turn for snapshot in snapshots),
+        "primary_observer": {
+            "linked_account_id": primary_account.id,
+            "planets_account_id": primary_account.planets_account_id,
+            "planets_username": primary_account.planets_username,
+            "player_slot_id": primary_snapshot.batch.source_player_slot_id,
+            "is_active": primary_account.is_active,
+        },
+        "sources": [
+            {
+                "linked_account_id": snapshot.account.id,
+                "planets_account_id": snapshot.account.planets_account_id,
+                "planets_username": snapshot.account.planets_username,
+                "player_slot_id": snapshot.batch.source_player_slot_id,
+                "batch_id": snapshot.batch.id,
+                "turn": snapshot.batch.turn,
+                "source": snapshot.batch.source,
+                "observed_at": snapshot.batch.observed_at,
+            }
+            for snapshot in snapshots
+        ],
+        "counts": {
+            "planets": len(planets),
+            "ships": len(ships),
+            "starbases": len(starbases),
+            "nebulas": feature_counts["nebula"],
+            "ion_storms": feature_counts["ion_storm"],
+            "star_clusters": feature_counts["star_cluster"],
+        },
+        "planets": planets,
+        "ships": ships,
+        "starbases": starbases,
+        "stellar_cartography": stellar_cartography,
+    }
 
 
 def get_combined_private_intel(
@@ -397,17 +416,14 @@ def get_combined_private_intel(
                 PlanetsAccount.is_active.is_(True),
             )
         ).scalar_one_or_none()
-
         if primary_account is None:
             return None
 
         shares = session.execute(
             select(DashboardIntelShare).where(
                 or_(
-                    DashboardIntelShare.account_low_id
-                    == linked_account_id,
-                    DashboardIntelShare.account_high_id
-                    == linked_account_id,
+                    DashboardIntelShare.account_low_id == linked_account_id,
+                    DashboardIntelShare.account_high_id == linked_account_id,
                 ),
                 DashboardIntelShare.approved_low_at.is_not(None),
                 DashboardIntelShare.approved_high_at.is_not(None),
@@ -420,7 +436,6 @@ def get_combined_private_intel(
             else share.account_low_id
             for share in shares
         ]
-
         peer_accounts: list[PlanetsAccount] = []
         if peer_ids:
             peer_accounts = list(
@@ -439,12 +454,10 @@ def get_combined_private_intel(
             account=primary_account,
             game_id=game_id,
         )
-
         if primary_snapshot is None:
             return None
 
         snapshots = [primary_snapshot]
-
         for peer_account in peer_accounts:
             peer_snapshot = _load_latest_snapshot(
                 session,
@@ -454,67 +467,9 @@ def get_combined_private_intel(
             if peer_snapshot is not None:
                 snapshots.append(peer_snapshot)
 
-        planets = _merge_planets(snapshots)
-        ships = _merge_ships(snapshots)
-        starbases = _merge_starbases(snapshots)
-        stellar_cartography = _merge_stellar_cartography(snapshots)
-
-        feature_counts = {
-            "nebula": 0,
-            "ion_storm": 0,
-            "star_cluster": 0,
-        }
-        for item in stellar_cartography:
-            feature_type = item["feature_type"]
-            if feature_type in feature_counts:
-                feature_counts[feature_type] += 1
-
-        return {
-            "mode": "combined",
-            "aggregation_policy": "freshest_field_union",
-            "game_id": game_id,
-            "turn": max(
-                snapshot.batch.turn
-                for snapshot in snapshots
-            ),
-            "primary_observer": {
-                "linked_account_id": primary_account.id,
-                "planets_account_id": primary_account.planets_account_id,
-                "planets_username": primary_account.planets_username,
-                "player_slot_id": (
-                    primary_snapshot.batch.source_player_slot_id
-                ),
-                "is_active": primary_account.is_active,
-            },
-            "sources": [
-                {
-                    "linked_account_id": snapshot.account.id,
-                    "planets_account_id": (
-                        snapshot.account.planets_account_id
-                    ),
-                    "planets_username": (
-                        snapshot.account.planets_username
-                    ),
-                    "player_slot_id": (
-                        snapshot.batch.source_player_slot_id
-                    ),
-                    "batch_id": snapshot.batch.id,
-                    "turn": snapshot.batch.turn,
-                    "source": snapshot.batch.source,
-                    "observed_at": snapshot.batch.observed_at,
-                }
-                for snapshot in snapshots
-            ],
-            "counts": {
-                "planets": len(planets),
-                "ships": len(ships),
-                "starbases": len(starbases),
-                "nebulas": feature_counts["nebula"],
-                "ion_storms": feature_counts["ion_storm"],
-                "star_clusters": feature_counts["star_cluster"],
-            },
-            "planets": planets,
-            "ships": ships,
-            "starbases": starbases,
-            "stellar_cartography": stellar_cartography,
-        }
+        return _combined_result(
+            game_id=game_id,
+            primary_account=primary_account,
+            primary_snapshot=primary_snapshot,
+            snapshots=snapshots,
+        )
