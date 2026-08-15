@@ -2,6 +2,15 @@ import { useEffect, useState } from "react";
 import { getHostEvents } from "../../api/activity";
 import type { HostEventItem } from "../../types/activity";
 
+
+function eventTypeLabel(item: HostEventItem): string {
+    if (item.event_type === "ship_explosion_detected") {
+        return "Long-range ship explosion";
+    }
+    return item.event_type.replaceAll("_", " ");
+}
+
+
 export function HostEventPanel(props: {
     gameId: number;
     linkedAccountId: number;
@@ -74,19 +83,36 @@ export function HostEventPanel(props: {
                 </div>
 
                 <div className="dashboard-report-list">
-                    {items.map((item, index) => (
-                        <article className="dashboard-report-item" key={`${item.event_type}:${index}`}>
-                            <strong>{item.summary}</strong>
-                            <small>
-                                {item.event_type.replaceAll("_", " ")}
-                                {item.planet_id !== null ? ` · planet #${item.planet_id}` : ""}
-                                {item.x !== null && item.y !== null ? ` · ${item.x}, ${item.y}` : ""}
-                            </small>
-                            <small>
-                                factual source: {item.sources.map((source) => source.planets_username).join(", ")}
-                            </small>
-                        </article>
-                    ))}
+                    {items.map((item, index) => {
+                        const explosion = item.event_type === "ship_explosion_detected";
+                        return (
+                            <article
+                                className="dashboard-report-item"
+                                key={`${item.event_type}:${item.x}:${item.y}:${index}`}
+                            >
+                                <strong>
+                                    {explosion ? "✹ " : ""}
+                                    {item.summary}
+                                </strong>
+                                <small>
+                                    {eventTypeLabel(item)}
+                                    {item.planet_id !== null ? ` · planet #${item.planet_id}` : ""}
+                                    {item.x !== null && item.y !== null ? ` · ${item.x}, ${item.y}` : ""}
+                                </small>
+                                {explosion && (
+                                    <small>
+                                        observed ship name: {item.ship_name ?? "unknown"}
+                                        {item.ship_id === null
+                                            ? " · ship ID not provided by sensor report"
+                                            : ` · ship #${item.ship_id}`}
+                                    </small>
+                                )}
+                                <small>
+                                    factual source: {item.sources.map((source) => source.planets_username).join(", ")}
+                                </small>
+                            </article>
+                        );
+                    })}
                 </div>
             </div>
         </section>
