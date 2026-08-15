@@ -16,6 +16,7 @@ export function HostEventPanel(props: {
     linkedAccountId: number;
     turn: number;
     embedded?: boolean;
+    onFocus?: (event: HostEventItem) => void;
 }) {
     const [items, setItems] = useState<HostEventItem[]>([]);
     const [open, setOpen] = useState(true);
@@ -85,15 +86,38 @@ export function HostEventPanel(props: {
                 <div className="dashboard-report-list">
                     {items.map((item, index) => {
                         const explosion = item.event_type === "ship_explosion_detected";
+                        const canFocus =
+                            props.onFocus !== undefined &&
+                            item.x !== null &&
+                            item.y !== null;
                         return (
                             <article
                                 className="dashboard-report-item"
                                 key={`${item.event_type}:${item.x}:${item.y}:${index}`}
                             >
-                                <strong>
-                                    {explosion ? "✹ " : ""}
-                                    {item.summary}
-                                </strong>
+                                <div
+                                    style={{
+                                        alignItems: "flex-start",
+                                        display: "flex",
+                                        gap: 8,
+                                        justifyContent: "space-between",
+                                    }}
+                                >
+                                    <strong>
+                                        {explosion ? "✹ " : ""}
+                                        {item.summary}
+                                    </strong>
+                                    {canFocus && (
+                                        <button
+                                            className="secondary-button"
+                                            onClick={() => props.onFocus?.(item)}
+                                            style={{ padding: "3px 7px", flex: "0 0 auto" }}
+                                            type="button"
+                                        >
+                                            Locate
+                                        </button>
+                                    )}
+                                </div>
                                 <small>
                                     {eventTypeLabel(item)}
                                     {item.planet_id !== null ? ` · planet #${item.planet_id}` : ""}
