@@ -50,6 +50,10 @@ def _value_label(value: Any) -> str:
     return str(value)
 
 
+def _api_failed(payload: Any) -> bool:
+    return isinstance(payload, dict) and payload.get("success") is False
+
+
 def print_collection(name: str, records: list[dict[str, Any]]) -> None:
     print(f"\n===== LOADTURN {name.upper()} ({len(records)}) =====")
     type_counts = Counter(
@@ -99,6 +103,75 @@ def print_activity_payload(payload: Any) -> None:
     )
 
 
+async def probe_ingame_activity(
+    client: PlanetsNuClient,
+    *,
+    api_key: str,
+    planets_account_id: int | None,
+    game_id: int,
+) -> None:
+    common_headers = {
+        "Origin": "https://planets.nu",
+        "Referer": "https://planets.nu/",
+        "User-Agent": "Mozilla/5.0",
+    }
+    candidates: list[tuple[str, dict[str, Any]]] = []
+    if planets_account_id is not None:
+        candidates.append(
+            (
+                "apikey+accountid+gameid",
+                {
+                    "apikey": api_key,
+                    "accountid": planets_account_id,
+                    "gameid": game_id,
+                },
+            )
+        )
+    candidates.extend(
+        [
+            ("apikey+gameid", {"apikey": api_key, "gameid": game_id}),
+            ("apikey", {"apikey": api_key}),
+        ]
+    )
+
+    print("\n===== /ACCOUNT/INGAMEACTIVITY PROBE =====")
+    for label, data in candidates:
+        print(f"\n--- attempt: {label} ---")
+        print("request fields: " + ", ".join(
+            "apikey=<redacted>" if key == "apikey" else f"{key}={value}"
+            for key, value in data.items()
+        ))
+        try:
+            activity = await client.post_form(
+                "account/ingameactivity",
+                data=data,
+                headers=common_headers,
+                use_proxy=True,
+            )
+        except PlanetsNuError as exc:
+            print(f"transport_or_http_error: {exc}")
+            continue
+
+        if _api_failed(activity):
+            print("api_error:")
+            print(
+                json.dumps(
+                    sanitize(activity),
+                    ensure_ascii=False,
+                    indent=2,
+                    sort_keys=True,
+                    default=str,
+                )
+            )
+            continue
+
+        print(f"accepted_request_shape: {label}")
+        print_activity_payload(activity)
+        return
+
+    print("\nNo candidate request shape produced a successful activity payload.")
+
+
 async def run() -> None:
     args = parse_args()
     if args.game_id <= 0:
@@ -132,33 +205,13 @@ async def run() -> None:
         print_collection("messages", _dict_records(rst.get("messages")))
         print_collection("mymessages", _dict_records(rst.get("mymessages")))
 
-        if args.no_activity:
-            return
-
-        print("\n===== /ACCOUNT/INGAMEACTIVITY PROBE =====")
-        print(
-            "request fields: apikey=<redacted>, "
-            f"accountid={account.planets_account_id}, gameid={args.game_id}"
-        )
-        try:
-            activity = await client.post_form(
-                "account/ingameactivity",
-                data={
-                    "apikey": api_key,
-                    "accountid": account.planets_account_id,
-                    "gameid": args.game_id,
-                },
-                headers={
-                    "Origin": "https://planets.nu",
-                    "Referer": "https://planets.nu/",
-                    "User-Agent": "Mozilla/5.0",
-                },
-                use_proxy=True,
+        if not args.no_activity:
+            await probe_ingame_activity(
+                client,
+                api_key=api_key,
+                planets_account_id=account.planets_account_id,
+                game_id=args.game_id,
             )
-        except PlanetsNuError as exc:
-            print(f"request_error: {exc}")
-        else:
-            print_activity_payload(activity)
     finally:
         del api_key
 
