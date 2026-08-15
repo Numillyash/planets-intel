@@ -1,4 +1,5 @@
 import type {
+    GameActivityResponse,
     HostEventsResponse,
     PlayerActivityResponse,
 } from "../types/activity";
@@ -47,5 +48,16 @@ export function getHostEvents(
 ): Promise<HostEventsResponse> {
     return apiGet<HostEventsResponse>(
         `/api/games/${gameId}/private-intel/history/host-events?linked_account_id=${linkedAccountId}&turn=${turn}`,
+    );
+}
+
+
+export function getGameActivity(
+    gameId: number,
+    linkedAccountId: number,
+    limit = 500,
+): Promise<GameActivityResponse> {
+    return apiGet<GameActivityResponse>(
+        `/api/games/${gameId}/communications?linked_account_id=${linkedAccountId}&limit=${limit}`,
     );
 }
