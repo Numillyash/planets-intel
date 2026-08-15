@@ -24,13 +24,79 @@ function readableMessage(value: string | null): string {
 }
 
 
+function compareNewestFirst(
+    left: GameActivityItem,
+    right: GameActivityItem,
+): number {
+    const leftDate = left.date_added ?? "";
+    const rightDate = right.date_added ?? "";
+    if (leftDate !== rightDate) return rightDate.localeCompare(leftDate);
+    return right.activity_id - left.activity_id;
+}
+
+
+function compareOldestFirst(
+    left: GameActivityItem,
+    right: GameActivityItem,
+): number {
+    const leftDate = left.date_added ?? "";
+    const rightDate = right.date_added ?? "";
+    if (leftDate !== rightDate) return leftDate.localeCompare(rightDate);
+    return left.activity_id - right.activity_id;
+}
+
+
 function newestFirst(items: GameActivityItem[]): GameActivityItem[] {
-    return [...items].sort((left, right) => {
-        const leftDate = left.date_added ?? "";
-        const rightDate = right.date_added ?? "";
-        if (leftDate !== rightDate) return rightDate.localeCompare(leftDate);
-        return right.activity_id - left.activity_id;
-    });
+    return [...items].sort(compareNewestFirst);
+}
+
+
+function threadedOrder(items: GameActivityItem[]): GameActivityItem[] {
+    const byId = new Map(
+        items.map((item) => [item.activity_id, item] as const),
+    );
+    const childrenByParent = new Map<number, GameActivityItem[]>();
+    const roots: GameActivityItem[] = [];
+
+    for (const item of items) {
+        const parentId = item.parent_id;
+        if (
+            parentId !== null &&
+            parentId > 0 &&
+            byId.has(parentId)
+        ) {
+            const children = childrenByParent.get(parentId) ?? [];
+            children.push(item);
+            childrenByParent.set(parentId, children);
+        } else {
+            roots.push(item);
+        }
+    }
+
+    roots.sort(compareNewestFirst);
+    for (const children of childrenByParent.values()) {
+        children.sort(compareOldestFirst);
+    }
+
+    const ordered: GameActivityItem[] = [];
+    const visited = new Set<number>();
+
+    const appendThread = (item: GameActivityItem) => {
+        if (visited.has(item.activity_id)) return;
+        visited.add(item.activity_id);
+        ordered.push(item);
+        for (const child of childrenByParent.get(item.activity_id) ?? []) {
+            appendThread(child);
+        }
+    };
+
+    for (const root of roots) appendThread(root);
+
+    // Fail closed on malformed/cyclic reply graphs: keep every factual record,
+    // but do not fabricate a parent relationship that is absent from the feed.
+    for (const item of newestFirst(items)) appendThread(item);
+
+    return ordered;
 }
 
 
@@ -69,6 +135,22 @@ function activityLabel(item: GameActivityItem): string {
 }
 
 
+function chatChannelFromLocation(): string {
+    return new URLSearchParams(window.location.search).get("chat") ?? "general";
+}
+
+
+function replaceChatChannelInLocation(channelKey: string): void {
+    const url = new URL(window.location.href);
+    url.searchParams.set("chat", channelKey);
+    window.history.replaceState(
+        null,
+        "",
+        `${url.pathname}${url.search}${url.hash}`,
+    );
+}
+
+
 export function CommunicationsPanel(props: {
     gameId: number;
     linkedAccountId: number;
@@ -76,7 +158,17 @@ export function CommunicationsPanel(props: {
     const [items, setItems] = useState<GameActivityItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [selectedChannelKey, setSelectedChannelKey] = useState("general");
+    const [selectedChannelKey, setSelectedChannelKey] = useState(
+        () => chatChannelFromLocation(),
+    );
+
+    useEffect(() => {
+        const handlePopState = () => {
+            setSelectedChannelKey(chatChannelFromLocation());
+        };
+        window.addEventListener("popstate", handlePopState);
+        return () => window.removeEventListener("popstate", handlePopState);
+    }, []);
 
     useEffect(() => {
         let active = true;
@@ -124,7 +216,7 @@ export function CommunicationsPanel(props: {
                 key,
                 kind: "private" as const,
                 label: group.label,
-                items: newestFirst(group.items),
+                items: threadedOrder(group.items),
                 latestSortKey: newestKey(group.items),
             }))
             .sort((left, right) => right.latestSortKey.localeCompare(left.latestSortKey));
@@ -134,7 +226,7 @@ export function CommunicationsPanel(props: {
                 key: "general",
                 kind: "general",
                 label: "General",
-                items: newestFirst(general),
+                items: threadedOrder(general),
                 latestSortKey: newestKey(general),
             },
             ...privateChannels,
@@ -147,6 +239,18 @@ export function CommunicationsPanel(props: {
             },
         ];
     }, [items]);
+
+    useEffect(() => {
+        if (loading) return;
+        if (channels.some((channel) => channel.key === selectedChannelKey)) return;
+        setSelectedChannelKey("general");
+        replaceChatChannelInLocation("general");
+    }, [channels, loading, selectedChannelKey]);
+
+    function selectChannel(channelKey: string) {
+        setSelectedChannelKey(channelKey);
+        replaceChatChannelInLocation(channelKey);
+    }
 
     const selectedChannel = channels.find((channel) => channel.key === selectedChannelKey) ?? channels[0];
     const privateChannels = channels.filter((channel) => channel.kind === "private");
@@ -161,8 +265,8 @@ export function CommunicationsPanel(props: {
                     <h2>Communications</h2>
                     <p>
                         General chat and direct conversations are separated by player.
-                        System and diplomacy records stay in Activity instead of mixing
-                        with chat messages.
+                        Root messages run newest first; replies stay under their root in
+                        chronological order. System and diplomacy records stay in Activity.
                     </p>
                 </div>
             </div>
@@ -190,7 +294,7 @@ export function CommunicationsPanel(props: {
                         <div className="eyebrow" style={{ margin: "4px 6px 8px" }}>Chat</div>
                         <button
                             className={selectedChannelKey === "general" ? "secondary-button is-active" : "secondary-button"}
-                            onClick={() => setSelectedChannelKey("general")}
+                            onClick={() => selectChannel("general")}
                             style={{ width: "100%", display: "flex", justifyContent: "space-between", marginBottom: 8 }}
                             type="button"
                         >
@@ -208,7 +312,7 @@ export function CommunicationsPanel(props: {
                             <button
                                 className={selectedChannelKey === channel.key ? "secondary-button is-active" : "secondary-button"}
                                 key={channel.key}
-                                onClick={() => setSelectedChannelKey(channel.key)}
+                                onClick={() => selectChannel(channel.key)}
                                 style={{
                                     width: "100%",
                                     display: "flex",
@@ -227,7 +331,7 @@ export function CommunicationsPanel(props: {
                         <div className="eyebrow" style={{ margin: "14px 6px 8px" }}>Other</div>
                         <button
                             className={selectedChannelKey === "activity" ? "secondary-button is-active" : "secondary-button"}
-                            onClick={() => setSelectedChannelKey("activity")}
+                            onClick={() => selectChannel("activity")}
                             style={{ width: "100%", display: "flex", justifyContent: "space-between" }}
                             type="button"
                         >
