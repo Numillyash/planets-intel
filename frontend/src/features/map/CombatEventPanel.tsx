@@ -2,12 +2,13 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { CombatEventPanel as VcrPanel } from "./CombatEventPanelLegacy";
+import { CommunicationsPanel } from "./CommunicationsPanel";
 import { HostEventPanel } from "./HostEventPanel";
 import { MapEventBridge } from "./MapEventBridge";
 import "./operational-shell-v2.css";
 import "./operational-dashboard-bridge.css";
 
-type DashboardTab = "combat" | "host";
+type DashboardTab = "combat" | "host" | "communications";
 
 interface FocusTarget {
     x: number | null;
@@ -166,6 +167,13 @@ export function CombatEventPanel(props: CombatEventPanelProps) {
                     >
                         Reports
                     </button>
+                    <button
+                        className={activeTab === "communications" ? "is-active" : ""}
+                        onClick={() => setActiveTab("communications")}
+                        type="button"
+                    >
+                        Communications
+                    </button>
                 </nav>
 
                 <div className="operational-dashboard-content">
@@ -189,6 +197,16 @@ export function CombatEventPanel(props: CombatEventPanelProps) {
                                 setIntelOverlayOpen(false);
                             }}
                             turn={props.turn}
+                        />
+                    </section>
+                    <section
+                        className={
+                            `operational-dashboard-pane${activeTab === "communications" ? " is-active" : ""}`
+                        }
+                    >
+                        <CommunicationsPanel
+                            gameId={props.gameId}
+                            linkedAccountId={props.linkedAccountId}
                         />
                     </section>
                 </div>
