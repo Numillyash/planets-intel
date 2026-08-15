@@ -21,6 +21,7 @@ import {
     shipPlannedRoute,
     type MapPoint,
 } from "./navigationAnalysis";
+import { drawWarpWellPrediction } from "./warpWellPredictionScene";
 
 
 interface RenderPoint {
@@ -171,6 +172,10 @@ function drawPrediction(
     bounds: MapBounds,
     item: ShipMovementPrediction,
 ) {
+    if (drawWarpWellPrediction({ world, bounds, item })) {
+        return;
+    }
+
     if (
         item.start_x === null
         || item.start_y === null
