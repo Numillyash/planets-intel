@@ -18,11 +18,18 @@ export interface ShipMovementPrediction {
     target_warp: number | null;
     target_speed_multiplier: number | null;
     target_standard_max_distance: number | null;
+    pre_well_x: number | null;
+    pre_well_y: number | null;
+    warp_well_status: string | null;
+    warp_well_planet_id: number | null;
+    warp_well_planet_name: string | null;
+    warp_well_pull_distance: number | null;
     predicted_x: number | null;
     predicted_y: number | null;
     requested_distance: number | null;
     max_distance: number | null;
     moved_distance: number | null;
+    displacement_distance: number | null;
     warp: number | null;
     speed_multiplier: number;
     reason: string;
