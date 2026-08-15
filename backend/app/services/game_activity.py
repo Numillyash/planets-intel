@@ -1,10 +1,12 @@
 from typing import Any
 
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
+from app.db.session import SessionLocal
 from app.models.game_activity_observation import GameActivityObservation
+from app.models.planets_account import PlanetsAccount
 
 
 def _integer(raw: dict[str, Any], key: str) -> int | None:
@@ -139,4 +141,69 @@ def persist_game_activity_observations(
     return {
         "game_activity_seen": len(rows),
         "game_activity_inserted": inserted,
+    }
+
+
+def get_owned_game_activity(
+    *,
+    user_id: int,
+    linked_account_id: int,
+    game_id: int,
+    limit: int = 500,
+) -> dict[str, object] | None:
+    """Return activity for the owning dashboard user only.
+
+    Deliberately does not use intel-sharing access. Private correspondence has a
+    stricter boundary than shared map intelligence.
+    """
+
+    with SessionLocal() as session:
+        owned_account = session.execute(
+            select(PlanetsAccount.id).where(
+                PlanetsAccount.id == linked_account_id,
+                PlanetsAccount.user_id == user_id,
+                PlanetsAccount.is_active.is_(True),
+            )
+        ).scalar_one_or_none()
+        if owned_account is None:
+            return None
+
+        rows = list(
+            session.execute(
+                select(GameActivityObservation)
+                .where(
+                    GameActivityObservation.observer_planets_account_id
+                    == linked_account_id,
+                    GameActivityObservation.game_id == game_id,
+                )
+                .order_by(
+                    GameActivityObservation.order_id.desc().nullslast(),
+                    GameActivityObservation.activity_id.desc(),
+                )
+                .limit(limit)
+            ).scalars().all()
+        )
+
+    return {
+        "game_id": game_id,
+        "linked_account_id": linked_account_id,
+        "count": len(rows),
+        "items": [
+            {
+                "activity_id": row.activity_id,
+                "activity_type": row.activity_type,
+                "scope": row.scope,
+                "turn": row.turn,
+                "parent_id": row.parent_id,
+                "source_id": row.source_id,
+                "source_name": row.source_name,
+                "source_type": row.source_type,
+                "target_id": row.target_id,
+                "target_name": row.target_name,
+                "target_type": row.target_type,
+                "message": row.message,
+                "date_added": row.date_added,
+            }
+            for row in rows
+        ],
     }
