@@ -24,6 +24,13 @@ PLANET_OWNER_CHANGE_RE = re.compile(
     r"(?P<ship_name>.+?)\s+ID#(?P<ship_id>\d+)\b",
     re.IGNORECASE | re.DOTALL,
 )
+LONG_RANGE_EXPLOSION_HEADLINE = "long range sensors"
+LONG_RANGE_EXPLOSION_RE = re.compile(
+    r"Distress\s+call\s+and\s+explosion\s+detected\s+at\s*"
+    r"\(\s*(?P<x>-?\d+)\s*,\s*(?P<y>-?\d+)\s*\)\s*"
+    r"the\s+name\s+of\s+the\s+ship\s+was:\s*(?P<ship_name>.+?)\s*$",
+    re.IGNORECASE | re.DOTALL,
+)
 
 
 def _integer(raw: dict[str, Any], key: str) -> int | None:
@@ -47,6 +54,35 @@ def _clean_label(value: str, *, limit: int = 255) -> str:
 def _event_key(*parts: object) -> str:
     encoded = "|".join(str(part) for part in parts).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _parse_long_range_ship_explosion(
+    raw: dict[str, Any],
+) -> tuple[int, int, str] | None:
+    """Parse the factual long-range sensor explosion message emitted by Nu.
+
+    The message contains coordinates and the ship's observed name, but it does
+    not provide a ship id. The message owner id is deliberately not interpreted
+    as the destroyed ship's owner.
+    """
+
+    headline = _text(raw, "headline").strip().casefold()
+    if headline != LONG_RANGE_EXPLOSION_HEADLINE:
+        return None
+
+    match = LONG_RANGE_EXPLOSION_RE.search(_text(raw, "body"))
+    if match is None:
+        return None
+
+    ship_name = _clean_label(match.group("ship_name"))
+    if not ship_name:
+        return None
+
+    return (
+        int(match.group("x")),
+        int(match.group("y")),
+        ship_name,
+    )
 
 
 def _resolve_planet_and_base(
@@ -123,6 +159,37 @@ def persist_safe_host_events(
         message_type = _integer(raw, "messagetype")
         x = _integer(raw, "x")
         y = _integer(raw, "y")
+
+        explosion = _parse_long_range_ship_explosion(raw)
+        if explosion is not None:
+            explosion_x, explosion_y, ship_name = explosion
+            event_key = _event_key(
+                "ship_explosion_detected",
+                turn,
+                message_id,
+                explosion_x,
+                explosion_y,
+                ship_name,
+            )
+            if event_key not in seen_keys:
+                seen_keys.add(event_key)
+                rows.append(
+                    {
+                        "batch_id": batch_id,
+                        "event_key": event_key,
+                        "event_type": "ship_explosion_detected",
+                        "turn": turn,
+                        "message_id": message_id,
+                        "message_type": message_type,
+                        "planet_id": None,
+                        "starbase_id": None,
+                        "ship_id": None,
+                        "ship_name": ship_name,
+                        "x": explosion_x,
+                        "y": explosion_y,
+                        "summary": f"Ship explosion detected: {ship_name}",
+                    }
+                )
 
         if STARBASE_BUILD_FAILURE_RE.search(combined):
             planet_id, starbase_id = _resolve_planet_and_base(
@@ -254,6 +321,8 @@ def get_accessible_host_events(
             event.starbase_id,
             event.ship_id,
             event.ship_name,
+            event.x,
+            event.y,
             event.summary,
         )
         item = grouped.get(key)
@@ -290,6 +359,9 @@ def get_accessible_host_events(
         key=lambda item: (
             item["planet_id"] is None,
             item["planet_id"] or 0,
+            item["x"] is None,
+            item["x"] or 0,
+            item["y"] or 0,
             item["summary"],
         )
     )
