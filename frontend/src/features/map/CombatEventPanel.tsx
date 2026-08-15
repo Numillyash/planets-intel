@@ -22,19 +22,71 @@ interface CombatEventPanelProps {
     onFocus(event: FocusTarget): void;
 }
 
+
+function dashboardTabFromLocation(): DashboardTab | null {
+    const value = new URLSearchParams(window.location.search).get("intel");
+    if (value === "combat") return "combat";
+    if (value === "reports" || value === "host") return "host";
+    if (value === "communications") return "communications";
+    return null;
+}
+
+
+function dashboardTabQueryValue(tab: DashboardTab): string {
+    return tab === "host" ? "reports" : tab;
+}
+
+
+function replaceIntelTabInLocation(tab: DashboardTab | null): void {
+    const url = new URL(window.location.href);
+    if (tab === null) {
+        url.searchParams.delete("intel");
+    } else {
+        url.searchParams.set("intel", dashboardTabQueryValue(tab));
+    }
+    window.history.replaceState(
+        null,
+        "",
+        `${url.pathname}${url.search}${url.hash}`,
+    );
+}
+
+
 export function CombatEventPanel(props: CombatEventPanelProps) {
-    const [intelOverlayOpen, setIntelOverlayOpen] = useState(false);
+    const [initialIntelTab] = useState<DashboardTab | null>(
+        () => dashboardTabFromLocation(),
+    );
+    const [intelOverlayOpen, setIntelOverlayOpen] = useState(
+        () => initialIntelTab !== null,
+    );
     const [pageDashboardOpen, setPageDashboardOpen] = useState(false);
-    const [activeTab, setActiveTab] = useState<DashboardTab>("combat");
+    const [activeTab, setActiveTab] = useState<DashboardTab>(
+        () => initialIntelTab ?? "combat",
+    );
+
+    function openIntelTab(tab: DashboardTab) {
+        setActiveTab(tab);
+        setIntelOverlayOpen(true);
+        setPageDashboardOpen(false);
+        document.body.classList.remove("operational-page-dashboard-open");
+        replaceIntelTabInLocation(tab);
+    }
+
+    function closeIntelOverlay() {
+        setIntelOverlayOpen(false);
+        replaceIntelTabInLocation(null);
+    }
 
     useEffect(() => {
         const openCombatEvidence = () => {
             setActiveTab("combat");
             setIntelOverlayOpen(true);
+            replaceIntelTabInLocation("combat");
         };
         const openHostEvidence = () => {
             setActiveTab("host");
             setIntelOverlayOpen(true);
+            replaceIntelTabInLocation("host");
         };
 
         window.addEventListener("dashboard-event-select", openCombatEvidence);
@@ -46,13 +98,27 @@ export function CombatEventPanel(props: CombatEventPanelProps) {
     }, []);
 
     useEffect(() => {
+        const handlePopState = () => {
+            const tab = dashboardTabFromLocation();
+            if (tab === null) {
+                setIntelOverlayOpen(false);
+                return;
+            }
+            setActiveTab(tab);
+            setIntelOverlayOpen(true);
+        };
+        window.addEventListener("popstate", handlePopState);
+        return () => window.removeEventListener("popstate", handlePopState);
+    }, []);
+
+    useEffect(() => {
         return () => {
             document.body.classList.remove("operational-page-dashboard-open");
         };
     }, []);
 
     function openPageDashboard() {
-        setIntelOverlayOpen(false);
+        closeIntelOverlay();
         setPageDashboardOpen(true);
         document.body.classList.add("operational-page-dashboard-open");
     }
@@ -95,7 +161,7 @@ export function CombatEventPanel(props: CombatEventPanelProps) {
                 </div>
                 <button
                     className="operational-map-intel-button"
-                    onClick={() => setIntelOverlayOpen(true)}
+                    onClick={() => openIntelTab(activeTab)}
                     type="button"
                 >
                     Intel
@@ -141,7 +207,7 @@ export function CombatEventPanel(props: CombatEventPanelProps) {
                         </button>
                         <button
                             className="operational-dashboard-map-button"
-                            onClick={() => setIntelOverlayOpen(false)}
+                            onClick={closeIntelOverlay}
                             type="button"
                         >
                             Starmap
@@ -155,21 +221,21 @@ export function CombatEventPanel(props: CombatEventPanelProps) {
                 >
                     <button
                         className={activeTab === "combat" ? "is-active" : ""}
-                        onClick={() => setActiveTab("combat")}
+                        onClick={() => openIntelTab("combat")}
                         type="button"
                     >
                         Combat
                     </button>
                     <button
                         className={activeTab === "host" ? "is-active" : ""}
-                        onClick={() => setActiveTab("host")}
+                        onClick={() => openIntelTab("host")}
                         type="button"
                     >
                         Reports
                     </button>
                     <button
                         className={activeTab === "communications" ? "is-active" : ""}
-                        onClick={() => setActiveTab("communications")}
+                        onClick={() => openIntelTab("communications")}
                         type="button"
                     >
                         Communications
@@ -194,7 +260,7 @@ export function CombatEventPanel(props: CombatEventPanelProps) {
                             linkedAccountId={props.linkedAccountId}
                             onFocus={(event) => {
                                 props.onFocus(event);
-                                setIntelOverlayOpen(false);
+                                closeIntelOverlay();
                             }}
                             turn={props.turn}
                         />
