@@ -203,10 +203,12 @@ def _catalog_hull_image_id(hull_id: int) -> int | None:
 
 
 async def _fetch_png(url: str) -> bytes | None:
+    settings = get_settings()
     try:
         async with httpx.AsyncClient(
             timeout=_DOWNLOAD_TIMEOUT,
             follow_redirects=True,
+            proxy=settings.planetsnu_proxy_url or None,
             trust_env=False,
         ) as client:
             response = await client.get(
