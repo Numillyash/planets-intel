@@ -2,6 +2,7 @@ from app.models.combat_observation import CombatObservation
 from app.models.combat_state_observation import CombatStateObservation
 from app.models.dashboard_intel_share import DashboardIntelShare
 from app.models.game import Game
+from app.models.game_activity_observation import GameActivityObservation
 from app.models.game_player_slot import GamePlayerSlot
 from app.models.game_rule_catalog import GameRuleCatalog
 from app.models.host_event_observation import HostEventObservation
@@ -28,6 +29,7 @@ __all__ = [
     "CombatStateObservation",
     "DashboardIntelShare",
     "Game",
+    "GameActivityObservation",
     "GamePlayerSlot",
     "GameRuleCatalog",
     "HostEventObservation",
