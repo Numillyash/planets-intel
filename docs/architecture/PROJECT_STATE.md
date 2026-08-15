@@ -67,6 +67,9 @@ The Scoreboard contains a factual lower-bound attribution model:
 - current observed fighter stock;
 - carrier fighter evidence with known/unknown coverage;
 - newly observed combat hulls with hull-only Military floors;
+- combat-start VCR fighter evidence kept separate from current loadout;
+- analyst-confirmed in-host fighter deltas with snapshot-overlap suppression;
+- deterministic replay deltas displayed as derived evidence only;
 - explicit unattributed remainder.
 
 Rules:
@@ -75,8 +78,11 @@ Rules:
 - Newly observed is not the same as newly built.
 - A hull-only floor is explanatory evidence, not automatically a contribution to public turn delta.
 - New/first-seen carriers are not directly comparable across turns.
+- An absolute combat-start fighter count proves only the load at that VCR instant; it is not a previous-turn or current-turn loadout fact.
+- A VCR start -> post fighter delta may enter factual turn attribution only when the post state is analyst-confirmed and the same ship does not already have a directly comparable previous/current fighter snapshot covering the change.
+- Deterministic VCR replay remains a derived layer and never enters `Confirmed factual Δ`.
 
-Current GitHub code additionally attaches factual VCR combat-start equipment to combat events and has Scoreboard UI for VCR fighter evidence. This must remain separate from current private loadout state. Runtime validation status is in `CURRENT_HANDOFF.md`.
+Current GitHub code implements this conservative VCR reconciliation. The newest runtime/build validation status is in `CURRENT_HANDOFF.md`.
 
 ## Combat / VCR evidence
 
@@ -88,7 +94,7 @@ Raw accessible VCR observations can expose immutable combat-start equipment such
 - shield, damage, crew and mass;
 - race ID.
 
-This evidence is attached read-time to normalized combat events with explicit evidence basis and does not mutate canonical observations. Replay-derived post-combat state remains a separate derived layer.
+This evidence is attached read-time to normalized combat events with explicit evidence basis and does not mutate canonical observations. Replay-derived post-combat state remains a separate derived layer. Analyst-reviewed post-combat state is separately stored and can support time-compatible factual attribution without converting combat-time evidence into current state.
 
 Longer-term goal: build a Battle Planner on top of the deterministic VCR engine, including sequential-wave combat and explicit scenario assumptions for unknown enemy equipment.
 
@@ -134,9 +140,9 @@ Still pending:
 
 The exact first actions for the next chat are in `CURRENT_HANDOFF.md`. After syncing/deploying the actual branch HEAD, priorities are:
 
-1. Validate the newest VCR fighter-evidence Scoreboard changes against live T11 -> T12 `tusilat` data.
+1. Build and runtime-validate the VCR fighter classification/reconciliation changes against live T11 -> T12 `tusilat` data.
 2. Re-test Rush hull #94 artwork using the current resilient downloader.
-3. Decide which VCR evidence can safely explain Military delta without turning combat-time evidence into current state.
+3. Verify that review-confirmed combat deltas are counted only when they do not overlap directly comparable turn snapshots, while replay-only evidence stays derived.
 4. Build Combat/Battle Planner on top of the deterministic VCR engine.
 5. Add movement fuel model.
 6. Add Tow resolution ahead of Move Most/Intercept.
@@ -148,15 +154,16 @@ The exact first actions for the next chat are in `CURRENT_HANDOFF.md`. After syn
 
 A completely fresh chat should start by reading:
 
-1. `docs/architecture/PROJECT_STATE.md`
-2. `docs/architecture/CURRENT_HANDOFF.md`
+1. `docs/architecture/NEW_CHAT_START.md`
+2. `docs/architecture/PROJECT_STATE.md`
+3. `docs/architecture/CURRENT_HANDOFF.md`
 
 Then inspect `feature/operational-ui` HEAD and server divergence before making any code change.
 
 Suggested opening request:
 
 ```text
-Работаем с Numillyash/planets-intel. Открой branch feature/operational-ui, сначала прочитай docs/architecture/PROJECT_STATE.md и docs/architecture/CURRENT_HANDOFF.md, затем проверь текущий HEAD репозитория. Считай GitHub источником истины и продолжай с Immediate next actions из CURRENT_HANDOFF.md. Старый чат не используй как источник состояния проекта.
+Работаем с Numillyash/planets-intel. Открой branch feature/operational-ui, сначала прочитай docs/architecture/NEW_CHAT_START.md, docs/architecture/PROJECT_STATE.md и docs/architecture/CURRENT_HANDOFF.md, затем проверь текущий HEAD репозитория. Считай GitHub источником истины и продолжай с Immediate next actions из CURRENT_HANDOFF.md. Старый чат не используй как источник состояния проекта.
 ```
 
 ## Validation protocol
