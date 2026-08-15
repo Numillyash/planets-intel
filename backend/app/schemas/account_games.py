@@ -18,8 +18,12 @@ class AccountGameSummary(BaseModel):
     is_private: bool
     is_custom: bool
 
+    data_source: str = "planets.nu"
+
 
 class AccountGamesResponse(BaseModel):
     linked_account_id: int
     planets_username: str
     games: list[AccountGameSummary]
+    upstream_available: bool = True
+    upstream_error: str | None = None
