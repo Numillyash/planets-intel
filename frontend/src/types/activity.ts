@@ -48,3 +48,26 @@ export interface HostEventsResponse {
     count: number;
     events: HostEventItem[];
 }
+
+export interface GameActivityItem {
+    activity_id: number;
+    activity_type: number | null;
+    scope: number | null;
+    turn: number | null;
+    parent_id: number | null;
+    source_id: number | null;
+    source_name: string | null;
+    source_type: number | null;
+    target_id: number | null;
+    target_name: string | null;
+    target_type: number | null;
+    message: string | null;
+    date_added: string | null;
+}
+
+export interface GameActivityResponse {
+    game_id: number;
+    linked_account_id: number;
+    count: number;
+    items: GameActivityItem[];
+}
