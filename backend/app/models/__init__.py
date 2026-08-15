@@ -6,6 +6,7 @@ from app.models.game_player_slot import GamePlayerSlot
 from app.models.game_rule_catalog import GameRuleCatalog
 from app.models.host_event_observation import HostEventObservation
 from app.models.planet_observation import PlanetObservation
+from app.models.planet_order_draft import PlanetOrderDraft
 from app.models.planets_account import PlanetsAccount
 from app.models.player_turn_activity_observation import PlayerTurnActivityObservation
 from app.models.private_observation_batch import PrivateObservationBatch
@@ -14,6 +15,7 @@ from app.models.session import AppSession
 from app.models.ship_observation import ShipObservation
 from app.models.ship_order_draft import ShipOrderDraft
 from app.models.starbase_observation import StarbaseObservation
+from app.models.starbase_order_draft import StarbaseOrderDraft
 from app.models.stellar_cartography_observation import StellarCartographyObservation
 from app.models.user import AppUser
 
@@ -29,6 +31,7 @@ __all__ = [
     "GameRuleCatalog",
     "HostEventObservation",
     "PlanetObservation",
+    "PlanetOrderDraft",
     "PlanetsAccount",
     "PlayerTurnActivityObservation",
     "PrivateObservationBatch",
@@ -36,5 +39,6 @@ __all__ = [
     "ShipObservation",
     "ShipOrderDraft",
     "StarbaseObservation",
+    "StarbaseOrderDraft",
     "StellarCartographyObservation",
 ]
