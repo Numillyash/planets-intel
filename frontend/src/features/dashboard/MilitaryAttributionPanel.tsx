@@ -25,6 +25,26 @@ const STARBASE_DEFENSE_SCORE = 7.5;
 const MINE_UNIT_SCORE = 0.27;
 
 type Payload = Record<string, unknown>;
+type FighterFactSource = "fighters" | "ammo" | "unknown";
+
+interface FighterFact {
+    fighters: number | null;
+    source: FighterFactSource;
+}
+
+interface FighterEvidence {
+    shipId: number;
+    name: string;
+    hullId: number | null;
+    hullName: string;
+    bays: number;
+    fighters: number | null;
+    source: FighterFactSource;
+    sourceLabel: string | null;
+    previousFighters: number | null;
+    deltaFighters: number | null;
+    deltaScore: number | null;
+}
 
 function numberField(payload: Payload, ...keys: string[]): number | null {
     const wanted = new Set(keys.map((key) => key.toLowerCase()));
@@ -99,24 +119,43 @@ function hullMap(catalog: GameRuleCatalogResponse | null) {
     return result;
 }
 
-function shipFighters(
+function hullFighterBays(hull: Record<string, unknown> | undefined): number {
+    if (hull === undefined) return 0;
+    return Math.max(0, Math.trunc(recordNumber(hull, "fighterbays", "bays") ?? 0));
+}
+
+function shipFighterFact(
     ship: MapShipObservation,
     hulls: Map<number, Record<string, unknown>>,
-): number | null {
-    const explicit = integerField(ship.payload, "fighters");
-    if (explicit !== null) return explicit;
+): FighterFact | null {
     if (ship.hull_id === null) return null;
-
     const hull = hulls.get(ship.hull_id);
-    if (hull === undefined) return null;
-    const bays = recordNumber(hull, "fighterbays", "bays");
-    if (bays === null || bays <= 0) return null;
+    if (hullFighterBays(hull) <= 0) return null;
 
-    // Nu private ship payloads expose one generic combat-ammo count. Combined
-    // intel only preserves that field when the source observer owns the ship,
-    // so a remaining ammo value is factual and may be interpreted as fighters
-    // once the hull catalog proves the ship has fighter bays.
-    return integerField(ship.payload, "ammo");
+    const explicit = integerField(ship.payload, "fighters");
+    if (explicit !== null) {
+        return { fighters: explicit, source: "fighters" };
+    }
+
+    // Nu loadturn exposes a generic combat-ammo count. Combined intel keeps
+    // this field only when the source observer owns the ship, so an ammo value
+    // that survives the merge is factual. The hull catalog proves that ammo on
+    // this ship is fighter stock rather than torpedoes.
+    const ammo = integerField(ship.payload, "ammo");
+    if (ammo !== null) {
+        return { fighters: ammo, source: "ammo" };
+    }
+
+    return { fighters: null, source: "unknown" };
+}
+
+function fighterFieldSource(
+    ship: MapShipObservation,
+    source: FighterFactSource,
+): number | null {
+    if (source === "unknown") return null;
+    const key = source === "ammo" ? "payload.ammo" : "payload.fighters";
+    return ship.field_sources?.[key] ?? null;
 }
 
 function hullMilitaryFloor(hull: Record<string, unknown> | undefined): number | null {
@@ -133,7 +172,7 @@ function hullIsCombat(hull: Record<string, unknown> | undefined): boolean {
     if (hull === undefined) return false;
     return (recordNumber(hull, "beams") ?? 0) > 0
         || (recordNumber(hull, "launchers", "torps") ?? 0) > 0
-        || (recordNumber(hull, "fighterbays", "bays") ?? 0) > 0;
+        || hullFighterBays(hull) > 0;
 }
 
 interface Attribution {
@@ -146,6 +185,9 @@ interface Attribution {
     currentObservedMobileFighters: number;
     currentObservedMobileFighterScore: number;
     comparableShipFighterRecords: number;
+    knownCarrierFighterRecords: number;
+    unknownCarrierFighterRecords: number;
+    fighterEvidence: FighterEvidence[];
     newlyObservedCombatShips: Array<{
         shipId: number;
         name: string;
@@ -164,26 +206,72 @@ function calculateAttribution(
 ): Attribution {
     const hulls = hullMap(catalog);
     const previousShips = byId(previous.ships, (ship) => ship.ship_id);
+    const sourceNames = new Map(
+        current.sources.map((source) => [source.linked_account_id, source.planets_username]),
+    );
+
     let mobileFighterDelta = 0;
     let comparableShipFighterRecords = 0;
     let currentObservedMobileFighters = 0;
+    let knownCarrierFighterRecords = 0;
+    let unknownCarrierFighterRecords = 0;
+    const fighterEvidence: FighterEvidence[] = [];
 
     for (const ship of current.ships) {
         if (ship.owner_id !== slotId) continue;
-        const fighters = shipFighters(ship, hulls);
-        if (fighters !== null) currentObservedMobileFighters += fighters;
+        const fact = shipFighterFact(ship, hulls);
+        if (fact === null) continue;
 
+        const hull = ship.hull_id === null ? undefined : hulls.get(ship.hull_id);
+        const sourceAccountId = fighterFieldSource(ship, fact.source);
         const old = previousShips.get(ship.ship_id);
-        if (
-            old === undefined
-            || old.owner_id !== slotId
-            || old.hull_id !== ship.hull_id
-        ) continue;
-        const oldFighters = shipFighters(old, hulls);
-        if (fighters === null || oldFighters === null) continue;
-        mobileFighterDelta += (fighters - oldFighters) * MOBILE_FIGHTER_SCORE;
-        comparableShipFighterRecords += 1;
+        const sameLifecycle = old !== undefined
+            && old.owner_id === slotId
+            && old.hull_id === ship.hull_id;
+        const oldFact = sameLifecycle ? shipFighterFact(old, hulls) : null;
+        const comparable = fact.fighters !== null && oldFact?.fighters !== null;
+        const deltaFighters = comparable
+            ? fact.fighters! - oldFact!.fighters!
+            : null;
+        const deltaScore = deltaFighters === null
+            ? null
+            : deltaFighters * MOBILE_FIGHTER_SCORE;
+
+        if (fact.fighters === null) {
+            unknownCarrierFighterRecords += 1;
+        } else {
+            knownCarrierFighterRecords += 1;
+            currentObservedMobileFighters += fact.fighters;
+        }
+
+        if (deltaScore !== null) {
+            mobileFighterDelta += deltaScore;
+            comparableShipFighterRecords += 1;
+        }
+
+        fighterEvidence.push({
+            shipId: ship.ship_id,
+            name: ship.name ?? `Ship #${ship.ship_id}`,
+            hullId: ship.hull_id,
+            hullName: recordString(hull ?? {}, "name")
+                ?? (ship.hull_id === null ? "Unknown hull" : `Hull #${ship.hull_id}`),
+            bays: hullFighterBays(hull),
+            fighters: fact.fighters,
+            source: fact.source,
+            sourceLabel: sourceAccountId === null
+                ? null
+                : sourceNames.get(sourceAccountId) ?? `account #${sourceAccountId}`,
+            previousFighters: oldFact?.fighters ?? null,
+            deltaFighters,
+            deltaScore,
+        });
     }
+
+    fighterEvidence.sort((left, right) => {
+        if (left.fighters === null && right.fighters !== null) return 1;
+        if (left.fighters !== null && right.fighters === null) return -1;
+        return (right.fighters ?? 0) - (left.fighters ?? 0) || left.shipId - right.shipId;
+    });
 
     const currentPlanets = current.planets.filter((planet) => planet.owner_id === slotId);
     const previousPlanets = byId(previous.planets, (planet) => planet.planet_id);
@@ -253,9 +341,10 @@ function calculateAttribution(
                 shipId: ship.ship_id,
                 name: ship.name ?? `Ship #${ship.ship_id}`,
                 hullId: ship.hull_id,
-                hullName: recordString(hull ?? {}, "name") ?? (ship.hull_id === null ? "Unknown hull" : `Hull #${ship.hull_id}`),
+                hullName: recordString(hull ?? {}, "name")
+                    ?? (ship.hull_id === null ? "Unknown hull" : `Hull #${ship.hull_id}`),
                 hullFloor: hullMilitaryFloor(hull),
-                fighters: shipFighters(ship, hulls),
+                fighters: shipFighterFact(ship, hulls)?.fighters ?? null,
             };
         });
 
@@ -275,6 +364,9 @@ function calculateAttribution(
         currentObservedMobileFighters,
         currentObservedMobileFighterScore: currentObservedMobileFighters * MOBILE_FIGHTER_SCORE,
         comparableShipFighterRecords,
+        knownCarrierFighterRecords,
+        unknownCarrierFighterRecords,
+        fighterEvidence,
         newlyObservedCombatShips,
     };
 }
@@ -409,7 +501,7 @@ export function MilitaryAttributionPanel({
                                 <div><dt>Minefields</dt><dd>{formatSigned(attribution.minefieldDelta)}</dd></div>
                             </dl>
                             <p className="muted">
-                                {attribution.comparableShipFighterRecords} ship fighter records were directly comparable across both turns.
+                                {attribution.comparableShipFighterRecords} carrier fighter records were directly comparable across both turns.
                             </p>
                         </div>
 
@@ -421,8 +513,50 @@ export function MilitaryAttributionPanel({
                             <p>
                                 At least {formatScore(attribution.currentObservedMobileFighterScore)} Military is currently visible in mobile fighters alone.
                             </p>
-                            <p className="muted">This is current stock, not necessarily this turn's increase.</p>
+                            <p className="muted">
+                                {attribution.knownCarrierFighterRecords} carrier loads known · {attribution.unknownCarrierFighterRecords} unknown.
+                                This is a factual lower bound, not an estimate.
+                            </p>
                         </div>
+                    </div>
+
+                    <div className="military-new-ships">
+                        <h3>Carrier fighter evidence</h3>
+                        {attribution.fighterEvidence.length === 0 ? (
+                            <p className="muted">No fighter-carrier hulls observed for this player.</p>
+                        ) : (
+                            attribution.fighterEvidence.map((ship) => (
+                                <div key={ship.shipId} className="military-new-ship-row">
+                                    <div>
+                                        <strong>#{ship.shipId} {ship.name}</strong>
+                                        <small>{ship.hullName} · {ship.bays} bays</small>
+                                    </div>
+                                    <div>
+                                        <span>Current fighters</span>
+                                        <strong>{ship.fighters === null ? "UNKNOWN" : ship.fighters.toLocaleString()}</strong>
+                                        <small>
+                                            {ship.source === "unknown"
+                                                ? "no factual loadout evidence"
+                                                : `${ship.source}${ship.sourceLabel === null ? "" : ` · ${ship.sourceLabel}`}`}
+                                        </small>
+                                    </div>
+                                    <div>
+                                        <span>Turn Δ</span>
+                                        <strong>
+                                            {ship.deltaFighters === null ? "—" : formatSigned(ship.deltaFighters)}
+                                        </strong>
+                                        <small>
+                                            {ship.deltaScore === null
+                                                ? "not directly comparable"
+                                                : `${formatSigned(ship.deltaScore)} Military`}
+                                        </small>
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                        <p className="muted">
+                            Generic Nu ammo is interpreted as fighters only when the hull catalog proves the ship has fighter bays. Hidden enemy ammo remains UNKNOWN.
+                        </p>
                     </div>
 
                     <div className="military-new-ships">
