@@ -37,6 +37,18 @@ def _payload_int(payload: dict[str, Any], *keys: str) -> int | None:
     return None
 
 
+def _payload_str(payload: dict[str, Any], *keys: str) -> str | None:
+    normalized = {key.lower() for key in keys}
+    for key, value in payload.items():
+        if key.lower() not in normalized:
+            continue
+        if isinstance(value, str):
+            return value.strip()
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return str(value)
+    return None
+
+
 def _account(
     session: Session,
     *,
@@ -135,6 +147,14 @@ def _validate_intercept_target(
         )
 
 
+def _upstream_mission(ship: ShipObservation) -> str | None:
+    named = _payload_str(ship.payload, "missionname", "mission_name")
+    if named:
+        return named
+    mission_id = _payload_int(ship.payload, "mission")
+    return f"Mission #{mission_id}" if mission_id is not None else None
+
+
 def _serialize(
     draft: ShipOrderDraft,
     *,
@@ -152,6 +172,19 @@ def _serialize(
         "waypointy",
         "targety",
         "waypoint_y",
+    )
+    upstream_friendly_code = _payload_str(
+        ship.payload,
+        "friendlycode",
+        "friendly_code",
+        "fcode",
+    )
+    upstream_mission = _upstream_mission(ship)
+    upstream_primary_enemy_id = _payload_int(
+        ship.payload,
+        "enemy",
+        "primaryenemy",
+        "primary_enemy_id",
     )
     changed_waypoint = (
         draft.waypoint_x is not None
@@ -173,17 +206,31 @@ def _serialize(
         "upstream_warp": ship.warp,
         "upstream_waypoint_x": upstream_waypoint_x,
         "upstream_waypoint_y": upstream_waypoint_y,
+        "upstream_friendly_code": upstream_friendly_code,
+        "upstream_mission": upstream_mission,
+        "upstream_primary_enemy_id": upstream_primary_enemy_id,
         "warp": draft.warp,
         "waypoint_x": draft.waypoint_x,
         "waypoint_y": draft.waypoint_y,
         "movement_mode": draft.movement_mode,
         "intercept_target_ship_id": draft.intercept_target_ship_id,
+        "friendly_code": draft.friendly_code,
+        "mission": draft.mission,
+        "primary_enemy_id": draft.primary_enemy_id,
         "changed_warp": draft.warp is not None and draft.warp != ship.warp,
         "changed_waypoint": changed_waypoint,
-        # We deliberately do not infer the semantic Nu mission from numeric
-        # mission ids here. A local Intercept draft is therefore treated as a
-        # changed movement order until save-back mapping is verified separately.
         "changed_movement": draft.movement_mode == "intercept",
+        "changed_friendly_code": (
+            draft.friendly_code is not None
+            and draft.friendly_code != upstream_friendly_code
+        ),
+        "changed_mission": (
+            draft.mission is not None and draft.mission != upstream_mission
+        ),
+        "changed_primary_enemy": (
+            draft.primary_enemy_id is not None
+            and draft.primary_enemy_id != (upstream_primary_enemy_id or 0)
+        ),
         "source": "local_order_draft",
     }
 
@@ -231,6 +278,9 @@ def upsert_ship_order_draft(
     waypoint_y: int | None,
     movement_mode: str | None,
     intercept_target_ship_id: int | None,
+    friendly_code: str | None = None,
+    mission: str | None = None,
+    primary_enemy_id: int | None = None,
 ) -> dict[str, Any]:
     with SessionLocal() as session:
         batch, ship = _factual_ship_context(
@@ -282,6 +332,9 @@ def upsert_ship_order_draft(
                     if movement_mode == "intercept"
                     else None
                 ),
+                friendly_code=friendly_code,
+                mission=mission,
+                primary_enemy_id=primary_enemy_id,
             )
             session.add(draft)
         else:
@@ -296,6 +349,12 @@ def upsert_ship_order_draft(
                     draft.intercept_target_ship_id = None
                 else:
                     draft.intercept_target_ship_id = intercept_target_ship_id
+            if friendly_code is not None:
+                draft.friendly_code = friendly_code
+            if mission is not None:
+                draft.mission = mission.strip()
+            if primary_enemy_id is not None:
+                draft.primary_enemy_id = primary_enemy_id
             draft.base_batch_id = batch.id
             draft.base_snapshot_hash = batch.snapshot_hash
 
