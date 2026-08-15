@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { getHistoricalCombinedIntel } from "../../api/history";
+import {
+    getHistoricalCombatEvents,
+    getHistoricalCombinedIntel,
+} from "../../api/history";
 import {
     getGameRuleCatalog,
     type GameRuleCatalogResponse,
@@ -10,6 +13,7 @@ import type {
     ScoreHistoryItem,
     ScoreHistoryResponse,
 } from "../../types/api";
+import type { CombatEventSummary } from "../../types/history";
 import type {
     CombinedPrivateIntelResponse,
     MapPlanetObservation,
@@ -44,6 +48,25 @@ interface FighterEvidence {
     previousFighters: number | null;
     deltaFighters: number | null;
     deltaScore: number | null;
+}
+
+interface CombatFighterDeltaEvidence {
+    key: string;
+    vcrId: number;
+    shipId: number;
+    shipName: string;
+    startFighters: number;
+    postFighters: number;
+    deltaFighters: number;
+    deltaScore: number;
+    counted: boolean;
+}
+
+interface CombatAttribution {
+    confirmedDelta: number;
+    countedRecords: number;
+    overlapRecords: number;
+    evidence: CombatFighterDeltaEvidence[];
 }
 
 function numberField(payload: Payload, ...keys: string[]): number | null {
@@ -173,6 +196,14 @@ function hullIsCombat(hull: Record<string, unknown> | undefined): boolean {
     return (recordNumber(hull, "beams") ?? 0) > 0
         || (recordNumber(hull, "launchers", "torps") ?? 0) > 0
         || hullFighterBays(hull) > 0;
+}
+
+function nonNegativeInteger(value: unknown): number | null {
+    return typeof value === "number"
+        && Number.isInteger(value)
+        && value >= 0
+        ? value
+        : null;
 }
 
 interface Attribution {
@@ -373,6 +404,79 @@ function calculateAttribution(
     };
 }
 
+function calculateCombatAttribution(
+    slotId: number,
+    events: CombatEventSummary[],
+    attribution: Attribution,
+): CombatAttribution {
+    const snapshotComparableShips = new Set(
+        attribution.fighterEvidence
+            .filter((ship) => ship.deltaScore !== null)
+            .map((ship) => ship.shipId),
+    );
+    const evidence: CombatFighterDeltaEvidence[] = [];
+    let confirmedDelta = 0;
+    let countedRecords = 0;
+    let overlapRecords = 0;
+
+    for (const event of events) {
+        for (const side of event.sides) {
+            if (
+                side.object_kind !== "ship"
+                || side.object_id === null
+                || side.owner_id !== slotId
+            ) continue;
+
+            const equipment = side.combat_equipment;
+            if (
+                equipment === null
+                || equipment === undefined
+                || equipment.post_combat_source !== "analyst_confirmed_vcr_review"
+            ) continue;
+
+            const startFighters = nonNegativeInteger(
+                equipment.combat_start_fighters ?? equipment.fighters,
+            );
+            const postFighters = nonNegativeInteger(equipment.post_combat_fighters);
+            if (startFighters === null || postFighters === null) continue;
+
+            const deltaFighters = postFighters - startFighters;
+            const deltaScore = deltaFighters * MOBILE_FIGHTER_SCORE;
+            const counted = !snapshotComparableShips.has(side.object_id);
+
+            if (counted) {
+                confirmedDelta += deltaScore;
+                countedRecords += 1;
+            } else {
+                overlapRecords += 1;
+            }
+
+            evidence.push({
+                key: `${event.vcr_id}:${side.side}:${side.object_id}`,
+                vcrId: event.vcr_id,
+                shipId: side.object_id,
+                shipName: side.name ?? `Ship #${side.object_id}`,
+                startFighters,
+                postFighters,
+                deltaFighters,
+                deltaScore,
+                counted,
+            });
+        }
+    }
+
+    evidence.sort((left, right) =>
+        left.vcrId - right.vcrId || left.shipId - right.shipId,
+    );
+
+    return {
+        confirmedDelta,
+        countedRecords,
+        overlapRecords,
+        evidence,
+    };
+}
+
 export function MilitaryAttributionPanel({
     game,
     history,
@@ -399,6 +503,7 @@ export function MilitaryAttributionPanel({
     const [selectedSlot, setSelectedSlot] = useState<number | null>(defaultSlot);
     const [currentIntel, setCurrentIntel] = useState<CombinedPrivateIntelResponse | null>(null);
     const [previousIntel, setPreviousIntel] = useState<CombinedPrivateIntelResponse | null>(null);
+    const [combatEvents, setCombatEvents] = useState<CombatEventSummary[]>([]);
     const [catalog, setCatalog] = useState<GameRuleCatalogResponse | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -415,6 +520,7 @@ export function MilitaryAttributionPanel({
         if (score === null || score.previous_turn === null) {
             setCurrentIntel(null);
             setPreviousIntel(null);
+            setCombatEvents([]);
             return () => { cancelled = true; };
         }
 
@@ -423,11 +529,13 @@ export function MilitaryAttributionPanel({
         void Promise.all([
             getHistoricalCombinedIntel(game.game.id, linkedAccountId, score.turn),
             getHistoricalCombinedIntel(game.game.id, linkedAccountId, score.previous_turn),
+            getHistoricalCombatEvents(game.game.id, linkedAccountId, score.turn),
             getGameRuleCatalog(game.game.id),
-        ]).then(([current, previous, ruleCatalog]) => {
+        ]).then(([current, previous, combat, ruleCatalog]) => {
             if (cancelled) return;
             setCurrentIntel(current);
             setPreviousIntel(previous);
+            setCombatEvents(combat.events);
             setCatalog(ruleCatalog);
         }).catch((reason) => {
             if (!cancelled) {
@@ -445,12 +553,20 @@ export function MilitaryAttributionPanel({
         return calculateAttribution(score.slot_id, currentIntel, previousIntel, catalog);
     }, [catalog, currentIntel, previousIntel, score]);
 
+    const combatAttribution = useMemo(() => {
+        if (score === null || attribution === null) return null;
+        return calculateCombatAttribution(score.slot_id, combatEvents, attribution);
+    }, [attribution, combatEvents, score]);
+
     const player = selectedSlot === null
         ? null
         : game.players.find((item) => item.slot_id === selectedSlot) ?? null;
     const publicDelta = score?.delta_military_score ?? null;
-    const residual = publicDelta !== null && attribution !== null
-        ? publicDelta - attribution.explainedDelta
+    const confirmedDelta = attribution === null
+        ? null
+        : attribution.explainedDelta + (combatAttribution?.confirmedDelta ?? 0);
+    const residual = publicDelta !== null && confirmedDelta !== null
+        ? publicDelta - confirmedDelta
         : null;
 
     return (
@@ -485,7 +601,7 @@ export function MilitaryAttributionPanel({
                         <div><span>Turns</span><strong>{score.previous_turn} → {score.turn}</strong></div>
                         <div><span>Public Δ Military</span><strong>{formatSigned(publicDelta ?? 0)}</strong></div>
                         <div><span>Public Δ warships</span><strong>{formatSigned(score.delta_capital_ships ?? 0)}</strong></div>
-                        <div><span>Confirmed factual Δ</span><strong>{formatSigned(attribution.explainedDelta)}</strong></div>
+                        <div><span>Confirmed factual Δ</span><strong>{formatSigned(confirmedDelta ?? 0)}</strong></div>
                         <div className={(residual ?? 0) > 5000 ? "is-warning" : ""}>
                             <span>Unattributed remainder</span>
                             <strong>{residual === null ? "—" : formatSigned(residual)}</strong>
@@ -497,6 +613,7 @@ export function MilitaryAttributionPanel({
                             <h3>Confirmed score changes</h3>
                             <dl>
                                 <div><dt>Mobile fighters</dt><dd>{formatSigned(attribution.mobileFighterDelta)}</dd></div>
+                                <div><dt>Review-confirmed combat fighters</dt><dd>{formatSigned(combatAttribution?.confirmedDelta ?? 0)}</dd></div>
                                 <div><dt>Starbase fighters</dt><dd>{formatSigned(attribution.starbaseFighterDelta)}</dd></div>
                                 <div><dt>Planet defense</dt><dd>{formatSigned(attribution.planetDefenseDelta)}</dd></div>
                                 <div><dt>Starbase defense</dt><dd>{formatSigned(attribution.starbaseDefenseDelta)}</dd></div>
@@ -504,6 +621,9 @@ export function MilitaryAttributionPanel({
                             </dl>
                             <p className="muted">
                                 {attribution.comparableShipFighterRecords} carrier fighter records were directly comparable across both turns.
+                                {combatAttribution !== null && combatAttribution.countedRecords > 0
+                                    ? ` ${combatAttribution.countedRecords} review-confirmed VCR side(s) add non-overlapping in-host fighter changes.`
+                                    : ""}
                             </p>
                         </div>
 
@@ -562,6 +682,45 @@ export function MilitaryAttributionPanel({
                     </div>
 
                     <div className="military-new-ships">
+                        <h3>Combat fighter Δ reconciliation</h3>
+                        {combatAttribution === null || combatAttribution.evidence.length === 0 ? (
+                            <p className="muted">No analyst-confirmed post-combat fighter deltas for this player and turn.</p>
+                        ) : (
+                            combatAttribution.evidence.map((item) => (
+                                <div key={item.key} className="military-new-ship-row">
+                                    <div>
+                                        <strong>#{item.shipId} {item.shipName}</strong>
+                                        <small>VCR #{item.vcrId} · analyst-confirmed post state</small>
+                                    </div>
+                                    <div>
+                                        <span>Combat fighters</span>
+                                        <strong>{item.startFighters} → {item.postFighters}</strong>
+                                        <small>{formatSigned(item.deltaFighters)} fighters</small>
+                                    </div>
+                                    <div>
+                                        <span>Attribution</span>
+                                        <strong>{formatSigned(item.deltaScore)} Military</strong>
+                                        <small>
+                                            {item.counted
+                                                ? "counted · no comparable turn snapshot"
+                                                : "overlap · already covered by turn snapshots"}
+                                        </small>
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                        <p className="muted">
+                            Only analyst-confirmed VCR start→post fighter changes are eligible here.
+                            A ship with factual fighter counts on both turn snapshots is excluded from
+                            the combat subtotal to prevent double-counting. Deterministic replay remains
+                            derived evidence and is never included in Confirmed factual Δ.
+                            {combatAttribution !== null && combatAttribution.overlapRecords > 0
+                                ? ` ${combatAttribution.overlapRecords} VCR side(s) were suppressed as snapshot overlap.`
+                                : ""}
+                        </p>
+                    </div>
+
+                    <div className="military-new-ships">
                         <h3>Newly observed combat hulls this turn</h3>
                         {attribution.newlyObservedCombatShips.length === 0 ? (
                             <p className="muted">None in accessible factual snapshots.</p>
@@ -592,7 +751,7 @@ export function MilitaryAttributionPanel({
                         <div className="military-attribution-warning">
                             <strong>Large unexplained military increase</strong>
                             <p>
-                                {formatScore(residual)} points remain after directly comparable fighters, defenses and minefields. Plausible sources include new or previously hidden warships and their equipment, unobserved fighter loading, or military assets outside current intel coverage.
+                                {formatScore(residual)} points remain after directly comparable fighters, review-confirmed non-overlapping combat fighter changes, defenses and minefields. Plausible sources include new or previously hidden warships and their equipment, unobserved fighter loading, or military assets outside current intel coverage.
                             </p>
                         </div>
                     )}
