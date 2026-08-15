@@ -157,12 +157,15 @@ export interface AccountGameSummary {
     time_to_host: string;
     is_private: boolean;
     is_custom: boolean;
+    data_source: "planets.nu" | "canonical-cache" | string;
 }
 
 export interface AccountGamesResponse {
     linked_account_id: number;
     planets_username: string;
     games: AccountGameSummary[];
+    upstream_available: boolean;
+    upstream_error: string | null;
 }
 
 export interface PrivateIntelObserver {
