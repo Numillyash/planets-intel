@@ -12,6 +12,7 @@ from app.schemas.games import (
     PlayerInfo,
     RelationInfo,
 )
+from app.services.cached_game_details import get_cached_game_details_payload
 from app.services.rule_catalog_view import get_game_rule_catalog_view
 
 
@@ -137,10 +138,13 @@ async def get_game(
     try:
         payload = await PlanetsNuClient().load_info(game_id)
     except PlanetsNuError as exc:
-        raise HTTPException(
-            status_code=502,
-            detail=str(exc),
-        ) from exc
+        cached = get_cached_game_details_payload(game_id)
+        if cached is None:
+            raise HTTPException(
+                status_code=502,
+                detail=str(exc),
+            ) from exc
+        payload = cached
 
     game_raw = payload.get("game")
     settings_raw = payload.get("settings")
@@ -150,35 +154,36 @@ async def get_game(
     if not isinstance(game_raw, dict):
         raise HTTPException(
             status_code=502,
-            detail="Invalid game object from Planets.nu",
+            detail="Invalid game object from Planets.nu/cache",
         )
 
     if game_raw.get("id") != game_id:
         raise HTTPException(
             status_code=502,
-            detail="Planets.nu returned a different game id",
+            detail="Game details returned a different game id",
         )
 
     if not isinstance(settings_raw, dict):
         raise HTTPException(
             status_code=502,
-            detail="Invalid settings object from Planets.nu",
+            detail="Invalid settings object from Planets.nu/cache",
         )
 
     if not isinstance(players_raw, list):
         raise HTTPException(
             status_code=502,
-            detail="Invalid players list from Planets.nu",
+            detail="Invalid players list from Planets.nu/cache",
         )
 
     if not isinstance(relations_raw, list):
         raise HTTPException(
             status_code=502,
-            detail="Invalid relations list from Planets.nu",
+            detail="Invalid relations list from Planets.nu/cache",
         )
 
     try:
         return GameDetailsResponse(
+            source=str(payload.get("source", "planets.nu/loadinfo")),
             game=build_game_info(game_raw),
             settings=build_settings_info(settings_raw),
             players=[
@@ -199,7 +204,6 @@ async def get_game(
         raise HTTPException(
             status_code=502,
             detail=(
-                "Planets.nu loadinfo response does not match "
-                "the expected schema"
+                "Game details do not match the expected schema"
             ),
         ) from exc
