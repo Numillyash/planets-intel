@@ -13,7 +13,9 @@ from app.intel.observations.private_turn import (
 from app.models.game import Game
 from app.models.game_player_slot import GamePlayerSlot
 from app.models.planets_account import PlanetsAccount
-from app.planetsnu.client import PlanetsNuClient
+from app.planetsnu.activity import load_ingame_activity
+from app.planetsnu.client import PlanetsNuClient, PlanetsNuError
+from app.services.game_activity import persist_game_activity_observations
 from app.services.game_rule_catalog import persist_game_rule_catalog
 from app.services.private_auxiliary import persist_private_auxiliary_observations
 
@@ -56,6 +58,8 @@ async def sync_private_game(
         planets_username = account.planets_username
 
     api_key = decrypt_credential(encrypted_api_key)
+    game_activity: list[dict[str, Any]] = []
+    game_activity_error: str | None = None
 
     try:
         client = PlanetsNuClient()
@@ -88,6 +92,39 @@ async def sync_private_game(
                 "private Planets.nu request failed after "
                 f"3 transport attempts ({error_name})"
             ) from last_transport_error
+
+        if turn is None:
+            probe_rst = payload.get("rst")
+            probe_player = (
+                probe_rst.get("player")
+                if isinstance(probe_rst, dict)
+                and isinstance(probe_rst.get("player"), dict)
+                else None
+            )
+            probe_player_id = (
+                probe_player.get("id")
+                if isinstance(probe_player, dict)
+                else None
+            )
+            if (
+                isinstance(probe_player_id, int)
+                and not isinstance(probe_player_id, bool)
+                and probe_player_id > 0
+            ):
+                try:
+                    game_activity = await load_ingame_activity(
+                        client,
+                        api_key=api_key,
+                        game_id=game_id,
+                        player_id=probe_player_id,
+                        planets_account_id=expected_planets_account_id,
+                    )
+                except PlanetsNuError as exc:
+                    game_activity_error = str(exc)
+            else:
+                game_activity_error = (
+                    "loadturn has no valid player id for ingameactivity"
+                )
 
     finally:
         del api_key
@@ -236,13 +273,29 @@ async def sync_private_game(
             rst=rst,
         )
 
+        activity_result = {
+            "game_activity_seen": 0,
+            "game_activity_inserted": 0,
+        }
+        if turn is None and game_activity:
+            activity_result = persist_game_activity_observations(
+                session,
+                observer_planets_account_id=linked_account_id,
+                game_id=game_id,
+                activity=game_activity,
+            )
+
         session.commit()
 
-    return {
+    response = {
         "linked_account_id": linked_account_id,
         "planets_account_id": source_account_id,
         "planets_username": planets_username,
         "requested_turn": turn,
         **result,
         **auxiliary,
+        **activity_result,
     }
+    if game_activity_error is not None:
+        response["game_activity_error"] = game_activity_error
+    return response
