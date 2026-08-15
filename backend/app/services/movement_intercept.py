@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 import math
-from typing import Mapping
+from typing import Callable, Mapping
 
 
 class InterceptMode(StrEnum):
@@ -18,12 +18,16 @@ class InterceptStatus(StrEnum):
     FAILED_INVALID_TARGET = "failed_invalid_target"
     UNRESOLVED_CHAINED_CYCLE = "unresolved_chained_cycle"
     UNRESOLVED_TARGET = "unresolved_target"
+    UNRESOLVED_POST_MOVE = "unresolved_post_move"
 
 
 @dataclass(frozen=True, slots=True)
 class Point:
     x: float
     y: float
+
+
+PostMoveTransform = Callable[[Point, float], Point | None]
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,6 +42,12 @@ class InterceptOrder:
     ``target_visible`` represents whether this interceptor still has a valid
     target lock under the factual turn state. An invalid/hidden target makes an
     Intercept mission fail without falling back to the normal waypoint.
+
+    ``post_move_transform`` represents deterministic movement substeps that
+    finalize the ship's position after geometric Intercept movement. Planetary
+    warp-well capture is one such Host substep. Keeping it here is important for
+    Chained Intercept: a later interceptor must pursue the target's finalized
+    position, not its pre-warp-well geometric endpoint.
     """
 
     ship_id: int
@@ -45,6 +55,7 @@ class InterceptOrder:
     target_ship_id: int | None
     max_distance: float
     target_visible: bool = True
+    post_move_transform: PostMoveTransform | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,6 +69,7 @@ class InterceptResult:
     moved_distance: float | None
     certain: bool
     reason: str
+    pre_final_position: Point | None = None
 
 
 def _distance(left: Point, right: Point) -> float:
@@ -100,6 +112,7 @@ def _invalid_target_result(
         moved_distance=0.0,
         certain=True,
         reason=reason,
+        pre_final_position=order.origin,
     )
 
 
@@ -117,6 +130,7 @@ def _unresolved_target_result(
         moved_distance=None,
         certain=False,
         reason=reason,
+        pre_final_position=None,
     )
 
 
@@ -124,7 +138,7 @@ def _movement_result(
     order: InterceptOrder,
     target_position: Point,
 ) -> InterceptResult:
-    position, requested, moved, reached = _move_toward(
+    pre_final_position, requested, moved, reached = _move_toward(
         order.origin,
         target_position,
         order.max_distance,
@@ -140,6 +154,18 @@ def _movement_result(
         status = InterceptStatus.MOVED
         reason = "Interceptor moves toward the target but cannot reach it this turn."
 
+    position: Point | None = pre_final_position
+    certain = True
+    if order.post_move_transform is not None:
+        position = order.post_move_transform(pre_final_position, moved)
+        if position is None:
+            status = InterceptStatus.UNRESOLVED_POST_MOVE
+            certain = False
+            reason = (
+                "Geometric Intercept movement is known, but a post-movement "
+                "Host substep could not be resolved safely."
+            )
+
     return InterceptResult(
         ship_id=order.ship_id,
         status=status,
@@ -148,8 +174,9 @@ def _movement_result(
         target_position=target_position,
         requested_distance=requested,
         moved_distance=moved,
-        certain=True,
+        certain=certain,
         reason=reason,
+        pre_final_position=pre_final_position,
     )
 
 
@@ -211,12 +238,13 @@ def resolve_chained_intercepts(
 
     Chained Intercept waits for an intercepting target to resolve before its
     pursuer moves. Valid dependency chains are therefore deterministic here.
+    ``post_move_transform`` is applied before a result becomes available to a
+    pursuer, matching Host substeps such as planetary warp-well capture.
 
     Pure valid loops require NuHost's agility/tie-breaking calculation. The
     public rules describe the factors but not a complete reproducible formula,
     so this module intentionally marks such loops as unresolved rather than
-    inventing a result. A later host-accurate movement engine can replace this
-    fail-closed branch once the rule has been verified from executable behavior.
+    inventing a result.
     """
 
     orders_by_id = {order.ship_id: order for order in orders}
@@ -267,6 +295,7 @@ def resolve_chained_intercepts(
                         "Valid Chained Intercept loop requires NuHost agility "
                         "tie-breaking, which is not yet modeled."
                     ),
+                    pre_final_position=None,
                 )
             return results[ship_id]
 
