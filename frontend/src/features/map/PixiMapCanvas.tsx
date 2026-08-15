@@ -6,8 +6,10 @@ import {
     useState,
 } from "react";
 import { Application, Assets, Container, Graphics, Text } from "pixi.js";
+import { getHostEvents } from "../../api/activity";
 import { getHistoricalShipTracks } from "../../api/history";
 import { privateHullAssetUrl } from "../../lib/privateAssets";
+import type { HostEventItem } from "../../types/activity";
 import type {
     CombatEventSummary,
     HistoricalCombatEvent,
@@ -34,6 +36,7 @@ import {
     radiationAtPoint,
 } from "./navigationAnalysis";
 import { CombatEventPanel } from "./CombatEventPanel";
+import { drawHostEvents, hostEventKey } from "./hostEventScene";
 import { drawMapScene } from "./mapScene";
 import { drawOrderVectors } from "./orderVectorScene";
 import {
@@ -144,6 +147,9 @@ export function PixiMapCanvas({
     const [trackFadePercent, setTrackFadePercent] = useState(20);
     const [selectedCombatEvent, setSelectedCombatEvent] =
         useState<HistoricalCombatEvent | null>(null);
+    const [hostEvents, setHostEvents] = useState<HostEventItem[]>([]);
+    const [selectedHostEventKey, setSelectedHostEventKey] =
+        useState<string | null>(null);
 
     const bounds = useMemo(
         () => observedBounds(intel),
@@ -249,6 +255,7 @@ export function PixiMapCanvas({
 
     useEffect(() => {
         setSelectedCombatEvent(null);
+        setSelectedHostEventKey(null);
     }, [intel.game_id, intel.turn]);
 
     useEffect(() => {
@@ -278,6 +285,32 @@ export function PixiMapCanvas({
     }, [intel.game_id, intel.turn, linkedAccountId]);
 
     useEffect(() => {
+        let cancelled = false;
+
+        async function loadHostEventMarkers() {
+            try {
+                const response = await getHostEvents(
+                    intel.game_id,
+                    linkedAccountId,
+                    intel.turn,
+                );
+                if (!cancelled) {
+                    setHostEvents(response.events);
+                }
+            } catch {
+                if (!cancelled) {
+                    setHostEvents([]);
+                }
+            }
+        }
+
+        void loadHostEventMarkers();
+        return () => {
+            cancelled = true;
+        };
+    }, [intel.game_id, intel.turn, linkedAccountId]);
+
+    useEffect(() => {
         if (selectedCombatEvent === null) return;
         const selectedKey = combatEventKey(selectedCombatEvent);
         const stillPresent = historicalTracks.some((track) =>
@@ -289,6 +322,14 @@ export function PixiMapCanvas({
         );
         if (!stillPresent) setSelectedCombatEvent(null);
     }, [historicalTracks, selectedCombatEvent]);
+
+    useEffect(() => {
+        if (selectedHostEventKey === null) return;
+        const stillPresent = hostEvents.some(
+            (event) => hostEventKey(event) === selectedHostEventKey,
+        );
+        if (!stillPresent) setSelectedHostEventKey(null);
+    }, [hostEvents, selectedHostEventKey]);
 
     useEffect(() => {
         const host = hostRef.current;
@@ -669,6 +710,21 @@ export function PixiMapCanvas({
             },
         });
 
+        drawHostEvents({
+            world,
+            events: hostEvents,
+            bounds,
+            selectedKey: selectedHostEventKey,
+            onSelect: (event) => {
+                if (waypointPickShipIdRef.current !== null) return;
+                const key = hostEventKey(event);
+                setSelectedHostEventKey(key);
+                window.dispatchEvent(new CustomEvent("dashboard-host-event-select", {
+                    detail: { key },
+                }));
+            },
+        });
+
         if (hoverLayerRef.current !== null) hoverLayerRef.current.visible = false;
 
         if (lastFitGameIdRef.current !== intel.game_id) {
@@ -681,6 +737,7 @@ export function PixiMapCanvas({
         bounds,
         fitViewRef,
         historicalTracks,
+        hostEvents,
         hullArtworkRevision,
         intel,
         labelMode,
@@ -689,6 +746,7 @@ export function PixiMapCanvas({
         orderDrafts,
         selected,
         selectedCombatEvent,
+        selectedHostEventKey,
         shipPositions,
         trackFadePercent,
         trackLookbackTurns,
