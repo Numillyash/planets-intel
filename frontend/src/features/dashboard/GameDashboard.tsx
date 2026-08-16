@@ -24,6 +24,7 @@ import {
 import { PlayersTable } from "../players/PlayersTable";
 import { MilitaryScoreChart } from "../statistics/MilitaryScoreChart";
 import { AdvantagesPanel } from "./AdvantagesPanel";
+import { BattlePlannerDashboardPanel } from "./BattlePlannerDashboardPanel";
 import { CombatFighterEvidencePanel } from "./CombatFighterEvidencePanel";
 import { DiplomacyPanel } from "./DiplomacyPanel";
 import { MilitaryAttributionPanel } from "./MilitaryAttributionPanel";
@@ -37,6 +38,7 @@ import "./military-attribution.css";
 type GameDashboardTab =
     | "dashboard"
     | "vcr"
+    | "battle-planner"
     | "reports"
     | "planets"
     | "starships"
@@ -50,6 +52,7 @@ type GameDashboardTab =
 const TABS: Array<{ id: GameDashboardTab; label: string }> = [
     { id: "dashboard", label: "Dashboard" },
     { id: "vcr", label: "VCR" },
+    { id: "battle-planner", label: "Battle Planner" },
     { id: "reports", label: "Reports" },
     { id: "planets", label: "Planets" },
     { id: "starships", label: "Starships" },
@@ -416,6 +419,14 @@ export function GameDashboard({
 
                 {activeTab === "vcr" && (
                     <VcrDashboardPanel
+                        gameId={game.game.id}
+                        linkedAccountId={selectedAccount.id}
+                        turn={dashboardTurn}
+                    />
+                )}
+
+                {activeTab === "battle-planner" && (
+                    <BattlePlannerDashboardPanel
                         gameId={game.game.id}
                         linkedAccountId={selectedAccount.id}
                         turn={dashboardTurn}
