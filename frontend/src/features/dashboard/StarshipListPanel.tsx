@@ -2,9 +2,12 @@ import { useMemo, useState } from "react";
 
 import type {
     GameDetailsResponse,
-    LatestPrivateIntelResponse,
     ShipObservationResponse,
 } from "../../types/api";
+import {
+    isCombinedPrivateIntel,
+    type PrivateIntelMapResponse,
+} from "../../types/intel";
 import { formatInteger, shipFacts } from "../map/observationView";
 
 type ShipSort = "owner" | "id" | "name" | "hull" | "warp";
@@ -16,6 +19,13 @@ function playerName(
     if (slotId === null) return "Unknown";
     const player = game.players.find((item) => item.slot_id === slotId);
     return player ? `${player.username} (slot ${slotId})` : `slot ${slotId}`;
+}
+
+function observerSlot(intel: PrivateIntelMapResponse | null): number | null {
+    if (intel === null) return null;
+    return isCombinedPrivateIntel(intel)
+        ? intel.primary_observer.player_slot_id
+        : intel.observer.player_slot_id;
 }
 
 function compareNullableNumber(
@@ -33,10 +43,10 @@ export function StarshipListPanel({
     intel,
 }: {
     game: GameDetailsResponse;
-    intel: LatestPrivateIntelResponse | null;
+    intel: PrivateIntelMapResponse | null;
 }) {
     const [sort, setSort] = useState<ShipSort>("owner");
-    const observerSlot = intel?.observer.player_slot_id ?? null;
+    const currentObserverSlot = observerSlot(intel);
 
     const ships = useMemo(() => {
         const result = [...(intel?.ships ?? [])];
@@ -57,7 +67,10 @@ export function StarshipListPanel({
             }
 
             const ownershipRank = (ship: ShipObservationResponse) => {
-                if (observerSlot !== null && ship.owner_id === observerSlot) return 0;
+                if (
+                    currentObserverSlot !== null
+                    && ship.owner_id === currentObserverSlot
+                ) return 0;
                 if (ship.owner_id === null) return 2;
                 return 1;
             };
@@ -68,7 +81,7 @@ export function StarshipListPanel({
         });
 
         return result;
-    }, [intel, observerSlot, sort]);
+    }, [currentObserverSlot, intel, sort]);
 
     return (
         <section className="panel">
@@ -111,8 +124,8 @@ export function StarshipListPanel({
                     <tbody>
                         {ships.map((ship) => {
                             const facts = shipFacts(ship);
-                            const own = observerSlot !== null
-                                && ship.owner_id === observerSlot;
+                            const own = currentObserverSlot !== null
+                                && ship.owner_id === currentObserverSlot;
                             return (
                                 <tr
                                     className={own ? "game-object-own" : undefined}
