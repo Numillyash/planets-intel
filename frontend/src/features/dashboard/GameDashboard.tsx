@@ -1,5 +1,9 @@
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
+import {
+    getHistoricalCombinedIntel,
+    getHistoricalPrivateIntel,
+} from "../../api/history";
 import type {
     GameDetailsResponse,
     LatestPrivateIntelResponse,
@@ -7,6 +11,10 @@ import type {
     ScoreHistoryItem,
     ScoreHistoryResponse,
 } from "../../types/api";
+import {
+    isCombinedPrivateIntel,
+    type PrivateIntelMapResponse,
+} from "../../types/intel";
 import { HostEventPanel } from "../map/HostEventPanel";
 import { PlayerActivityPanel } from "../map/PlayerActivityPanel";
 import {
@@ -62,6 +70,13 @@ function playerName(
     return player ? `${player.username} (slot ${slotId})` : `slot ${slotId}`;
 }
 
+function observerSlot(intel: PrivateIntelMapResponse | null): number | null {
+    if (intel === null) return null;
+    return isCombinedPrivateIntel(intel)
+        ? intel.primary_observer.player_slot_id
+        : intel.observer.player_slot_id;
+}
+
 function Placeholder({
     title,
     children,
@@ -72,6 +87,24 @@ function Placeholder({
     return (
         <section className="panel game-dashboard-placeholder">
             <div className="eyebrow">Operational client roadmap</div>
+            <h2>{title}</h2>
+            <p>{children}</p>
+        </section>
+    );
+}
+
+function HistoricalUnavailable({
+    title,
+    turn,
+    children,
+}: {
+    title: string;
+    turn: number;
+    children: string;
+}) {
+    return (
+        <section className="panel game-dashboard-placeholder">
+            <div className="eyebrow">Historical mode · T{turn}</div>
             <h2>{title}</h2>
             <p>{children}</p>
         </section>
@@ -97,13 +130,111 @@ export function GameDashboard({
 }) {
     const [activeTab, setActiveTab] =
         useState<GameDashboardTab>("dashboard");
+    const [dashboardTurn, setDashboardTurn] = useState(game.game.turn);
+    const [historicalIntel, setHistoricalIntel] =
+        useState<PrivateIntelMapResponse | null>(null);
+    const [historicalLoading, setHistoricalLoading] = useState(false);
+    const [historicalError, setHistoricalError] = useState<string | null>(null);
+    const previousCurrentTurn = useRef(game.game.turn);
 
-    const mySlot = privateIntel?.observer.player_slot_id ?? null;
-    const myPlayer = mySlot === null
-        ? null
-        : game.players.find((item) => item.slot_id === mySlot) ?? null;
+    useEffect(() => {
+        setDashboardTurn(game.game.turn);
+        setHistoricalIntel(null);
+        setHistoricalError(null);
+    }, [game.game.id, selectedAccount.id]);
 
-    const intelCounts = privateIntel?.counts ?? null;
+    useEffect(() => {
+        const previous = previousCurrentTurn.current;
+        if (dashboardTurn === previous && game.game.turn !== previous) {
+            setDashboardTurn(game.game.turn);
+        }
+        previousCurrentTurn.current = game.game.turn;
+    }, [dashboardTurn, game.game.turn]);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        if (dashboardTurn === game.game.turn) {
+            setHistoricalIntel(null);
+            setHistoricalLoading(false);
+            setHistoricalError(null);
+            return () => {
+                cancelled = true;
+            };
+        }
+
+        setHistoricalIntel(null);
+        setHistoricalLoading(true);
+        setHistoricalError(null);
+
+        void (async () => {
+            try {
+                const combined = await getHistoricalCombinedIntel(
+                    game.game.id,
+                    selectedAccount.id,
+                    dashboardTurn,
+                );
+                if (cancelled) return;
+                if (combined !== null) {
+                    setHistoricalIntel(combined);
+                    return;
+                }
+
+                const single = await getHistoricalPrivateIntel(
+                    game.game.id,
+                    selectedAccount.id,
+                    dashboardTurn,
+                );
+                if (!cancelled) {
+                    setHistoricalIntel(single);
+                    if (single === null) {
+                        setHistoricalError(
+                            `Turn ${dashboardTurn} has no stored private-intel snapshot.`,
+                        );
+                    }
+                }
+            } catch (reason) {
+                if (!cancelled) {
+                    setHistoricalError(
+                        reason instanceof Error
+                            ? reason.message
+                            : `Failed to load turn ${dashboardTurn}`,
+                    );
+                }
+            } finally {
+                if (!cancelled) setHistoricalLoading(false);
+            }
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [dashboardTurn, game.game.id, game.game.turn, selectedAccount.id]);
+
+    const historicalMode = dashboardTurn !== game.game.turn;
+    const activeIntel: PrivateIntelMapResponse | null = historicalMode
+        ? historicalIntel
+        : privateIntel;
+    const mySlot = observerSlot(activeIntel);
+    const myPlayer = !historicalMode && mySlot !== null
+        ? game.players.find((item) => item.slot_id === mySlot) ?? null
+        : null;
+    const intelCounts = activeIntel?.counts ?? null;
+
+    const dashboardScores = useMemo(() => {
+        if (!historicalMode) return latestScores;
+        const scores = new Map<number, ScoreHistoryItem>();
+        for (const item of history?.items ?? []) {
+            if (item.turn === dashboardTurn) scores.set(item.slot_id, item);
+        }
+        return scores;
+    }, [dashboardTurn, historicalMode, history, latestScores]);
+
+    function returnToLive() {
+        setDashboardTurn(game.game.turn);
+        setHistoricalIntel(null);
+        setHistoricalError(null);
+    }
 
     return (
         <section className="game-dashboard-shell">
@@ -123,6 +254,44 @@ export function GameDashboard({
                 ))}
             </nav>
 
+            {historicalMode && (
+                <div
+                    style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: 12,
+                        margin: "10px 0 0",
+                        padding: "9px 12px",
+                        border: "1px solid rgba(255, 204, 115, 0.55)",
+                        borderRadius: 8,
+                        background: "rgba(75, 61, 32, 0.34)",
+                    }}
+                >
+                    <div>
+                        <strong>Historical mode · Turn {dashboardTurn}</strong>
+                        <div style={{ color: "#aabbd1", fontSize: 11, marginTop: 2 }}>
+                            Turn-aware sections use stored T{dashboardTurn} evidence.
+                            Current-only metadata is not substituted as historical state.
+                        </div>
+                    </div>
+                    <button
+                        className="secondary-button"
+                        onClick={returnToLive}
+                        type="button"
+                    >
+                        Return to live · T{game.game.turn}
+                    </button>
+                </div>
+            )}
+
+            {historicalLoading && (
+                <div className="loading-card">Loading historical turn {dashboardTurn}…</div>
+            )}
+            {historicalError !== null && (
+                <div className="auth-error" role="alert">{historicalError}</div>
+            )}
+
             <div className="game-dashboard-content">
                 {activeTab === "dashboard" && (
                     <>
@@ -134,9 +303,11 @@ export function GameDashboard({
                             >
                                 <span>Planets</span>
                                 <strong>
-                                    {myPlayer?.planets
-                                        ?? intelCounts?.planets
-                                        ?? "—"}
+                                    {historicalMode
+                                        ? intelCounts?.planets ?? "—"
+                                        : myPlayer?.planets
+                                            ?? intelCounts?.planets
+                                            ?? "—"}
                                 </strong>
                             </button>
                             <button
@@ -146,9 +317,11 @@ export function GameDashboard({
                             >
                                 <span>Starships</span>
                                 <strong>
-                                    {myPlayer?.ships
-                                        ?? intelCounts?.ships
-                                        ?? "—"}
+                                    {historicalMode
+                                        ? intelCounts?.ships ?? "—"
+                                        : myPlayer?.ships
+                                            ?? intelCounts?.ships
+                                            ?? "—"}
                                 </strong>
                             </button>
                             <button
@@ -158,9 +331,11 @@ export function GameDashboard({
                             >
                                 <span>Starbases</span>
                                 <strong>
-                                    {myPlayer?.starbases
-                                        ?? intelCounts?.starbases
-                                        ?? "—"}
+                                    {historicalMode
+                                        ? intelCounts?.starbases ?? "—"
+                                        : myPlayer?.starbases
+                                            ?? intelCounts?.starbases
+                                            ?? "—"}
                                 </strong>
                             </button>
                             <button
@@ -168,21 +343,23 @@ export function GameDashboard({
                                 onClick={() => setActiveTab("scoreboard")}
                                 type="button"
                             >
-                                <span>Turn status</span>
+                                <span>Turn state</span>
                                 <strong>
-                                    {myPlayer?.turn_ready === null || myPlayer === null
-                                        ? "—"
-                                        : myPlayer.turn_ready
-                                            ? "Ready"
-                                            : "Open"}
+                                    {historicalMode
+                                        ? `Snapshot T${dashboardTurn}`
+                                        : myPlayer?.turn_ready === null || myPlayer === null
+                                            ? "—"
+                                            : myPlayer.turn_ready
+                                                ? "Ready"
+                                                : "Open"}
                                 </strong>
                             </button>
                             <div className="summary-card">
-                                <span>Schedule</span>
+                                <span>{historicalMode ? "Live schedule" : "Schedule"}</span>
                                 <strong>{game.schedule || "—"}</strong>
                             </div>
                             <div className="summary-card">
-                                <span>Next host</span>
+                                <span>{historicalMode ? "Live next host" : "Next host"}</span>
                                 <strong>{game.time_to_host || "—"}</strong>
                             </div>
                         </section>
@@ -193,19 +370,31 @@ export function GameDashboard({
                                     <h2>{game.game.name}</h2>
                                     <p>
                                         Observer {selectedAccount.planets_username}
-                                        {" · "}Turn {game.game.turn}
-                                        {" · "}{game.game.status_name}
-                                        {game.source === "canonical-cache" ? " · cached game metadata" : ""}
+                                        {" · "}Turn {dashboardTurn}
+                                        {historicalMode ? " · historical snapshot" : ` · ${game.game.status_name}`}
+                                        {!historicalMode && game.source === "canonical-cache"
+                                            ? " · cached game metadata"
+                                            : ""}
                                     </p>
                                 </div>
-                                <button
-                                    className="secondary-button"
-                                    disabled={refreshing}
-                                    onClick={onRefresh}
-                                    type="button"
-                                >
-                                    {refreshing ? "Syncing…" : "Refresh intel"}
-                                </button>
+                                {historicalMode ? (
+                                    <button
+                                        className="secondary-button"
+                                        onClick={returnToLive}
+                                        type="button"
+                                    >
+                                        Return to live
+                                    </button>
+                                ) : (
+                                    <button
+                                        className="secondary-button"
+                                        disabled={refreshing}
+                                        onClick={onRefresh}
+                                        type="button"
+                                    >
+                                        {refreshing ? "Syncing…" : "Refresh intel"}
+                                    </button>
+                                )}
                             </div>
 
                             <div className="game-dashboard-launch-grid">
@@ -229,7 +418,7 @@ export function GameDashboard({
                     <VcrDashboardPanel
                         gameId={game.game.id}
                         linkedAccountId={selectedAccount.id}
-                        turn={game.game.turn}
+                        turn={dashboardTurn}
                     />
                 )}
 
@@ -238,7 +427,7 @@ export function GameDashboard({
                         embedded
                         gameId={game.game.id}
                         linkedAccountId={selectedAccount.id}
-                        turn={game.game.turn}
+                        turn={dashboardTurn}
                     />
                 )}
 
@@ -246,10 +435,10 @@ export function GameDashboard({
                     <section className="panel">
                         <div className="panel-header">
                             <div>
-                                <h2>Planet List</h2>
+                                <h2>Planet List · T{dashboardTurn}</h2>
                                 <p>
-                                    {privateIntel?.planets.length ?? 0}
-                                    {" factual planet observations for this observer."}
+                                    {activeIntel?.planets.length ?? 0}
+                                    {" factual planet observations for this snapshot."}
                                 </p>
                             </div>
                         </div>
@@ -264,7 +453,7 @@ export function GameDashboard({
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {(privateIntel?.planets ?? []).map((planet) => {
+                                    {(activeIntel?.planets ?? []).map((planet) => {
                                         const facts = planetFacts(planet);
                                         return (
                                             <tr key={planet.planet_id}>
@@ -292,22 +481,23 @@ export function GameDashboard({
                 {activeTab === "starships" && (
                     <StarshipListPanel
                         game={game}
-                        intel={privateIntel}
+                        intel={activeIntel}
                     />
                 )}
 
                 {activeTab === "starbases" && (
                     <StarbaseListPanel
                         game={game}
-                        intel={privateIntel}
+                        intel={activeIntel}
                     />
                 )}
 
                 {activeTab === "scoreboard" && (
                     <div className="game-dashboard-stack">
                         <PlayersTable
-                            latestScores={latestScores}
+                            latestScores={dashboardScores}
                             players={game.players}
+                            snapshotTurn={historicalMode ? dashboardTurn : null}
                         />
                         {history !== null && (
                             <MilitaryAttributionPanel
@@ -319,12 +509,12 @@ export function GameDashboard({
                         <CombatFighterEvidencePanel
                             game={game}
                             linkedAccountId={selectedAccount.id}
-                            turn={game.game.turn}
+                            turn={dashboardTurn}
                         />
                         <PlayerActivityPanel
                             embedded
                             gameId={game.game.id}
-                            throughTurn={game.game.turn}
+                            throughTurn={dashboardTurn}
                         />
                         {history !== null && (
                             <MilitaryScoreChart
@@ -336,69 +526,106 @@ export function GameDashboard({
                 )}
 
                 {activeTab === "diplomacy" && (
-                    <DiplomacyPanel
-                        game={game}
-                        observerSlotId={mySlot}
-                    />
+                    historicalMode ? (
+                        <HistoricalUnavailable
+                            title="Historical diplomacy snapshot unavailable"
+                            turn={dashboardTurn}
+                        >
+                            Relations are currently stored as canonical live game metadata,
+                            not as turn-indexed factual snapshots. Showing today's relations
+                            here would falsely label current state as historical evidence.
+                        </HistoricalUnavailable>
+                    ) : (
+                        <DiplomacyPanel
+                            game={game}
+                            observerSlotId={mySlot}
+                        />
+                    )
                 )}
 
                 {activeTab === "time-machine" && (
                     <TimeMachinePanel
+                        activeTurn={dashboardTurn}
                         currentTurn={game.game.turn}
                         gameId={game.game.id}
                         linkedAccountId={selectedAccount.id}
+                        onOpenTurn={(turn) => {
+                            setDashboardTurn(turn);
+                            setActiveTab("dashboard");
+                        }}
                     />
                 )}
 
                 {activeTab === "advantages" && (
-                    <AdvantagesPanel
-                        game={game}
-                        observerSlotId={mySlot}
-                    />
+                    historicalMode ? (
+                        <HistoricalUnavailable
+                            title="Historical advantages snapshot unavailable"
+                            turn={dashboardTurn}
+                        >
+                            Player advantage activation is not yet persisted as a
+                            turn-indexed snapshot. The live advantage set is intentionally
+                            hidden while browsing a historical turn.
+                        </HistoricalUnavailable>
+                    ) : (
+                        <AdvantagesPanel
+                            game={game}
+                            observerSlotId={mySlot}
+                        />
+                    )
                 )}
 
                 {activeTab === "settings" && (
-                    <div className="game-dashboard-stack">
-                        <section className="panel">
-                            <div className="panel-header">
-                                <div>
-                                    <h2>Game settings</h2>
-                                    <p>
-                                        Canonical game configuration. Client
-                                        preferences and turn-order controls are
-                                        separate from these rules.
-                                    </p>
-                                </div>
-                                <button
-                                    className="secondary-button"
-                                    disabled={refreshing}
-                                    onClick={onRefresh}
-                                    type="button"
-                                >
-                                    {refreshing ? "Syncing…" : "Refresh private intel"}
-                                </button>
-                            </div>
-                            <div className="game-dashboard-settings-grid">
-                                {Object.entries(game.settings).map(([key, value]) => (
-                                    <div key={key}>
-                                        <span>{key.split("_").join(" ")}</span>
-                                        <strong>
-                                            {value === null
-                                                ? "—"
-                                                : typeof value === "boolean"
-                                                    ? (value ? "Yes" : "No")
-                                                    : String(value)}
-                                        </strong>
+                    historicalMode ? (
+                        <HistoricalUnavailable
+                            title="Historical game-settings snapshot unavailable"
+                            turn={dashboardTurn}
+                        >
+                            The current canonical game settings are not evidence that the
+                            same mutable settings were active on this historical turn.
+                        </HistoricalUnavailable>
+                    ) : (
+                        <div className="game-dashboard-stack">
+                            <section className="panel">
+                                <div className="panel-header">
+                                    <div>
+                                        <h2>Game settings</h2>
+                                        <p>
+                                            Canonical game configuration. Client
+                                            preferences and turn-order controls are
+                                            separate from these rules.
+                                        </p>
                                     </div>
-                                ))}
-                            </div>
-                        </section>
-                        <Placeholder title="Turn controls">
-                            Full order entry, local order drafts, validation,
-                            save/submit turn and upstream reconciliation belong
-                            here once the write-path milestone is implemented.
-                        </Placeholder>
-                    </div>
+                                    <button
+                                        className="secondary-button"
+                                        disabled={refreshing}
+                                        onClick={onRefresh}
+                                        type="button"
+                                    >
+                                        {refreshing ? "Syncing…" : "Refresh private intel"}
+                                    </button>
+                                </div>
+                                <div className="game-dashboard-settings-grid">
+                                    {Object.entries(game.settings).map(([key, value]) => (
+                                        <div key={key}>
+                                            <span>{key.split("_").join(" ")}</span>
+                                            <strong>
+                                                {value === null
+                                                    ? "—"
+                                                    : typeof value === "boolean"
+                                                        ? (value ? "Yes" : "No")
+                                                        : String(value)}
+                                            </strong>
+                                        </div>
+                                    ))}
+                                </div>
+                            </section>
+                            <Placeholder title="Turn controls">
+                                Full order entry, local order drafts, validation,
+                                save/submit turn and upstream reconciliation belong
+                                here once the write-path milestone is implemented.
+                            </Placeholder>
+                        </div>
+                    )
                 )}
             </div>
         </section>
