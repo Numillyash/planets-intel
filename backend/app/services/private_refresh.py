@@ -2,9 +2,11 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+import httpx
 from sqlalchemy import select
 
 from app.db.session import SessionLocal
+from app.models.game import Game
 from app.models.game_player_slot import GamePlayerSlot
 from app.models.planets_account import PlanetsAccount
 from app.models.private_observation_batch import PrivateObservationBatch
@@ -93,6 +95,48 @@ def _latest_batch(
         ).scalar_one_or_none()
 
 
+def _canonical_current_turn(game_id: int) -> int | None:
+    with SessionLocal() as session:
+        value = session.execute(
+            select(Game.current_turn).where(Game.id == game_id)
+        ).scalar_one_or_none()
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        return None
+    return value
+
+
+async def _resolve_refresh_turn(game_id: int) -> tuple[int, dict[str, Any]]:
+    """Resolve the turn without making public API availability a private-sync gate.
+
+    A public sync is preferred because it keeps canonical game metadata fresh.
+    During a public transport/API outage, however, a previously synchronized
+    canonical Game row is sufficient to throttle current private loadturn
+    refreshes. Each private sync still asks Planets.nu for the current turn and
+    validates the returned private payload independently.
+    """
+
+    try:
+        public_result = await sync_public_game(game_id)
+        return int(public_result["turn"]), {
+            "status": "refreshed",
+            "source": "planetsnu-public",
+            "detail": None,
+        }
+    except (httpx.TransportError, PlanetsNuError) as exc:
+        cached_turn = _canonical_current_turn(game_id)
+        if cached_turn is None:
+            raise
+        return cached_turn, {
+            "status": "canonical-fallback",
+            "source": "canonical-cache",
+            "detail": (
+                "public synchronization unavailable; private loadturn refresh "
+                f"continued using cached turn {cached_turn} for throttling "
+                f"({type(exc).__name__})"
+            ),
+        }
+
+
 def _is_account_in_game(
     *,
     planets_account_id: int | None,
@@ -140,10 +184,13 @@ async def refresh_accessible_private_intel(
     dashboard intel share. The combined result itself remains a read-time
     aggregation; this service only refreshes observer-specific factual
     snapshots.
+
+    Public game synchronization is best-effort here. A public outage must not
+    prevent current private loadturn observations from refreshing when a
+    canonical game row already exists locally.
     """
 
-    public_result = await sync_public_game(game_id)
-    current_turn = int(public_result["turn"])
+    current_turn, public_sync = await _resolve_refresh_turn(game_id)
     accounts = _accessible_accounts(user_id)
     now = datetime.now(timezone.utc)
 
@@ -237,6 +284,7 @@ async def refresh_accessible_private_intel(
     return {
         "game_id": game_id,
         "turn": current_turn,
+        "public_sync": public_sync,
         "accounts": len(accounts),
         "refreshed": sum(item["status"] == "refreshed" for item in results),
         "cached": sum(item["status"] == "cached" for item in results),
