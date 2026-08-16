@@ -2,32 +2,15 @@ import { useEffect, useMemo, useState } from "react";
 
 import { getHistoricalCombatEvents } from "../../api/history";
 import type {
+    CombatEquipmentEvidence,
     CombatEventResultStatus,
     CombatEventSideSummary,
     CombatEventSummary,
 } from "../../types/history";
 
-interface CombatEquipmentEvidence {
-    beam_id: number | null;
-    beam_name: string | null;
-    beam_count: number | null;
-    torpedo_id: number | null;
-    torpedo_name: string | null;
-    launcher_count: number | null;
-    torpedoes: number | null;
-    fighters: number | null;
-    combat_start_torpedoes?: number | null;
-    combat_start_fighters?: number | null;
-    post_combat_torpedoes?: number | null;
-    post_combat_fighters?: number | null;
-    post_combat_source?: string | null;
-    damage: number | null;
-    crew: number | null;
-    mass: number | null;
-}
-
-type EnrichedCombatSide = CombatEventSideSummary & {
-    combat_equipment?: CombatEquipmentEvidence | null;
+type DisplayCombatEquipment = CombatEquipmentEvidence & {
+    beam_name?: string | null;
+    torpedo_name?: string | null;
 };
 
 function sideName(side: CombatEventSideSummary): string {
@@ -40,23 +23,23 @@ function sideName(side: CombatEventSideSummary): string {
     return side.object_kind === "ship" ? "Unknown ship" : "Unknown planet";
 }
 
-function resultLabel(
+function independentResultLabel(
     status: CombatEventResultStatus,
     side: CombatEventSideSummary,
 ): string {
     switch (status) {
         case "survived_post_host":
-            return "Survived host · directly observed afterwards";
+            return "Independent outcome: survived host · directly observed afterwards";
         case "survived_to_later_combat":
-            return "Survived to a later VCR at this position";
+            return "Independent outcome: survived to a later VCR at this position";
         case "defeated":
-            return "Defeated in this combat";
+            return "Independent outcome: defeated by same-position VCR sequence evidence";
         case "planet_held_post_host":
-            return `Planet held after host${side.post_host_owner_id !== null ? ` · owner slot ${side.post_host_owner_id}` : ""}`;
+            return `Independent outcome: planet held after host${side.post_host_owner_id !== null ? ` · owner slot ${side.post_host_owner_id}` : ""}`;
         case "planet_owner_changed_post_host":
-            return `Planet owner changed after host${side.post_host_owner_id !== null ? ` → slot ${side.post_host_owner_id}` : ""}`;
+            return `Independent outcome: planet owner changed after host${side.post_host_owner_id !== null ? ` → slot ${side.post_host_owner_id}` : ""}`;
         default:
-            return "Final result not proven by available evidence";
+            return "Independent host/sequence outcome: not confirmed";
     }
 }
 
@@ -71,7 +54,7 @@ function resultColor(status: CombatEventResultStatus): string {
         case "planet_owner_changed_post_host":
             return "#ffd27d";
         default:
-            return "#c8d4e4";
+            return "#91a9c8";
     }
 }
 
@@ -86,47 +69,78 @@ function eventTitle(event: CombatEventSummary): string {
     return `${sideName(event.sides[0])} vs ${sideName(event.sides[1])}`;
 }
 
-function equipmentSummary(equipment: CombatEquipmentEvidence): string[] {
+function factualEquipmentRows(equipment: DisplayCombatEquipment): string[] {
     const rows: string[] = [];
-    if (equipment.beam_count !== null || equipment.beam_name !== null) {
+
+    if (equipment.beam_count !== null || equipment.beam_name != null) {
         rows.push(
             `Beams: ${equipment.beam_count ?? "?"} × ${equipment.beam_name ?? (equipment.beam_id !== null ? `Beam #${equipment.beam_id}` : "unknown")}`,
         );
     }
-    if (equipment.launcher_count !== null || equipment.torpedo_name !== null) {
+    if (equipment.launcher_count !== null || equipment.torpedo_name != null) {
         rows.push(
             `Tubes: ${equipment.launcher_count ?? "?"} × ${equipment.torpedo_name ?? (equipment.torpedo_id !== null ? `Torpedo #${equipment.torpedo_id}` : "unknown")}`,
         );
     }
-    const combatStartTorpedoes =
-        equipment.combat_start_torpedoes ?? equipment.torpedoes;
 
-    if (combatStartTorpedoes !== null) {
-        rows.push(`Combat-start torpedoes: ${combatStartTorpedoes}`);
+    const startTorps = equipment.combat_start_torpedoes ?? equipment.torpedoes;
+    const startFighters = equipment.combat_start_fighters ?? equipment.fighters;
+    if (startTorps !== null && startTorps !== undefined) {
+        rows.push(`Combat-start torpedoes: ${startTorps}`);
+    }
+    if (startFighters !== null && startFighters !== undefined) {
+        rows.push(`Combat-start fighters: ${startFighters}`);
     }
 
-    if (
-        equipment.post_combat_torpedoes !== null &&
-        equipment.post_combat_torpedoes !== undefined
-    ) {
-        rows.push(
-            `Post-combat torpedoes: ${equipment.post_combat_torpedoes}`,
-        );
-    }
-    const combatStartFighters =
-        equipment.combat_start_fighters ?? equipment.fighters;
+    return rows;
+}
 
-    if (combatStartFighters !== null) {
-        rows.push(`Combat-start fighters: ${combatStartFighters}`);
-    }
+function hasReplayState(equipment: DisplayCombatEquipment): boolean {
+    return equipment.replay_engine != null
+        || equipment.replay_basis != null
+        || equipment.replay_post_combat_shield != null
+        || equipment.replay_post_combat_damage != null
+        || equipment.replay_post_combat_crew != null
+        || equipment.replay_post_combat_torpedoes != null
+        || equipment.replay_post_combat_fighters != null
+        || equipment.replay_survived != null
+        || equipment.replay_destroyed != null
+        || equipment.replay_captured != null;
+}
 
-    if (
-        equipment.post_combat_fighters !== null &&
-        equipment.post_combat_fighters !== undefined
-    ) {
-        rows.push(
-            `Post-combat fighters: ${equipment.post_combat_fighters}`,
-        );
+function replayOutcome(equipment: DisplayCombatEquipment): string {
+    if (equipment.replay_captured === true) return "Captured";
+    if (equipment.replay_destroyed === true) return "Destroyed";
+    if (equipment.replay_survived === true) return "Survived";
+    return "Terminal state calculated";
+}
+
+function replayRows(equipment: DisplayCombatEquipment): string[] {
+    const rows = [`Outcome: ${replayOutcome(equipment)}`];
+    const state: string[] = [];
+
+    if (equipment.replay_post_combat_shield != null) {
+        state.push(`shield ${equipment.replay_post_combat_shield}%`);
+    }
+    if (equipment.replay_post_combat_damage != null) {
+        state.push(`damage ${equipment.replay_post_combat_damage}%`);
+    }
+    if (equipment.replay_post_combat_crew != null) {
+        state.push(`crew ${equipment.replay_post_combat_crew}`);
+    }
+    if (state.length > 0) rows.push(`Final state: ${state.join(" · ")}`);
+
+    const ammo: string[] = [];
+    if (equipment.replay_post_combat_torpedoes != null) {
+        ammo.push(`torpedoes ${equipment.replay_post_combat_torpedoes}`);
+    }
+    if (equipment.replay_post_combat_fighters != null) {
+        ammo.push(`fighters ${equipment.replay_post_combat_fighters}`);
+    }
+    if (ammo.length > 0) rows.push(`Final ammo: ${ammo.join(" · ")}`);
+
+    if (equipment.replay_cycles != null) {
+        rows.push(`Combat cycles: ${equipment.replay_cycles}`);
     }
     return rows;
 }
@@ -300,12 +314,7 @@ export function CombatEventPanel({
                 <button
                     className="secondary-button"
                     onClick={() => setListOpen(true)}
-                    style={{
-                        position: "absolute",
-                        zIndex: 5,
-                        left: 12,
-                        top: 52,
-                    }}
+                    style={{ position: "absolute", zIndex: 5, left: 12, top: 52 }}
                     type="button"
                 >
                     VCRs · {events.length}
@@ -319,8 +328,8 @@ export function CombatEventPanel({
                         zIndex: 6,
                         right: 12,
                         bottom: 12,
-                        width: "min(430px, calc(100% - 24px))",
-                        maxHeight: "64%",
+                        width: "min(520px, calc(100% - 24px))",
+                        maxHeight: "72%",
                         overflowY: "auto",
                         padding: "12px 13px",
                         border: "1px solid rgba(255, 204, 115, 0.55)",
@@ -369,11 +378,14 @@ export function CombatEventPanel({
                     </div>
 
                     <div style={{ display: "grid", gap: 8, marginTop: 11 }}>
-                        {selectedEvent.sides.map((rawSide) => {
-                            const side = rawSide as EnrichedCombatSide;
-                            const equipment = side.combat_equipment ?? null;
-                            const equipmentRows = equipment !== null
-                                ? equipmentSummary(equipment)
+                        {selectedEvent.sides.map((side) => {
+                            const equipment = side.combat_equipment as DisplayCombatEquipment | null | undefined;
+                            const factualRows = equipment == null
+                                ? []
+                                : factualEquipmentRows(equipment);
+                            const replayAvailable = equipment != null && hasReplayState(equipment);
+                            const derivedRows = replayAvailable && equipment != null
+                                ? replayRows(equipment)
                                 : [];
 
                             return (
@@ -393,16 +405,18 @@ export function CombatEventPanel({
                                             : `${side.has_starbase ? "Planet + starbase" : "Planet"}${side.object_id !== null ? ` #${side.object_id}` : ""}`}
                                         {side.owner_id !== null ? ` · VCR owner slot ${side.owner_id}` : ""}
                                     </div>
+
                                     <div
                                         style={{
                                             marginTop: 5,
-                                            fontSize: 12,
+                                            fontSize: 11,
                                             color: resultColor(side.result_status),
                                         }}
                                     >
-                                        {resultLabel(side.result_status, side)}
+                                        {independentResultLabel(side.result_status, side)}
                                     </div>
-                                    {equipment !== null && equipmentRows.length > 0 && (
+
+                                    {equipment != null && (
                                         <div
                                             style={{
                                                 marginTop: 7,
@@ -414,23 +428,70 @@ export function CombatEventPanel({
                                             }}
                                         >
                                             <strong style={{ display: "block", color: "#9ec8ff", marginBottom: 2 }}>
-                                                VCR equipment · factual
+                                                VCR combat-start state · factual
                                             </strong>
-                                            {equipmentRows.map((row) => (
+                                            {factualRows.map((row) => (
                                                 <div key={row}>{row}</div>
                                             ))}
-                                            {(equipment.damage !== null || equipment.crew !== null || equipment.mass !== null) && (
+                                            <div style={{ color: "#91a9c8", marginTop: 3 }}>
+                                                {equipment.shield !== null ? `Shield ${equipment.shield}%` : ""}
+                                                {equipment.damage !== null ? `${equipment.shield !== null ? " · " : ""}damage ${equipment.damage}%` : ""}
+                                                {equipment.crew !== null ? `${equipment.shield !== null || equipment.damage !== null ? " · " : ""}crew ${equipment.crew}` : ""}
+                                                {equipment.mass !== null ? `${equipment.shield !== null || equipment.damage !== null || equipment.crew !== null ? " · " : ""}mass ${equipment.mass} kt` : ""}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {replayAvailable && equipment != null && (
+                                        <div
+                                            style={{
+                                                marginTop: 7,
+                                                padding: "7px 8px",
+                                                border: "1px solid rgba(91, 151, 220, 0.45)",
+                                                borderRadius: 6,
+                                                background: "rgba(25, 53, 82, 0.25)",
+                                                color: "#d8e5f5",
+                                                fontSize: 11,
+                                                lineHeight: 1.55,
+                                            }}
+                                        >
+                                            <strong style={{ display: "block", color: "#82bfff", marginBottom: 2 }}>
+                                                Deterministic VCR replay · derived
+                                            </strong>
+                                            {derivedRows.map((row, index) => (
+                                                <div
+                                                    key={row}
+                                                    style={index === 0 ? {
+                                                        color: equipment.replay_destroyed
+                                                            ? "#ff9999"
+                                                            : "#82e6b1",
+                                                        fontWeight: 700,
+                                                    } : undefined}
+                                                >
+                                                    {row}
+                                                </div>
+                                            ))}
+                                            {(equipment.replay_engine != null || equipment.replay_basis != null) && (
                                                 <div style={{ color: "#91a9c8", marginTop: 3 }}>
-                                                    {equipment.mass !== null ? `Mass ${equipment.mass} kt` : ""}
-                                                    {equipment.damage !== null ? `${equipment.mass !== null ? " · " : ""}damage ${equipment.damage}%` : ""}
-                                                    {equipment.crew !== null ? `${equipment.mass !== null || equipment.damage !== null ? " · " : ""}crew ${equipment.crew}` : ""}
+                                                    {equipment.replay_engine ?? "deterministic engine"}
+                                                    {equipment.replay_basis != null
+                                                        ? ` · ${equipment.replay_basis}`
+                                                        : ""}
                                                 </div>
                                             )}
                                         </div>
                                     )}
+
+                                    {equipment?.post_combat_source === "analyst_confirmed_vcr_review" && (
+                                        <div style={{ color: "#ffd27d", fontSize: 10, marginTop: 5 }}>
+                                            Analyst-confirmed post-combat ammo: torpedoes {equipment.post_combat_torpedoes ?? "?"}
+                                            {" · "}fighters {equipment.post_combat_fighters ?? "?"}
+                                        </div>
+                                    )}
+
                                     {side.result_sources.length > 0 && (
                                         <div style={{ color: "#91a9c8", fontSize: 10, marginTop: 4 }}>
-                                            Result evidence: {side.result_sources
+                                            Independent result evidence: {side.result_sources
                                                 .map((source) => source.planets_username)
                                                 .join(", ")}
                                         </div>
@@ -448,10 +509,10 @@ export function CombatEventPanel({
                             marginTop: 9,
                         }}
                     >
-                        Equipment and combat-start ammo come directly from the stored VCR.
-                        Post-combat ammo is a separate analyst-confirmed observation from the
-                        reviewed VCR. Host-survival labels come from structured Fleet Command
-                        reports. No value is written back into ShipObservation or raw VCR data.
+                        Combat-start equipment/state is copied from the stored VCR.
+                        Deterministic terminal state is replay-derived from that factual VCR seed
+                        and is kept separate from host-confirmed evidence. No replay value is
+                        written back into ShipObservation or raw VCR data.
                     </div>
                 </div>
             )}
