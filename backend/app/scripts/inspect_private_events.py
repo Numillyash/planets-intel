@@ -16,6 +16,7 @@ from app.planetsnu.client import PlanetsNuClient
 SENSITIVE_KEYS = frozenset({"apikey", "password", "savekey"})
 DEFAULT_EVENT_COLLECTIONS = frozenset(
     {
+        "activity",
         "messages",
         "mymessages",
         "explosions",
@@ -64,7 +65,7 @@ def parse_args() -> argparse.Namespace:
         action="append",
         default=[],
         help=(
-            "Case-insensitive text to search for in raw records. Repeatable, "
+            "Case-insensitive text to search for in raw record values. Repeatable, "
             "for example: --term Explosion --term Scout."
         ),
     )
@@ -73,16 +74,16 @@ def parse_args() -> argparse.Namespace:
         action="append",
         default=[],
         help=(
-            "Restrict scanning to an rst list collection. Repeatable. "
-            "Without this option all rst list collections are eligible."
+            "Restrict scanning to a named list collection. This includes rst "
+            "collections plus the top-level loadturn activity list. Repeatable."
         ),
     )
     parser.add_argument(
         "--all",
         action="store_true",
         help=(
-            "When no --near/--term filter is supplied, dump every record from "
-            "eligible collections instead of only event-like collections."
+            "Scan all list collections, including catalogs. By default diagnostics "
+            "scan only event-like collections even when filters are supplied."
         ),
     )
     return parser.parse_args()
@@ -109,13 +110,28 @@ def numeric(raw: dict[str, Any], key: str) -> float | None:
     return None
 
 
+def _searchable_values(value: Any) -> list[str]:
+    """Flatten scalar payload values without matching field names themselves."""
+
+    if isinstance(value, dict):
+        parts: list[str] = []
+        for key, item in value.items():
+            if str(key).casefold() in SENSITIVE_KEYS:
+                continue
+            parts.extend(_searchable_values(item))
+        return parts
+    if isinstance(value, list):
+        parts = []
+        for item in value:
+            parts.extend(_searchable_values(item))
+        return parts
+    if value is None:
+        return []
+    return [str(value)]
+
+
 def record_text(raw: dict[str, Any]) -> str:
-    return json.dumps(
-        sanitize(raw),
-        ensure_ascii=False,
-        sort_keys=True,
-        default=str,
-    ).casefold()
+    return "\n".join(_searchable_values(raw)).casefold()
 
 
 def match_record(
@@ -237,8 +253,11 @@ async def run() -> None:
         for key, value in rst.items()
         if isinstance(value, list)
     }
+    top_level_activity = payload.get("activity")
+    if isinstance(top_level_activity, list):
+        list_collections["activity"] = top_level_activity
 
-    print("\n===== RST LIST COLLECTIONS =====")
+    print("\n===== LOADTURN LIST COLLECTIONS =====")
     for name in sorted(list_collections):
         value = list_collections[name]
         first_keys: list[str] = []
@@ -247,20 +266,19 @@ async def run() -> None:
                 first_keys = sorted(str(key) for key in item.keys())
                 break
         suffix = f" keys={','.join(first_keys)}" if first_keys else ""
-        print(f"{name}: {len(value)}{suffix}")
+        origin = "top-level" if name == "activity" else "rst"
+        print(f"{name}: {len(value)} origin={origin}{suffix}")
 
     print("\n===== MATCHING RAW RECORDS =====")
     matches = 0
     for collection_name in sorted(list_collections):
-        if (
-            selected_collections
-            and collection_name.casefold() not in selected_collections
-        ):
+        collection_key = collection_name.casefold()
+        if selected_collections and collection_key not in selected_collections:
+            continue
+        if not selected_collections and not args.all and collection_key not in DEFAULT_EVENT_COLLECTIONS:
             continue
 
         records = list_collections[collection_name]
-        event_like_default = collection_name.casefold() in DEFAULT_EVENT_COLLECTIONS
-
         for index, item in enumerate(records):
             if not isinstance(item, dict):
                 continue
@@ -275,8 +293,6 @@ async def run() -> None:
             if has_filter:
                 if not reasons:
                     continue
-            elif not args.all and not event_like_default:
-                continue
             else:
                 reasons = ["unfiltered"]
 
