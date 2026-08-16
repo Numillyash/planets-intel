@@ -1,7 +1,8 @@
-import type {
-    GameDetailsResponse,
-    LatestPrivateIntelResponse,
-} from "../../types/api";
+import type { GameDetailsResponse } from "../../types/api";
+import {
+    isCombinedPrivateIntel,
+    type PrivateIntelMapResponse,
+} from "../../types/intel";
 import { formatInteger, starbaseFacts } from "../map/observationView";
 
 function playerName(
@@ -13,14 +14,21 @@ function playerName(
     return player ? `${player.username} (slot ${slotId})` : `slot ${slotId}`;
 }
 
+function observerSlot(intel: PrivateIntelMapResponse | null): number | null {
+    if (intel === null) return null;
+    return isCombinedPrivateIntel(intel)
+        ? intel.primary_observer.player_slot_id
+        : intel.observer.player_slot_id;
+}
+
 export function StarbaseListPanel({
     game,
     intel,
 }: {
     game: GameDetailsResponse;
-    intel: LatestPrivateIntelResponse | null;
+    intel: PrivateIntelMapResponse | null;
 }) {
-    const observerSlot = intel?.observer.player_slot_id ?? null;
+    const currentObserverSlot = observerSlot(intel);
     const starbases = intel?.starbases ?? [];
 
     return (
@@ -52,8 +60,8 @@ export function StarbaseListPanel({
                             const planet = intel?.planets.find(
                                 (item) => item.planet_id === base.planet_id,
                             ) ?? null;
-                            const ownBase = observerSlot !== null
-                                && planet?.owner_id === observerSlot;
+                            const ownBase = currentObserverSlot !== null
+                                && planet?.owner_id === currentObserverSlot;
 
                             return (
                                 <tr
