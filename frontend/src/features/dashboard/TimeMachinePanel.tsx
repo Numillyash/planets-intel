@@ -23,10 +23,14 @@ export function TimeMachinePanel({
     gameId,
     linkedAccountId,
     currentTurn,
+    activeTurn,
+    onOpenTurn,
 }: {
     gameId: number;
     linkedAccountId: number;
     currentTurn: number;
+    activeTurn: number;
+    onOpenTurn(turn: number): void;
 }) {
     const [status, setStatus] = useState<HistoricalIntelStatus | null>(null);
     const [selectedTurn, setSelectedTurn] = useState<number>(
@@ -56,9 +60,11 @@ export function TimeMachinePanel({
                 const candidates = response.complete_turns.length > 0
                     ? response.complete_turns
                     : response.available_turns;
-                const preferred = [...candidates]
-                    .filter((turn) => turn < currentTurn)
-                    .sort((left, right) => right - left)[0];
+                const preferred = activeTurn < currentTurn
+                    ? activeTurn
+                    : [...candidates]
+                        .filter((turn) => turn < currentTurn)
+                        .sort((left, right) => right - left)[0];
                 if (preferred !== undefined) setSelectedTurn(preferred);
             })
             .catch((reason) => {
@@ -74,7 +80,7 @@ export function TimeMachinePanel({
         return () => {
             cancelled = true;
         };
-    }, [gameId, linkedAccountId, currentTurn]);
+    }, [activeTurn, gameId, linkedAccountId, currentTurn]);
 
     useEffect(() => {
         let cancelled = false;
@@ -176,8 +182,8 @@ export function TimeMachinePanel({
                 <div>
                     <h2>Time machine</h2>
                     <p>
-                        Browse stored end-of-turn intelligence snapshots rather
-                        than only public score history.
+                        Load a stored end-of-turn intelligence snapshot and make
+                        that turn the active turn for the dashboard.
                     </p>
                 </div>
 
@@ -215,6 +221,17 @@ export function TimeMachinePanel({
                                   : "Backfill turn"}
                         </button>
                     )}
+
+                    <button
+                        className="primary-button"
+                        disabled={intel === null || selectedTurn === activeTurn}
+                        onClick={() => onOpenTurn(selectedTurn)}
+                        type="button"
+                    >
+                        {selectedTurn === activeTurn
+                            ? `Turn ${selectedTurn} active`
+                            : `Open turn ${selectedTurn}`}
+                    </button>
                 </div>
             </div>
 
@@ -284,8 +301,9 @@ export function TimeMachinePanel({
                     </div>
 
                     <p className="time-machine-note">
-                        This is historical factual/combined intelligence for the
-                        selected turn. It does not overwrite the live map state.
+                        Opening this turn switches the turn-aware Dashboard
+                        sections to this historical snapshot. Current-only
+                        metadata is never presented as historical evidence.
                     </p>
                 </>
             )}
