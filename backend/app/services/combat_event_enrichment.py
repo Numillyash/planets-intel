@@ -203,6 +203,18 @@ def enrich_combat_events(
             equipment["replay_post_combat_crew"] = (
                 replay.get("post_combat_crew") if replay is not None else None
             )
+            equipment["replay_survived"] = (
+                replay.get("survived") if replay is not None else None
+            )
+            equipment["replay_destroyed"] = (
+                replay.get("destroyed") if replay is not None else None
+            )
+            equipment["replay_captured"] = (
+                replay.get("captured") if replay is not None else None
+            )
+            equipment["replay_cycles"] = (
+                replay.get("cycles") if replay is not None else None
+            )
             equipment["replay_engine"] = replay.get("engine") if replay is not None else None
             equipment["replay_basis"] = replay.get("basis") if replay is not None else None
 
