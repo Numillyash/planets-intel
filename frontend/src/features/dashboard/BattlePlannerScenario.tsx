@@ -65,7 +65,9 @@ export function BattlePlannerScenario({
     factualTrace: VcrReplayTraceResponse;
 }) {
     const factualStart = factualTrace.frames[0] ?? null;
-    const factualEnd = factualTrace.frames.at(-1) ?? null;
+    const factualEnd = factualTrace.frames.length > 0
+        ? factualTrace.frames[factualTrace.frames.length - 1]
+        : null;
     const [leftFighters, setLeftFighters] = useState("");
     const [leftTorps, setLeftTorps] = useState("");
     const [rightFighters, setRightFighters] = useState("");
@@ -107,7 +109,9 @@ export function BattlePlannerScenario({
         || parsed.rightFighters !== factualStart.right.fighters
         || parsed.rightTorps !== factualStart.right.torpedoes
     );
-    const scenarioFinal = scenario?.frames.at(-1) ?? null;
+    const scenarioFinal = scenario !== null && scenario.frames.length > 0
+        ? scenario.frames[scenario.frames.length - 1]
+        : null;
 
     async function runScenario() {
         if (!valid) return;
