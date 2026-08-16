@@ -116,6 +116,10 @@ export interface CombatEquipmentEvidence {
     replay_post_combat_shield?: number | null;
     replay_post_combat_damage?: number | null;
     replay_post_combat_crew?: number | null;
+    replay_survived?: boolean | null;
+    replay_destroyed?: boolean | null;
+    replay_captured?: boolean | null;
+    replay_cycles?: number | null;
     replay_engine?: string | null;
     replay_basis?: string | null;
     post_combat_torpedoes?: number | null;
