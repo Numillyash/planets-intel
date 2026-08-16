@@ -8,6 +8,7 @@ import { raceName } from "../../lib/races";
 interface PlayersTableProps {
     players: PlayerInfo[];
     latestScores: Map<number, ScoreHistoryItem>;
+    snapshotTurn?: number | null;
 }
 
 
@@ -29,13 +30,20 @@ function formatDelta(
 export function PlayersTable({
     players,
     latestScores,
+    snapshotTurn = null,
 }: PlayersTableProps) {
+    const historical = snapshotTurn !== null;
+
     return (
         <section className="panel">
             <div className="panel-header">
                 <div>
                     <h2>Players</h2>
-                    <p>Current public score snapshot</p>
+                    <p>
+                        {historical
+                            ? `Public score snapshot · turn ${snapshotTurn}`
+                            : "Current public score snapshot"}
+                    </p>
                 </div>
             </div>
 
@@ -60,10 +68,14 @@ export function PlayersTable({
                             const score = latestScores.get(
                                 player.slot_id,
                             );
+                            const scoreShips = score === undefined
+                                ? null
+                                : score.capital_ships + score.freighters;
 
-                            const isDead =
+                            const isDead = !historical && (
                                 player.status !== 1 ||
-                                player.username === "dead";
+                                player.username === "dead"
+                            );
 
                             return (
                                 <tr
@@ -88,16 +100,17 @@ export function PlayersTable({
 
                                     <td>
                                         {score?.planets ??
-                                            player.planets}
+                                            (historical ? "—" : player.planets)}
                                     </td>
 
                                     <td>
-                                        {player.ships}
+                                        {scoreShips ??
+                                            (historical ? "—" : player.ships)}
                                     </td>
 
                                     <td>
                                         {score?.starbases ??
-                                            player.starbases}
+                                            (historical ? "—" : player.starbases)}
                                     </td>
 
                                     <td className="numeric-important">
@@ -126,9 +139,11 @@ export function PlayersTable({
                                     </td>
 
                                     <td>
-                                        {player.turn_ready
-                                            ? "Ready"
-                                            : "—"}
+                                        {historical
+                                            ? "—"
+                                            : player.turn_ready
+                                                ? "Ready"
+                                                : "—"}
                                     </td>
                                 </tr>
                             );
