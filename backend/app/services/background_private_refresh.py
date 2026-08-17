@@ -5,7 +5,7 @@ import logging
 from contextlib import suppress
 from typing import Any
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 
 from app.db.session import SessionLocal
 from app.models.game import Game
@@ -24,9 +24,9 @@ MAX_CONCURRENT_GAME_REFRESHES = 2
 def running_private_refresh_targets() -> list[tuple[int, int]]:
     """Return unique ``(local_user_id, game_id)`` background refresh targets.
 
-    A target exists only when an active linked Planets.nu account owned by the
-    local user has a verified external account id that occurs in a canonical
-    player slot of a running game.  ``refresh_accessible_private_intel`` then
+    Membership is matched against canonical game slots by verified external
+    account id, with canonical username as a conservative fallback for dead or
+    sentinel-shaped player records. ``refresh_accessible_private_intel`` then
     refreshes every observer that user is allowed to combine for that game.
 
     This intentionally does not depend on any browser session or currently
@@ -41,12 +41,15 @@ def running_private_refresh_targets() -> list[tuple[int, int]]:
             )
             .join(
                 GamePlayerSlot,
-                GamePlayerSlot.account_id == PlanetsAccount.planets_account_id,
+                or_(
+                    GamePlayerSlot.account_id == PlanetsAccount.planets_account_id,
+                    func.lower(GamePlayerSlot.username)
+                    == func.lower(PlanetsAccount.planets_username),
+                ),
             )
             .join(Game, Game.id == GamePlayerSlot.game_id)
             .where(
                 PlanetsAccount.is_active.is_(True),
-                PlanetsAccount.planets_account_id.is_not(None),
                 or_(
                     Game.status_id == 2,
                     Game.status_name.ilike("running"),
