@@ -48,6 +48,11 @@ export interface CombatPlannerScenarioRequest {
     right: CombatPlannerSideOverrides;
 }
 
+export interface CombatPlannerRepeatRequest extends CombatPlannerScenarioRequest {
+    battles: number;
+    sampling_seed?: number | null;
+}
+
 export interface CombatPlannerAmmoState {
     fighters: number | null;
     torpedoes: number | null;
@@ -93,7 +98,7 @@ export interface CombatPlannerOddsResponse {
     vcr_id: number;
     supported: boolean;
     reason: string | null;
-    basis: "battle_planner_seed_sweep";
+    basis: "battle_planner_seed_sweep" | "battle_planner_repeat_sampling";
     source_basis: "factual_vcr";
     engine_basis?: string;
     persisted: false;
@@ -112,6 +117,12 @@ export interface CombatPlannerOddsResponse {
         last: number;
         count: number;
         assumption: string;
+    };
+    sampling?: {
+        mode: string;
+        requested_battles: number;
+        sampling_seed: number | null;
+        unique_start_seed_count: number;
     };
     outcomes: CombatPlannerOddsOutcome[];
     sides: {
@@ -192,7 +203,35 @@ export async function runCombatPlannerOdds(
     );
     if (!response.ok) {
         throw new Error(
-            `Battle odds request failed: ${response.status} ${response.statusText}`,
+            `Battle seed-series request failed: ${response.status} ${response.statusText}`,
+        );
+    }
+    return response.json() as Promise<CombatPlannerOddsResponse>;
+}
+
+export async function runCombatPlannerRepeatOdds(
+    gameId: number,
+    linkedAccountId: number,
+    turn: number,
+    vcrId: number,
+    scenario: CombatPlannerRepeatRequest,
+): Promise<CombatPlannerOddsResponse> {
+    const response = await fetch(
+        `/api/games/${gameId}/private-intel/history/combat-events/${turn}/${vcrId}/repeat-odds`
+        + `?linked_account_id=${linkedAccountId}`,
+        {
+            method: "POST",
+            credentials: "same-origin",
+            headers: {
+                Accept: "application/json",
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify(scenario),
+        },
+    );
+    if (!response.ok) {
+        throw new Error(
+            `Repeated battle simulation failed: ${response.status} ${response.statusText}`,
         );
     }
     return response.json() as Promise<CombatPlannerOddsResponse>;
