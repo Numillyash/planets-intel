@@ -1,6 +1,8 @@
 import {
+    useCallback,
     useEffect,
     useMemo,
+    useRef,
     useState,
 } from "react";
 
@@ -10,8 +12,12 @@ import {
     getLatestPrivateIntel,
     getPlanetsAccounts,
     getScoreHistory,
-    refreshPrivateIntel,
+    refreshAccessiblePrivateIntel,
 } from "../../api/client";
+import {
+    readRememberedObserverId,
+    rememberObserverId,
+} from "../../lib/observerSelection";
 import type {
     AccountGameSummary,
     CurrentUserResponse,
@@ -28,6 +34,8 @@ interface IntelboardRoute {
     observer: string | null;
     gameId: number | null;
 }
+
+const AUTO_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
 function parseIntelboardRoute(pathname: string): IntelboardRoute {
     const match = pathname.match(/^\/intelboard\/([^/]+)\/(\d+)\/?$/i);
@@ -114,6 +122,7 @@ export function DashboardApp({
     const [privateIntelError, setPrivateIntelError] = useState<string | null>(null);
 
     const [loggingOut, setLoggingOut] = useState(false);
+    const refreshInFlightRef = useRef(false);
 
     useEffect(() => {
         let cancelled = false;
@@ -130,6 +139,14 @@ export function DashboardApp({
                 );
                 setAccounts(activeAccounts);
                 setSelectedAccountId((previous) => {
+                    const routed = activeAccounts.find((account) =>
+                        sameObserver(
+                            initialRoute.observer,
+                            account.planets_username,
+                        ),
+                    );
+                    if (routed !== undefined) return routed.id;
+
                     if (
                         previous !== null &&
                         activeAccounts.some((account) => account.id === previous)
@@ -137,13 +154,15 @@ export function DashboardApp({
                         return previous;
                     }
 
-                    const routed = activeAccounts.find((account) =>
-                        sameObserver(
-                            initialRoute.observer,
-                            account.planets_username,
-                        ),
-                    );
-                    return routed?.id ?? activeAccounts[0]?.id ?? null;
+                    const rememberedId = readRememberedObserverId();
+                    if (
+                        rememberedId !== null &&
+                        activeAccounts.some((account) => account.id === rememberedId)
+                    ) {
+                        return rememberedId;
+                    }
+
+                    return activeAccounts[0]?.id ?? null;
                 });
             } catch (reason) {
                 if (!cancelled) {
@@ -163,6 +182,10 @@ export function DashboardApp({
             cancelled = true;
         };
     }, [accountsRevision, initialRoute.observer]);
+
+    useEffect(() => {
+        rememberObserverId(selectedAccountId);
+    }, [selectedAccountId]);
 
     useEffect(() => {
         let cancelled = false;
@@ -292,8 +315,7 @@ export function DashboardApp({
 
         if (
             selectedAccountId === null ||
-            selectedGameId === null ||
-            selectedGame === null
+            selectedGameId === null
         ) {
             setPrivateIntel(null);
             setPrivateIntelError(null);
@@ -303,10 +325,6 @@ export function DashboardApp({
 
         const accountId = selectedAccountId;
         const gameId = selectedGameId;
-        const expectedTurn = selectedGame.turn;
-        const isRunning =
-            selectedGame.status_name.toLowerCase() === "running" ||
-            selectedGame.status_id === 2;
 
         async function loadPrivateIntel() {
             setPrivateIntelLoading(true);
@@ -314,13 +332,7 @@ export function DashboardApp({
             setPrivateIntel(null);
 
             try {
-                let response = await getLatestPrivateIntel(gameId, accountId);
-                const needsRefresh = response === null || response.turn < expectedTurn;
-
-                if (needsRefresh && isRunning) {
-                    response = await refreshPrivateIntel(gameId, accountId);
-                }
-
+                const response = await getLatestPrivateIntel(gameId, accountId);
                 if (!cancelled) setPrivateIntel(response);
             } catch (reason) {
                 if (!cancelled) {
@@ -337,7 +349,71 @@ export function DashboardApp({
 
         void loadPrivateIntel();
         return () => { cancelled = true; };
-    }, [selectedAccountId, selectedGameId, selectedGame]);
+    }, [selectedAccountId, selectedGameId]);
+
+    const refreshDashboardData = useCallback(async () => {
+        if (
+            selectedAccountId === null ||
+            selectedGameId === null ||
+            refreshInFlightRef.current
+        ) {
+            return;
+        }
+
+        const accountId = selectedAccountId;
+        const gameId = selectedGameId;
+        refreshInFlightRef.current = true;
+        setPrivateIntelLoading(true);
+        setPrivateIntelError(null);
+
+        try {
+            await refreshAccessiblePrivateIntel(gameId);
+            const [intelResponse, historyResponse, gameResponse] = await Promise.all([
+                getLatestPrivateIntel(gameId, accountId),
+                getScoreHistory(gameId),
+                getGame(gameId),
+            ]);
+            setPrivateIntel(intelResponse);
+            setHistory(historyResponse);
+            setGame(gameResponse);
+        } catch (reason) {
+            setPrivateIntelError(
+                reason instanceof Error
+                    ? reason.message
+                    : "Failed to refresh dashboard intelligence",
+            );
+        } finally {
+            refreshInFlightRef.current = false;
+            setPrivateIntelLoading(false);
+        }
+    }, [selectedAccountId, selectedGameId]);
+
+    useEffect(() => {
+        if (
+            selectedAccountId === null ||
+            selectedGameId === null ||
+            selectedGame === null
+        ) {
+            return;
+        }
+
+        const isRunning =
+            selectedGame.status_name.toLowerCase() === "running" ||
+            selectedGame.status_id === 2;
+        if (!isRunning) return;
+
+        void refreshDashboardData();
+        const intervalId = window.setInterval(
+            () => void refreshDashboardData(),
+            AUTO_REFRESH_INTERVAL_MS,
+        );
+        return () => window.clearInterval(intervalId);
+    }, [
+        refreshDashboardData,
+        selectedAccountId,
+        selectedGame,
+        selectedGameId,
+    ]);
 
     const latestScores = useMemo(() => {
         const result = new Map<number, ScoreHistoryResponse["items"][number]>();
@@ -353,28 +429,7 @@ export function DashboardApp({
     }, [history]);
 
     async function handlePrivateIntelRefresh() {
-        if (selectedAccountId === null || selectedGameId === null) return;
-
-        setPrivateIntelLoading(true);
-        setPrivateIntelError(null);
-
-        try {
-            const response = await refreshPrivateIntel(
-                selectedGameId,
-                selectedAccountId,
-            );
-            setPrivateIntel(response);
-            setHistory(await getScoreHistory(selectedGameId));
-            setGame(await getGame(selectedGameId));
-        } catch (reason) {
-            setPrivateIntelError(
-                reason instanceof Error
-                    ? reason.message
-                    : "Failed to refresh private intelligence",
-            );
-        } finally {
-            setPrivateIntelLoading(false);
-        }
+        await refreshDashboardData();
     }
 
     async function handleLogout() {
