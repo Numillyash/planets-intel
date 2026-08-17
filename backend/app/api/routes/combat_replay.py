@@ -5,12 +5,16 @@ from app.models.user import AppUser
 from app.schemas.combat_planner import (
     BattleSimulatorOddsRequest,
     BattleSimulatorRunRequest,
+    BattleSimulatorSequenceOddsRequest,
+    BattleSimulatorSequenceRunRequest,
     CombatPlannerRepeatRequest,
     CombatPlannerScenarioRequest,
 )
 from app.services.battle_simulator import (
     run_battle_simulator_odds,
     run_battle_simulator_once,
+    run_battle_simulator_sequence_odds,
+    run_battle_simulator_sequence_once,
 )
 from app.services.combat_replay_sampling import get_combat_replay_repeat_odds
 from app.services.combat_replay_trace import (
@@ -167,6 +171,48 @@ def standalone_battle_simulator_odds(
         game_id=game_id,
         left=body.left.model_dump(),
         right=body.right.model_dump(),
+        battles=body.battles,
+        sampling_seed=body.sampling_seed,
+    )
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Game combat rule catalog not found",
+        )
+    return result
+
+
+@router.post("/games/{game_id}/battle-simulator/sequence/run")
+def standalone_battle_simulator_sequence_run(
+    body: BattleSimulatorSequenceRunRequest,
+    game_id: int = Path(gt=0),
+    _user: AppUser = Depends(require_user),
+) -> dict[str, object]:
+    result = run_battle_simulator_sequence_once(
+        game_id=game_id,
+        left=[item.model_dump() for item in body.left],
+        right=[item.model_dump() for item in body.right],
+        seed=body.seed,
+        sampling_seed=body.sampling_seed,
+    )
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Game combat rule catalog not found",
+        )
+    return result
+
+
+@router.post("/games/{game_id}/battle-simulator/sequence/odds")
+def standalone_battle_simulator_sequence_odds(
+    body: BattleSimulatorSequenceOddsRequest,
+    game_id: int = Path(gt=0),
+    _user: AppUser = Depends(require_user),
+) -> dict[str, object]:
+    result = run_battle_simulator_sequence_odds(
+        game_id=game_id,
+        left=[item.model_dump() for item in body.left],
+        right=[item.model_dump() for item in body.right],
         battles=body.battles,
         sampling_seed=body.sampling_seed,
     )
