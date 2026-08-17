@@ -5,6 +5,9 @@ export interface GameRuleCatalogResponse {
     races: Array<Record<string, unknown>>;
     advantages: Array<Record<string, unknown>>;
     hulls: Array<Record<string, unknown>>;
+    beams: Array<Record<string, unknown>>;
+    torpedos: Array<Record<string, unknown>>;
+    engines: Array<Record<string, unknown>>;
 }
 
 export async function getGameRuleCatalog(
