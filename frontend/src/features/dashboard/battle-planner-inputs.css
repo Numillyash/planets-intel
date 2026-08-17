@@ -1,0 +1,28 @@
+/* Shared controls for the standalone simulator and the VCR-derived validation lab. */
+.game-dashboard-shell .panel input[type="number"] {
+    box-sizing: border-box;
+    min-height: 36px;
+    padding: 7px 9px;
+    border: 1px solid #314761;
+    border-radius: 7px;
+    outline: none;
+    background: #0b1725;
+    color: #eaf2ff;
+    color-scheme: dark;
+    font: inherit;
+}
+
+.game-dashboard-shell .panel input[type="number"]:hover {
+    border-color: #4f7097;
+}
+
+.game-dashboard-shell .panel input[type="number"]:focus {
+    border-color: #6aa9ea;
+    box-shadow: 0 0 0 2px rgba(72, 136, 209, 0.16);
+}
+
+.game-dashboard-shell .panel input[type="number"]:disabled {
+    border-color: #273547;
+    background: #101925;
+    color: #8296ad;
+}
