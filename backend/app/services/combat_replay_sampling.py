@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 import random
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from app.services.combat_replay_trace import (
     CLASSIC_START_SEEDS,
@@ -13,6 +13,20 @@ from app.services.combat_replay_trace import (
 )
 from app.services.vcr_replay import ReplayUnsupported
 from app.services.vcr_replay_nu import replay_nuhost_from_nu_catalog
+
+
+def sample_battle_results(
+    seed_results: Sequence[dict[str, Any]],
+    *,
+    battles: int,
+    sampling_seed: int | None,
+) -> list[dict[str, Any]]:
+    if not seed_results:
+        raise ValueError("seed_results must not be empty")
+    if battles <= 0:
+        raise ValueError("battles must be positive")
+    rng = random.Random(sampling_seed)
+    return [rng.choice(seed_results) for _ in range(battles)]
 
 
 def get_combat_replay_repeat_odds(
@@ -82,8 +96,11 @@ def get_combat_replay_repeat_odds(
             "sides": {},
         }
 
-    rng = random.Random(sampling_seed)
-    trials = [rng.choice(seed_results) for _ in range(battles)]
+    trials = sample_battle_results(
+        seed_results,
+        battles=battles,
+        sampling_seed=sampling_seed,
+    )
     summary = _summarize_seed_results(trials)
     summary["sampling"] = {
         "mode": "random_start_seed_with_replacement",
