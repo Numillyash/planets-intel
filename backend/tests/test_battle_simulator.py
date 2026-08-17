@@ -1,6 +1,9 @@
+import random
 import unittest
 
 from app.services.battle_simulator import (
+    _balance_applied,
+    _balance_probability,
     _combatant_payload,
     _fed_recover_shields,
     _functional_weapon_limit,
@@ -48,6 +51,17 @@ class BattleSimulatorHelperTests(unittest.TestCase):
                 heavy_ship,
             )
         )
+
+    def test_right_balance_modes_are_explicit_and_eligibility_gated(self) -> None:
+        rng = random.Random(12345)
+
+        self.assertTrue(_balance_applied(eligible=True, mode="on", rng=rng))
+        self.assertFalse(_balance_applied(eligible=True, mode="off", rng=rng))
+        self.assertFalse(_balance_applied(eligible=False, mode="on", rng=rng))
+        self.assertEqual(_balance_probability(True, "on"), 1.0)
+        self.assertEqual(_balance_probability(True, "off"), 0.0)
+        self.assertEqual(_balance_probability(True, "auto"), 0.60)
+        self.assertEqual(_balance_probability(False, "auto"), 0.0)
 
     def test_right_balance_adds_mass_without_mutating_source_payload(self) -> None:
         payload = {
