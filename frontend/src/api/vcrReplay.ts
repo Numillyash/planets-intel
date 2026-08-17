@@ -1,3 +1,28 @@
+export interface VcrFighterTrack {
+    index: number;
+    status: number;
+    x: number;
+}
+
+export interface VcrReplayEffect {
+    kind:
+        | "torpedo_launch"
+        | "fighter_launch"
+        | "fighter_attack"
+        | "beam_ship"
+        | "beam_fighter"
+        | "fighter_dogfight_loss"
+        | string;
+    source?: "left" | "right";
+    target?: "left" | "right";
+    lost_side?: "left" | "right";
+    count?: number;
+    fighter_id?: number;
+    x?: number;
+    source_x?: number;
+    target_x?: number;
+}
+
 export interface VcrReplaySideFrame {
     object_id: number | null;
     owner_id: number | null;
@@ -12,6 +37,9 @@ export interface VcrReplaySideFrame {
     torpedoes: number;
     fighters: number;
     fighters_out: number;
+    fighter_tracks?: VcrFighterTrack[];
+    beam_slots?: number[];
+    launcher_slots?: number[];
     beam_charge: number | null;
     launcher_charge: number | null;
 }
@@ -22,6 +50,7 @@ export interface VcrReplayFrame {
     left: VcrReplaySideFrame;
     right: VcrReplaySideFrame;
     events: string[];
+    effects?: VcrReplayEffect[];
 }
 
 export interface VcrReplayTraceResponse {
