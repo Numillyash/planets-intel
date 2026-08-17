@@ -119,15 +119,31 @@ export function normalizeShipForRace(
     raceId: number | null,
 ): MaterializedCombatant {
     if (value.setup.kind !== "ship") return value;
+    const previousRaceId = value.combatant.race_id;
+    const raceChanged = previousRaceId !== raceId;
     const fed = raceId === 1;
     const limit = functionalWeaponLimit(raceId, value.combatant.damage, fed);
     const setup = value.setup;
+
+    // Fury/Privateer combat advantages can be disabled in custom/campaign
+    // contexts, so once the user toggles them we preserve the explicit value.
+    // Changing the selected race resets the corresponding modifier to the
+    // standard racial default and exposes it in the editor for adjustment.
+    const beamChargeRate = raceId === 4
+        ? (raceChanged ? 2 : Math.max(1, value.combatant.beam_charge_rate))
+        : 1;
+    const beamKillRate = raceId === 5
+        ? (raceChanged ? 3 : Math.max(1, value.combatant.beam_kill_rate))
+        : 1;
+
     return {
         ...value,
         combatant: {
             ...value.combatant,
             race_id: raceId,
             federation_crew_bonus: fed,
+            beam_charge_rate: beamChargeRate,
+            beam_kill_rate: beamKillRate,
             mass: Math.max(1, setup.baseMass + (fed ? 50 : 0)),
             physical_beam_count: setup.physicalBeams,
             physical_launcher_count: setup.physicalLaunchers,
@@ -186,6 +202,12 @@ function materializeShip(
         torpedoes = 0;
         warnings.push("Torpedo stock unknown: 0 is a simulation assumption, not a fact.");
     }
+    if (raceId === 4) {
+        warnings.push("Fury 2× beam recharge is enabled for this simulation; toggle it if the advantage is disabled for this hull/game.");
+    }
+    if (raceId === 5) {
+        warnings.push("Privateer 3× beam crew-kill is enabled for this simulation; toggle it if the advantage is disabled in this game.");
+    }
 
     const initial: MaterializedCombatant = {
         warnings,
@@ -220,8 +242,8 @@ function materializeShip(
             mass: baseMass,
             torpedoes: torpedoes ?? 0,
             fighters: fighters ?? 0,
-            beam_kill_rate: 1,
-            beam_charge_rate: 1,
+            beam_kill_rate: raceId === 5 ? 3 : 1,
+            beam_charge_rate: raceId === 4 ? 2 : 1,
             torp_charge_rate: 1,
             torp_miss_rate: 35,
             crew_defense_rate: 0,
@@ -246,6 +268,8 @@ function materializeManualHull(
     if (physicalBeams > 0) warnings.push("Manual hull: choose beam technology.");
     if (physicalLaunchers > 0) warnings.push("Manual hull: choose torpedo technology and ammunition.");
     if (physicalBays > 0) warnings.push("Manual hull: set fighter stock.");
+    if (raceId === 4) warnings.push("Fury 2× beam recharge defaults on; it can be disabled in the editor.");
+    if (raceId === 5) warnings.push("Privateer 3× beam crew-kill defaults on; it can be disabled in the editor.");
     const initial: MaterializedCombatant = {
         warnings,
         setup: {
@@ -279,8 +303,8 @@ function materializeManualHull(
             mass: baseMass,
             torpedoes: 0,
             fighters: 0,
-            beam_kill_rate: 1,
-            beam_charge_rate: 1,
+            beam_kill_rate: raceId === 5 ? 3 : 1,
+            beam_charge_rate: raceId === 4 ? 2 : 1,
             torp_charge_rate: 1,
             torp_miss_rate: 35,
             crew_defense_rate: 0,
