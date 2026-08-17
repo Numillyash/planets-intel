@@ -26,4 +26,7 @@ def get_game_rule_catalog_view(*, game_id: int) -> dict[str, Any] | None:
             "races": list(catalog.races),
             "advantages": list(catalog.advantages),
             "hulls": list(catalog.hulls),
+            "beams": list(catalog.beams),
+            "torpedos": list(catalog.torpedos),
+            "engines": list(catalog.engines),
         }
