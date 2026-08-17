@@ -37,6 +37,7 @@ class BattleSimulatorCombatant(BaseModel):
     owner_id: int | None = Field(default=None, ge=0)
     race_id: int | None = Field(default=None, ge=0)
     hull_id: int = Field(ge=0)
+    has_starbase: bool = False
     beam_count: int = Field(ge=0, le=10)
     launcher_count: int = Field(ge=0, le=10)
     bay_count: int = Field(ge=0, le=30)
