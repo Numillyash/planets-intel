@@ -172,6 +172,7 @@ def standalone_battle_simulator_odds(
         left=body.left.model_dump(),
         right=body.right.model_dump(),
         battles=body.battles,
+        right_balance_bonus=body.right_balance_bonus,
         sampling_seed=body.sampling_seed,
     )
     if result is None:
@@ -193,6 +194,7 @@ def standalone_battle_simulator_sequence_run(
         left=[item.model_dump() for item in body.left],
         right=[item.model_dump() for item in body.right],
         seed=body.seed,
+        right_balance_bonus=body.right_balance_bonus,
         sampling_seed=body.sampling_seed,
     )
     if result is None:
@@ -214,6 +216,7 @@ def standalone_battle_simulator_sequence_odds(
         left=[item.model_dump() for item in body.left],
         right=[item.model_dump() for item in body.right],
         battles=body.battles,
+        right_balance_bonus=body.right_balance_bonus,
         sampling_seed=body.sampling_seed,
     )
     if result is None:
