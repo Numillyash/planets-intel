@@ -1,3 +1,5 @@
+import type { VcrReplayFrame } from "./vcrReplay";
+
 export type BattleSimulatorSourceKind =
     | "known_ship"
     | "known_planet"
@@ -13,6 +15,10 @@ export interface BattleSimulatorCombatant {
     race_id: number | null;
     hull_id: number;
     has_starbase: boolean;
+    physical_beam_count: number | null;
+    physical_launcher_count: number | null;
+    physical_bay_count: number | null;
+    federation_crew_bonus: boolean;
     beam_count: number;
     launcher_count: number;
     bay_count: number;
@@ -56,6 +62,7 @@ export interface BattleSimulatorRunResponse {
     engine?: string;
     cycles?: number;
     result?: string[];
+    frames: VcrReplayFrame[];
     left?: BattleSimulatorTerminalSide;
     right?: BattleSimulatorTerminalSide;
     start_seed?: number;
@@ -107,7 +114,92 @@ export interface BattleSimulatorOddsResponse {
     };
 }
 
-export async function runStandaloneBattle(
+export interface BattleSimulatorSequenceTerminalCombatant extends BattleSimulatorCombatant {
+    index: number;
+    status: "unfought" | "fighting" | "survived" | "destroyed" | "captured";
+}
+
+export interface BattleSimulatorSequenceEngagement {
+    number: number;
+    left_index: number;
+    right_index: number;
+    start_seed: number;
+    right_balance_applied: boolean;
+    result: string[];
+    cycles: number;
+    left: BattleSimulatorTerminalSide;
+    right: BattleSimulatorTerminalSide;
+}
+
+export interface BattleSimulatorSequenceRunResponse {
+    game_id: number;
+    supported: boolean;
+    reason: string | null;
+    basis: "standalone_battle_sequence";
+    persisted: false;
+    winner?: "left" | "right" | "draw" | "timeout" | "unknown";
+    engagements?: BattleSimulatorSequenceEngagement[];
+    left?: BattleSimulatorSequenceTerminalCombatant[];
+    right?: BattleSimulatorSequenceTerminalCombatant[];
+}
+
+export interface BattleSimulatorSequenceCombatantOdds {
+    index: number;
+    name: string | null;
+    source_id: number | null;
+    fought_count: number;
+    fought_percent: number;
+    status_counts: Record<string, number>;
+    mean_final_shield: number | null;
+    mean_final_damage: number | null;
+    mean_final_crew: number | null;
+    mean_final_torpedoes: number | null;
+    mean_final_fighters: number | null;
+}
+
+export interface BattleSimulatorSequenceOddsResponse {
+    game_id: number;
+    supported: boolean;
+    reason: string | null;
+    basis: "standalone_battle_sequence_sampling";
+    persisted: false;
+    sample_count: number;
+    outcomes?: Array<{
+        outcome: string;
+        count: number;
+        percent: number;
+    }>;
+    sides?: {
+        left: BattleSimulatorSequenceCombatantOdds[];
+        right: BattleSimulatorSequenceCombatantOdds[];
+    };
+    sampling?: {
+        requested_battles: number;
+        sampling_seed: number | null;
+        classic_start_seeds: number;
+        right_balance_probability_when_eligible: number;
+        unique_engagement_replays_computed: number;
+        mean_engagements: number;
+    };
+}
+
+async function postJson<T>(url: string, body: unknown, label: string): Promise<T> {
+    const response = await fetch(url, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+        throw new Error(`${label}: ${response.status} ${response.statusText}`);
+    }
+    return response.json() as Promise<T>;
+}
+
+export function runStandaloneBattle(
     gameId: number,
     body: {
         left: BattleSimulatorCombatant;
@@ -117,24 +209,14 @@ export async function runStandaloneBattle(
         sampling_seed?: number | null;
     },
 ): Promise<BattleSimulatorRunResponse> {
-    const response = await fetch(`/api/games/${gameId}/battle-simulator/run`, {
-        method: "POST",
-        credentials: "same-origin",
-        headers: {
-            Accept: "application/json",
-            "Content-Type": "application/json",
-        },
-        body: JSON.stringify(body),
-    });
-    if (!response.ok) {
-        throw new Error(
-            `Battle simulator request failed: ${response.status} ${response.statusText}`,
-        );
-    }
-    return response.json() as Promise<BattleSimulatorRunResponse>;
+    return postJson<BattleSimulatorRunResponse>(
+        `/api/games/${gameId}/battle-simulator/run`,
+        body,
+        "Battle simulator request failed",
+    );
 }
 
-export async function runStandaloneBattleOdds(
+export function runStandaloneBattleOdds(
     gameId: number,
     body: {
         left: BattleSimulatorCombatant;
@@ -143,19 +225,41 @@ export async function runStandaloneBattleOdds(
         sampling_seed?: number | null;
     },
 ): Promise<BattleSimulatorOddsResponse> {
-    const response = await fetch(`/api/games/${gameId}/battle-simulator/odds`, {
-        method: "POST",
-        credentials: "same-origin",
-        headers: {
-            Accept: "application/json",
-            "Content-Type": "application/json",
-        },
-        body: JSON.stringify(body),
-    });
-    if (!response.ok) {
-        throw new Error(
-            `Battle odds request failed: ${response.status} ${response.statusText}`,
-        );
-    }
-    return response.json() as Promise<BattleSimulatorOddsResponse>;
+    return postJson<BattleSimulatorOddsResponse>(
+        `/api/games/${gameId}/battle-simulator/odds`,
+        body,
+        "Battle odds request failed",
+    );
+}
+
+export function runStandaloneBattleSequence(
+    gameId: number,
+    body: {
+        left: BattleSimulatorCombatant[];
+        right: BattleSimulatorCombatant[];
+        seed: number;
+        sampling_seed?: number | null;
+    },
+): Promise<BattleSimulatorSequenceRunResponse> {
+    return postJson<BattleSimulatorSequenceRunResponse>(
+        `/api/games/${gameId}/battle-simulator/sequence/run`,
+        body,
+        "Battle sequence request failed",
+    );
+}
+
+export function runStandaloneBattleSequenceOdds(
+    gameId: number,
+    body: {
+        left: BattleSimulatorCombatant[];
+        right: BattleSimulatorCombatant[];
+        battles: number;
+        sampling_seed?: number | null;
+    },
+): Promise<BattleSimulatorSequenceOddsResponse> {
+    return postJson<BattleSimulatorSequenceOddsResponse>(
+        `/api/games/${gameId}/battle-simulator/sequence/odds`,
+        body,
+        "Battle sequence odds request failed",
+    );
 }
