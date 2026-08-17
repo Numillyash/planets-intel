@@ -3,9 +3,13 @@ import { useEffect, useMemo, useState } from "react";
 import {
     runStandaloneBattle,
     runStandaloneBattleOdds,
+    runStandaloneBattleSequence,
+    runStandaloneBattleSequenceOdds,
     type BattleSimulatorCombatant,
     type BattleSimulatorOddsResponse,
     type BattleSimulatorRunResponse,
+    type BattleSimulatorSequenceOddsResponse,
+    type BattleSimulatorSequenceRunResponse,
 } from "../../api/battleSimulator";
 import {
     getGameRuleCatalog,
@@ -20,27 +24,45 @@ import type {
 import type { PrivateIntelMapResponse } from "../../types/intel";
 import {
     factNumber,
-    factString,
     planetFacts,
     shipFacts,
     starbaseFacts,
 } from "../map/observationView";
+import { CombatReplayPlayer } from "./CombatReplayPlayer";
+import "./battle-simulator.css";
 
 
-type CandidateKey = `ship:${number}` | `planet:${number}`;
+type CandidateKey = `ship:${number}` | `planet:${number}` | `hull:${number}`;
+type SideName = "left" | "right";
+
+type ShipSetup = {
+    kind: "ship";
+    baseMass: number;
+    physicalBeams: number;
+    physicalLaunchers: number;
+    physicalBays: number;
+};
+
+type PlanetSetup = {
+    kind: "planet";
+    planetDefense: number;
+    starbasePresent: boolean;
+    starbaseDefense: number;
+    starbaseBeamTech: number;
+    starbaseFighters: number;
+};
 
 interface MaterializedCombatant {
     combatant: BattleSimulatorCombatant;
     warnings: string[];
+    setup: ShipSetup | PlanetSetup;
 }
 
 function intValue(record: Record<string, unknown>, ...keys: string[]): number | null {
     for (const key of keys) {
         const value = record[key];
         if (typeof value === "number" && Number.isInteger(value)) return value;
-        if (typeof value === "string" && /^-?\d+$/.test(value.trim())) {
-            return Number(value);
-        }
+        if (typeof value === "string" && /^-?\d+$/.test(value.trim())) return Number(value);
     }
     return null;
 }
@@ -55,7 +77,9 @@ function textValue(record: Record<string, unknown>, ...keys: string[]): string |
 
 function boolSetting(settings: Record<string, unknown>, ...keys: string[]): boolean | null {
     for (const key of keys) {
-        const direct = settings[key];
+        const direct = Object.entries(settings).find(
+            ([candidate]) => candidate.toLowerCase() === key.toLowerCase(),
+        )?.[1];
         if (typeof direct === "boolean") return direct;
         if (typeof direct === "number") return direct !== 0;
         if (typeof direct === "string") {
@@ -63,23 +87,13 @@ function boolSetting(settings: Record<string, unknown>, ...keys: string[]): bool
             if (["true", "1", "yes"].includes(folded)) return true;
             if (["false", "0", "no"].includes(folded)) return false;
         }
-        const match = Object.entries(settings).find(
-            ([candidate]) => candidate.toLowerCase() === key.toLowerCase(),
-        );
-        if (match !== undefined && match[0] !== key) {
-            const value = match[1];
-            if (typeof value === "boolean") return value;
-            if (typeof value === "number") return value !== 0;
-        }
     }
     return null;
 }
 
 function numericIds(value: unknown): number[] {
     if (Array.isArray(value)) return value.flatMap((item) => numericIds(item));
-    if (typeof value === "number" && Number.isInteger(value) && value > 0) {
-        return [value];
-    }
+    if (typeof value === "number" && Number.isInteger(value) && value > 0) return [value];
     if (typeof value === "string") {
         return (value.match(/\d+/g) ?? [])
             .map(Number)
@@ -136,15 +150,76 @@ function componentIdByName(
     return record === undefined ? null : intValue(record, "id");
 }
 
-function effectiveWeaponLimit(
-    raceId: number | null,
-    damage: number,
-    federationCrewBonus: boolean,
-): number {
-    if (federationCrewBonus && raceId === 1) return 99;
+function raceLabel(catalog: GameRuleCatalogResponse, raceId: number | null): string {
+    if (raceId === null) return "No racial bonus";
+    const race = catalog.races.find((item) => intValue(item, "id") === raceId);
+    return race === undefined
+        ? `Race #${raceId}`
+        : textValue(race, "name", "shortname") ?? `Race #${raceId}`;
+}
+
+function effectiveWeaponLimit(raceId: number | null, damage: number, fed: boolean): number {
+    if (fed) return 10;
     const decade = Math.floor(Math.max(0, damage) / 10);
     if (raceId === 2) return Math.min(10, Math.max(0, 15 - decade));
     return Math.max(0, 10 - decade);
+}
+
+function raceRates(
+    raceId: number | null,
+    catalog: GameRuleCatalogResponse,
+    knownAdvantages: string[] = [],
+) {
+    const fed = raceId === 1;
+    const furySetting = boolSetting(
+        catalog.settings,
+        "fascistdoublebeams",
+        "doublebeams",
+    );
+    const fury = raceId === 4 && (
+        hasAdvantage(knownAdvantages, "2x faster beams") || furySetting === true
+    );
+    const privateerSetting = boolSetting(
+        catalog.settings,
+        "privateer3xbeamcrewkill",
+        "priv3xbeamkill",
+        "privateerbeamcrewkill",
+    );
+    const privateer = raceId === 5 && privateerSetting !== false;
+    return { fed, fury, privateer };
+}
+
+function normalizeShipForRace(
+    value: MaterializedCombatant,
+    raceId: number | null,
+    catalog: GameRuleCatalogResponse,
+): MaterializedCombatant {
+    if (value.setup.kind !== "ship") return value;
+    const rates = raceRates(raceId, catalog);
+    const damage = value.combatant.damage;
+    const limit = effectiveWeaponLimit(raceId, damage, rates.fed);
+    const setup = value.setup;
+    const combatant = {
+        ...value.combatant,
+        race_id: raceId,
+        federation_crew_bonus: rates.fed,
+        mass: Math.max(1, setup.baseMass + (rates.fed ? 50 : 0)),
+        physical_beam_count: setup.physicalBeams,
+        physical_launcher_count: setup.physicalLaunchers,
+        physical_bay_count: setup.physicalBays,
+        beam_count: rates.fed
+            ? setup.physicalBeams
+            : Math.min(setup.physicalBeams, limit),
+        launcher_count: rates.fed
+            ? setup.physicalLaunchers
+            : Math.min(setup.physicalLaunchers, limit),
+        bay_count: rates.fed
+            ? setup.physicalBays + (setup.physicalBays > 0 ? 3 : 0)
+            : Math.min(setup.physicalBays, limit),
+        beam_kill_rate: rates.privateer ? 3 : 1,
+        beam_charge_rate: rates.fury ? 2 : 1,
+    };
+    return { ...value, combatant };
 }
 
 function materializeShip(
@@ -158,33 +233,13 @@ function materializeShip(
     const player = playerForOwner(game, ship.owner_id);
     const raceId = player?.race_id ?? null;
     const advantages = activeAdvantageNames(game, catalog, ship.owner_id);
-
-    const hullBeams = hull === null ? null : intValue(hull, "beams", "beamcount");
-    const hullLaunchers = hull === null
-        ? null
-        : intValue(hull, "launchers", "torpedotubes", "tubes");
-    const hullBays = hull === null ? null : intValue(hull, "fighterbays", "bays");
-    const hullMass = hull === null ? null : intValue(hull, "mass");
-    const hullCrew = hull === null ? null : intValue(hull, "crew");
-
+    const physicalBeams = facts.beams ?? (hull === null ? 0 : intValue(hull, "beams", "beamcount") ?? 0);
+    const physicalLaunchers = facts.tubes ?? (hull === null ? 0 : intValue(hull, "launchers", "torpedotubes", "tubes") ?? 0);
+    const physicalBays = facts.bays ?? (hull === null ? 0 : intValue(hull, "fighterbays", "bays") ?? 0);
+    const baseMass = hull === null ? 1 : intValue(hull, "mass") ?? 1;
+    const hullCrew = hull === null ? 1 : intValue(hull, "crew") ?? 1;
     const damage = facts.damage ?? 0;
-    if (facts.damage === null) warnings.push("Damage unknown: simulator assumes 0%.");
-
-    const fedSetting = boolSetting(
-        catalog.settings,
-        "fedcrewbonus",
-        "federationcrewbonus",
-        "allowfedcrewbonus",
-    );
-    const federationCrewBonus = raceId === 1 && fedSetting !== false;
-    if (federationCrewBonus && fedSetting === null) {
-        warnings.push("Federation Crew Bonus assumed enabled from the standard racial rule.");
-    }
-
-    const physicalBeams = facts.beams ?? hullBeams ?? 0;
-    const physicalLaunchers = facts.tubes ?? hullLaunchers ?? 0;
-    const physicalBays = facts.bays ?? hullBays ?? 0;
-    const limit = effectiveWeaponLimit(raceId, damage, federationCrewBonus);
+    if (facts.damage === null) warnings.push("Damage unknown: 0% is a simulation assumption.");
 
     const beamId = factNumber(ship.payload, "beamid", "beam_id")
         ?? componentIdByName(catalog.beams, facts.beamName)
@@ -192,13 +247,8 @@ function materializeShip(
     const torpedoId = factNumber(ship.payload, "torpedoid", "torpedo_id")
         ?? componentIdByName(catalog.torpedos, facts.torpedoName)
         ?? 0;
-
-    if (physicalBeams > 0 && beamId === 0) {
-        warnings.push("Beam type unknown: choose a beam before trusting the result.");
-    }
-    if (physicalLaunchers > 0 && torpedoId === 0) {
-        warnings.push("Torpedo type unknown: choose a torpedo before trusting the result.");
-    }
+    if (physicalBeams > 0 && beamId === 0) warnings.push("Beam type unknown: select a beam weapon.");
+    if (physicalLaunchers > 0 && torpedoId === 0) warnings.push("Torpedo type unknown: select a torpedo weapon.");
 
     let fighters = facts.fighters;
     if (physicalBays > 0 && fighters === null) {
@@ -210,46 +260,22 @@ function materializeShip(
         torpedoes = 0;
         warnings.push("Torpedo stock unknown: 0 is a simulation assumption, not a fact.");
     }
+    const shieldFact = factNumber(ship.payload, "shield");
+    const shield = shieldFact ?? 100;
+    if (shieldFact === null) warnings.push("Shield not observed: simulator starts at 100%.");
+    if (ship.hull_id === null || hull === null) warnings.push("Hull catalog entry unavailable; mass/crew use conservative fallbacks.");
 
-    const shield = factNumber(ship.payload, "shield") ?? 100;
-    if (factNumber(ship.payload, "shield") === null) {
-        warnings.push("Shield not stored in ship observation: simulator uses turn-start 100%.");
-    }
-
-    const furyFastBeams = hasAdvantage(advantages, "2x faster beams")
-        || (
-            raceId === 4
-            && boolSetting(catalog.settings, "fascistdoublebeams") === true
-        );
-    const privateerCrewKill = hasAdvantage(advantages, "3x beam crew kill")
-        || (raceId === 5 && player?.active_advantages.trim() === "");
-    if (raceId === 5 && player?.active_advantages.trim() === "") {
-        warnings.push("Privateer 3x beam crew kill assumed from the default racial rule.");
-    }
-
-    const baseBays = federationCrewBonus && physicalBays > 0
-        ? physicalBays + 3
-        : physicalBays;
-    const effectiveBeams = Math.min(physicalBeams, limit);
-    const effectiveLaunchers = Math.min(physicalLaunchers, limit);
-    const effectiveBays = federationCrewBonus
-        ? baseBays
-        : Math.min(baseBays, limit);
-
-    if (damage > 0 && (
-        effectiveBeams !== physicalBeams
-        || effectiveLaunchers !== physicalLaunchers
-        || effectiveBays !== baseBays
-    )) {
-        warnings.push("Damaged-ship functional weapon cap applied for this engagement.");
-    }
-
-    if (ship.hull_id === null || hull === null) {
-        warnings.push("Hull catalog entry unavailable: mass/crew may need manual correction.");
-    }
-
+    const rates = raceRates(raceId, catalog, advantages);
+    const limit = effectiveWeaponLimit(raceId, damage, rates.fed);
     return {
         warnings,
+        setup: {
+            kind: "ship",
+            baseMass,
+            physicalBeams,
+            physicalLaunchers,
+            physicalBays,
+        },
         combatant: {
             source_kind: "known_ship",
             source_id: ship.ship_id,
@@ -259,23 +285,139 @@ function materializeShip(
             race_id: raceId,
             hull_id: ship.hull_id ?? 1,
             has_starbase: false,
-            beam_count: effectiveBeams,
-            launcher_count: effectiveLaunchers,
-            bay_count: effectiveBays,
+            physical_beam_count: physicalBeams,
+            physical_launcher_count: physicalLaunchers,
+            physical_bay_count: physicalBays,
+            federation_crew_bonus: rates.fed,
+            beam_count: rates.fed ? physicalBeams : Math.min(physicalBeams, limit),
+            launcher_count: rates.fed ? physicalLaunchers : Math.min(physicalLaunchers, limit),
+            bay_count: rates.fed
+                ? physicalBays + (physicalBays > 0 ? 3 : 0)
+                : Math.min(physicalBays, limit),
             beam_id: beamId,
             torpedo_id: torpedoId,
             shield,
             damage,
-            crew: facts.crew ?? hullCrew ?? 1,
-            mass: Math.max(1, (hullMass ?? 1) + (federationCrewBonus ? 50 : 0)),
+            crew: facts.crew ?? hullCrew,
+            mass: Math.max(1, baseMass + (rates.fed ? 50 : 0)),
             torpedoes: torpedoes ?? 0,
             fighters: fighters ?? 0,
-            beam_kill_rate: privateerCrewKill ? 3 : 1,
-            beam_charge_rate: furyFastBeams ? 2 : 1,
+            beam_kill_rate: rates.privateer ? 3 : 1,
+            beam_charge_rate: rates.fury ? 2 : 1,
             torp_charge_rate: 1,
             torp_miss_rate: 35,
             crew_defense_rate: 0,
             notes: warnings,
+        },
+    };
+}
+
+function materializeManualHull(
+    hullId: number,
+    raceId: number | null,
+    catalog: GameRuleCatalogResponse,
+): MaterializedCombatant {
+    const hull = hullRecord(catalog, hullId);
+    const physicalBeams = hull === null ? 0 : intValue(hull, "beams", "beamcount") ?? 0;
+    const physicalLaunchers = hull === null ? 0 : intValue(hull, "launchers", "tubes") ?? 0;
+    const physicalBays = hull === null ? 0 : intValue(hull, "fighterbays", "bays") ?? 0;
+    const baseMass = hull === null ? 1 : intValue(hull, "mass") ?? 1;
+    const crew = hull === null ? 1 : intValue(hull, "crew") ?? 1;
+    const warnings: string[] = [];
+    if (physicalBeams > 0) warnings.push("Manual hull: choose beam technology.");
+    if (physicalLaunchers > 0) warnings.push("Manual hull: choose torpedo technology and ammunition.");
+    if (physicalBays > 0) warnings.push("Manual hull: set fighter stock.");
+    const rates = raceRates(raceId, catalog);
+    const name = hull === null
+        ? `Hull #${hullId}`
+        : textValue(hull, "name") ?? `Hull #${hullId}`;
+    return {
+        warnings,
+        setup: { kind: "ship", baseMass, physicalBeams, physicalLaunchers, physicalBays },
+        combatant: {
+            source_kind: "manual",
+            source_id: hullId,
+            name,
+            object_id: null,
+            owner_id: null,
+            race_id: raceId,
+            hull_id: hullId,
+            has_starbase: false,
+            physical_beam_count: physicalBeams,
+            physical_launcher_count: physicalLaunchers,
+            physical_bay_count: physicalBays,
+            federation_crew_bonus: rates.fed,
+            beam_count: physicalBeams,
+            launcher_count: physicalLaunchers,
+            bay_count: physicalBays + (rates.fed && physicalBays > 0 ? 3 : 0),
+            beam_id: 0,
+            torpedo_id: 0,
+            shield: 100,
+            damage: 0,
+            crew,
+            mass: Math.max(1, baseMass + (rates.fed ? 50 : 0)),
+            torpedoes: 0,
+            fighters: 0,
+            beam_kill_rate: rates.privateer ? 3 : 1,
+            beam_charge_rate: rates.fury ? 2 : 1,
+            torp_charge_rate: 1,
+            torp_miss_rate: 35,
+            crew_defense_rate: 0,
+            notes: warnings,
+        },
+    };
+}
+
+function rebuildPlanet(
+    value: MaterializedCombatant,
+    setup: PlanetSetup,
+    raceId: number | null,
+    catalog: GameRuleCatalogResponse,
+): MaterializedCombatant {
+    const defense = Math.max(0, Math.trunc(setup.planetDefense));
+    const baseDefense = setup.starbasePresent
+        ? Math.max(0, Math.trunc(setup.starbaseDefense))
+        : 0;
+    const baseFighters = setup.starbasePresent
+        ? Math.max(0, Math.trunc(setup.starbaseFighters))
+        : 0;
+    const canFight = defense > 0;
+    const planetFighters = canFight
+        ? Math.round(Math.sqrt(Math.max(0, defense - 0.75)))
+        : 0;
+    const planetBays = canFight ? Math.trunc(Math.sqrt(defense)) : 0;
+    const beamCount = canFight
+        ? Math.min(10, Math.round(Math.sqrt(Math.max(0, defense + baseDefense) / 3)))
+        : 0;
+    const planetBeamSlot = canFight
+        ? Math.max(1, Math.min(10, Math.trunc(Math.sqrt(defense / 2))))
+        : 0;
+    const baseBeamSlot = setup.starbasePresent
+        ? Math.max(0, Math.min(10, Math.trunc(setup.starbaseBeamTech)))
+        : 0;
+    const rates = raceRates(raceId, catalog);
+    return {
+        ...value,
+        setup,
+        combatant: {
+            ...value.combatant,
+            race_id: raceId,
+            has_starbase: setup.starbasePresent,
+            physical_beam_count: null,
+            physical_launcher_count: null,
+            physical_bay_count: null,
+            federation_crew_bonus: false,
+            beam_count: beamCount,
+            launcher_count: 0,
+            bay_count: canFight ? planetBays + (setup.starbasePresent ? 5 : 0) : 0,
+            beam_id: beamCount > 0 ? Math.max(planetBeamSlot, baseBeamSlot) : 0,
+            torpedo_id: 0,
+            shield: canFight ? 100 : 0,
+            mass: Math.max(1, 100 + defense + baseDefense),
+            torpedoes: 0,
+            fighters: canFight ? planetFighters + baseFighters : 0,
+            beam_kill_rate: rates.privateer ? 3 : 1,
+            beam_charge_rate: rates.fury ? 2 : 1,
         },
     };
 }
@@ -289,211 +431,443 @@ function materializePlanet(
     const warnings: string[] = [];
     const facts = planetFacts(planet);
     const base = starbase === null ? null : starbaseFacts(starbase);
-    const defense = facts.defense ?? 0;
-    if (facts.defense === null) {
-        warnings.push("Planetary defense unknown: simulator assumes 0 posts.");
-    }
-    const baseDefense = base?.defense ?? 0;
-    if (starbase !== null && base?.defense === null) {
-        warnings.push("Starbase defense unknown: simulator assumes 0 base defense posts.");
-    }
-    const baseFighters = base?.fighters ?? 0;
-    if (starbase !== null && base?.fighters === null) {
-        warnings.push("Starbase fighter stock unknown: simulator assumes 0.");
-    }
-
-    const planetFighters = Math.round(Math.sqrt(Math.max(0, defense - 0.75)));
-    const planetBays = Math.trunc(Math.sqrt(Math.max(0, defense)));
-    const beamCount = Math.min(
-        10,
-        Math.round(Math.sqrt(Math.max(0, defense + baseDefense) / 3)),
-    );
-    const planetBeamSlot = defense > 0
-        ? Math.max(1, Math.min(10, Math.trunc(Math.sqrt(defense / 2))))
-        : 0;
-    const baseBeamSlot = Math.max(0, Math.min(10, base?.beamTech ?? 0));
-    const beamId = beamCount > 0 ? Math.max(planetBeamSlot, baseBeamSlot) : 0;
+    if (facts.defense === null) warnings.push("Planet defense unknown: 0 is a simulation assumption.");
+    if (starbase !== null && base?.defense === null) warnings.push("Starbase defense unknown: 0 is a simulation assumption.");
+    if (starbase !== null && base?.fighters === null) warnings.push("Starbase fighters unknown: 0 is a simulation assumption.");
     const player = playerForOwner(game, planet.owner_id);
     const raceId = player?.race_id ?? starbase?.race_id ?? null;
-    const advantages = activeAdvantageNames(game, catalog, planet.owner_id);
-    const furyFastBeams = hasAdvantage(advantages, "2x faster beams")
-        || (
-            raceId === 4
-            && boolSetting(catalog.settings, "fascistdoublebeams") === true
-        );
-
-    if (starbase !== null && (base?.damage ?? 0) > 0) {
-        warnings.push(`Starbase currently has ${base?.damage}% damage; stored defense/tech values are used.`);
-    }
-    if (defense <= 0) {
-        warnings.push("Planet has no known defense posts; a starbase would refuse to fight by itself.");
-    }
-
-    return {
+    const setup: PlanetSetup = {
+        kind: "planet",
+        planetDefense: facts.defense ?? 0,
+        starbasePresent: starbase !== null,
+        starbaseDefense: base?.defense ?? 0,
+        starbaseBeamTech: base?.beamTech ?? 0,
+        starbaseFighters: base?.fighters ?? 0,
+    };
+    const initial: MaterializedCombatant = {
         warnings,
+        setup,
         combatant: {
             source_kind: "known_planet",
             source_id: planet.planet_id,
-            name: starbase === null
-                ? planet.name ?? `Planet #${planet.planet_id}`
-                : `${planet.name ?? `Planet #${planet.planet_id}`} + starbase`,
+            name: planet.name ?? `Planet #${planet.planet_id}`,
             object_id: planet.planet_id,
             owner_id: planet.owner_id,
             race_id: raceId,
             hull_id: 0,
             has_starbase: starbase !== null,
-            beam_count: beamCount,
+            physical_beam_count: null,
+            physical_launcher_count: null,
+            physical_bay_count: null,
+            federation_crew_bonus: false,
+            beam_count: 0,
             launcher_count: 0,
-            bay_count: planetBays + (starbase === null ? 0 : 5),
-            beam_id: beamId,
+            bay_count: 0,
+            beam_id: 0,
             torpedo_id: 0,
-            shield: defense > 0 ? 100 : 0,
+            shield: 100,
             damage: 0,
             crew: 10_000,
-            mass: Math.max(1, 100 + defense + baseDefense),
+            mass: 100,
             torpedoes: 0,
-            fighters: planetFighters + baseFighters,
-            beam_kill_rate: raceId === 5 ? 3 : 1,
-            beam_charge_rate: furyFastBeams ? 2 : 1,
+            fighters: 0,
+            beam_kill_rate: 1,
+            beam_charge_rate: 1,
             torp_charge_rate: 1,
             torp_miss_rate: 35,
             crew_defense_rate: 0,
             notes: warnings,
         },
     };
+    return rebuildPlanet(initial, setup, raceId, catalog);
 }
 
-function candidateLabel(
-    key: CandidateKey,
-    intel: PrivateIntelMapResponse,
-): string {
+function observerRaceId(game: GameDetailsResponse, intel: PrivateIntelMapResponse): number | null {
+    const slot = "primary_observer" in intel
+        ? intel.primary_observer.player_slot_id
+        : intel.observer.player_slot_id;
+    return game.players.find((player) => player.slot_id === slot)?.race_id ?? null;
+}
+
+function candidateLabel(key: CandidateKey, intel: PrivateIntelMapResponse, catalog: GameRuleCatalogResponse): string {
     const [kind, rawId] = key.split(":");
     const id = Number(rawId);
     if (kind === "ship") {
         const ship = intel.ships.find((item) => item.ship_id === id);
         return ship === undefined ? `Ship #${id}` : `${ship.name ?? `Ship #${id}`} · #${id}`;
     }
-    const planet = intel.planets.find((item) => item.planet_id === id);
-    const base = intel.starbases.find((item) => item.planet_id === id);
-    return planet === undefined
-        ? `Planet #${id}`
-        : `${planet.name ?? `Planet #${id}`} · #${id}${base === undefined ? "" : " + base"}`;
+    if (kind === "planet") {
+        const planet = intel.planets.find((item) => item.planet_id === id);
+        const base = intel.starbases.find((item) => item.planet_id === id);
+        return planet === undefined
+            ? `Planet #${id}`
+            : `${planet.name ?? `Planet #${id}`} · #${id}${base === undefined ? "" : " + base"}`;
+    }
+    const hull = hullRecord(catalog, id);
+    return `Manual · ${hull === null ? `Hull #${id}` : textValue(hull, "name") ?? `Hull #${id}`}`;
 }
 
-function editableNumber(
-    combatant: BattleSimulatorCombatant,
-    key: keyof BattleSimulatorCombatant,
-    value: number,
-): BattleSimulatorCombatant {
-    return { ...combatant, [key]: value };
+function materializeCandidate(
+    key: CandidateKey,
+    game: GameDetailsResponse,
+    intel: PrivateIntelMapResponse,
+    catalog: GameRuleCatalogResponse,
+): MaterializedCombatant | null {
+    const [kind, rawId] = key.split(":");
+    const id = Number(rawId);
+    if (kind === "ship") {
+        const ship = intel.ships.find((item) => item.ship_id === id);
+        return ship === undefined ? null : materializeShip(ship, game, catalog);
+    }
+    if (kind === "planet") {
+        const planet = intel.planets.find((item) => item.planet_id === id);
+        if (planet === undefined) return null;
+        const base = intel.starbases.find((item) => item.planet_id === id) ?? null;
+        return materializePlanet(planet, base, game, catalog);
+    }
+    return materializeManualHull(id, observerRaceId(game, intel), catalog);
 }
 
-function CombatantEditor({
+function NumberInput({
     label,
     value,
-    catalog,
     onChange,
+    min = 0,
+    max,
+    disabled = false,
 }: {
     label: string;
-    value: MaterializedCombatant;
-    catalog: GameRuleCatalogResponse;
-    onChange: (next: MaterializedCombatant) => void;
+    value: number;
+    onChange: (value: number) => void;
+    min?: number;
+    max?: number;
+    disabled?: boolean;
 }) {
-    const combatant = value.combatant;
-    const numberField = (
-        title: string,
-        key: keyof BattleSimulatorCombatant,
-        current: number,
-        min = 0,
-    ) => (
-        <label>
-            <small>{title}</small>
+    return (
+        <label className="battle-sim-field">
+            <span>{label}</span>
             <input
+                className="battle-sim-input"
+                disabled={disabled}
+                max={max}
                 min={min}
                 onChange={(event) => {
                     const parsed = Number(event.target.value);
                     if (!Number.isFinite(parsed)) return;
-                    onChange({
-                        ...value,
-                        combatant: editableNumber(combatant, key, Math.max(min, Math.trunc(parsed))),
-                    });
+                    const bounded = Math.max(min, max === undefined ? parsed : Math.min(max, parsed));
+                    onChange(Math.trunc(bounded));
                 }}
                 type="number"
-                value={current}
+                value={value}
             />
         </label>
     );
+}
+
+function RaceSelect({
+    raceId,
+    catalog,
+    onChange,
+}: {
+    raceId: number | null;
+    catalog: GameRuleCatalogResponse;
+    onChange: (raceId: number | null) => void;
+}) {
+    return (
+        <label className="battle-sim-field">
+            <span>Race / crew</span>
+            <select
+                className="battle-sim-select"
+                onChange={(event) => onChange(event.target.value === "" ? null : Number(event.target.value))}
+                value={raceId ?? ""}
+            >
+                <option value="">No racial bonus</option>
+                {catalog.races.map((record) => {
+                    const id = intValue(record, "id");
+                    if (id === null) return null;
+                    return <option key={id} value={id}>{textValue(record, "name", "shortname") ?? `Race #${id}`}</option>;
+                })}
+            </select>
+        </label>
+    );
+}
+
+function ShipEditor({
+    value,
+    catalog,
+    onChange,
+}: {
+    value: MaterializedCombatant;
+    catalog: GameRuleCatalogResponse;
+    onChange: (value: MaterializedCombatant) => void;
+}) {
+    if (value.setup.kind !== "ship") return null;
+    const c = value.combatant;
+    const setup = value.setup;
+
+    const updateDamage = (damage: number) => {
+        const updated = { ...value, combatant: { ...c, damage } };
+        onChange(normalizeShipForRace(updated, c.race_id, catalog));
+    };
+    const updatePhysical = (key: "physicalBeams" | "physicalLaunchers" | "physicalBays", next: number) => {
+        const updated = { ...value, setup: { ...setup, [key]: next } };
+        onChange(normalizeShipForRace(updated, c.race_id, catalog));
+    };
 
     return (
-        <section className="summary-card" style={{ display: "grid", gap: 10 }}>
-            <div>
-                <span>{label}</span>
-                <strong style={{ display: "block", marginTop: 3 }}>
-                    {combatant.name ?? "Combatant"}
-                </strong>
-                <small>
-                    {combatant.source_kind.replace("_", " ")}
-                    {combatant.source_id === null ? "" : ` · #${combatant.source_id}`}
-                </small>
+        <div className="battle-sim-editor-body">
+            <div className="battle-sim-fields battle-sim-fields-4">
+                <RaceSelect
+                    catalog={catalog}
+                    onChange={(raceId) => onChange(normalizeShipForRace(value, raceId, catalog))}
+                    raceId={c.race_id}
+                />
+                <NumberInput label="Shield %" max={100} onChange={(shield) => onChange({ ...value, combatant: { ...c, shield } })} value={c.shield} />
+                <NumberInput label="Damage %" max={9999} onChange={updateDamage} value={c.damage} />
+                <NumberInput label="Crew" max={100000} onChange={(crew) => onChange({ ...value, combatant: { ...c, crew } })} value={c.crew} />
             </div>
 
-            {value.warnings.length > 0 && (
-                <div style={{ display: "grid", gap: 3 }}>
-                    {value.warnings.map((warning) => (
-                        <small key={warning} style={{ color: "#e6bd79" }}>⚠ {warning}</small>
-                    ))}
+            <div className="battle-sim-derived-strip">
+                <span>Hull mass <strong>{setup.baseMass} KT</strong></span>
+                <span>Combat mass <strong>{c.mass} KT</strong></span>
+                <span>Effective weapons <strong>{c.beam_count}B / {c.launcher_count}T / {c.bay_count} bays</strong></span>
+                <span>Race <strong>{raceLabel(catalog, c.race_id)}</strong></span>
+            </div>
+
+            {setup.physicalBeams > 0 && (
+                <div className="battle-sim-weapon-row">
+                    <NumberInput label="Installed beams" max={10} onChange={(next) => updatePhysical("physicalBeams", next)} value={setup.physicalBeams} />
+                    <label className="battle-sim-field battle-sim-field-wide">
+                        <span>Beam weapon</span>
+                        <select
+                            className="battle-sim-select"
+                            onChange={(event) => onChange({ ...value, combatant: { ...c, beam_id: Number(event.target.value) } })}
+                            value={c.beam_id}
+                        >
+                            <option value={0}>Unknown / none</option>
+                            {catalog.beams.map((record) => {
+                                const id = intValue(record, "id");
+                                if (id === null) return null;
+                                return <option key={id} value={id}>{textValue(record, "name") ?? `Beam #${id}`}</option>;
+                            })}
+                        </select>
+                    </label>
                 </div>
             )}
 
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8 }}>
-                {numberField("Shield %", "shield", combatant.shield)}
-                {numberField("Damage %", "damage", combatant.damage)}
-                {numberField("Crew", "crew", combatant.crew)}
-                {numberField("Mass", "mass", combatant.mass, 1)}
-                {numberField("Beams", "beam_count", combatant.beam_count)}
-                {numberField("Launchers", "launcher_count", combatant.launcher_count)}
-                {numberField("Bays", "bay_count", combatant.bay_count)}
-                {numberField("Torpedoes", "torpedoes", combatant.torpedoes)}
-                {numberField("Fighters", "fighters", combatant.fighters)}
+            {setup.physicalLaunchers > 0 && (
+                <div className="battle-sim-weapon-row">
+                    <NumberInput label="Installed launchers" max={10} onChange={(next) => updatePhysical("physicalLaunchers", next)} value={setup.physicalLaunchers} />
+                    <label className="battle-sim-field battle-sim-field-wide">
+                        <span>Torpedo weapon</span>
+                        <select
+                            className="battle-sim-select"
+                            onChange={(event) => onChange({ ...value, combatant: { ...c, torpedo_id: Number(event.target.value) } })}
+                            value={c.torpedo_id}
+                        >
+                            <option value={0}>Unknown / none</option>
+                            {catalog.torpedos.map((record) => {
+                                const id = intValue(record, "id");
+                                if (id === null) return null;
+                                return <option key={id} value={id}>{textValue(record, "name") ?? `Torpedo #${id}`}</option>;
+                            })}
+                        </select>
+                    </label>
+                    <NumberInput label="Torpedoes" max={100000} onChange={(torpedoes) => onChange({ ...value, combatant: { ...c, torpedoes } })} value={c.torpedoes} />
+                </div>
+            )}
+
+            {setup.physicalBays > 0 && (
+                <div className="battle-sim-weapon-row">
+                    <NumberInput label="Hull fighter bays" max={30} onChange={(next) => updatePhysical("physicalBays", next)} value={setup.physicalBays} />
+                    <NumberInput label="Effective bays" disabled onChange={() => {}} value={c.bay_count} />
+                    <NumberInput label="Fighters" max={100000} onChange={(fighters) => onChange({ ...value, combatant: { ...c, fighters } })} value={c.fighters} />
+                </div>
+            )}
+        </div>
+    );
+}
+
+function PlanetEditor({
+    value,
+    catalog,
+    onChange,
+}: {
+    value: MaterializedCombatant;
+    catalog: GameRuleCatalogResponse;
+    onChange: (value: MaterializedCombatant) => void;
+}) {
+    if (value.setup.kind !== "planet") return null;
+    const setup = value.setup;
+    const c = value.combatant;
+    const update = (patch: Partial<PlanetSetup>) => {
+        const nextSetup = { ...setup, ...patch };
+        onChange(rebuildPlanet(value, nextSetup, c.race_id, catalog));
+    };
+
+    return (
+        <div className="battle-sim-editor-body">
+            <div className="battle-sim-fields battle-sim-fields-4">
+                <RaceSelect
+                    catalog={catalog}
+                    onChange={(raceId) => onChange(rebuildPlanet(value, setup, raceId, catalog))}
+                    raceId={c.race_id}
+                />
+                <NumberInput label="Planet defense" max={1000} onChange={(planetDefense) => update({ planetDefense })} value={setup.planetDefense} />
+                <label className="battle-sim-toggle-field">
+                    <span>Starbase</span>
+                    <input
+                        checked={setup.starbasePresent}
+                        onChange={(event) => update({ starbasePresent: event.target.checked })}
+                        type="checkbox"
+                    />
+                    <strong>{setup.starbasePresent ? "Present" : "None"}</strong>
+                </label>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
-                <label>
-                    <small>Beam weapon</small>
-                    <select
-                        onChange={(event) => onChange({
-                            ...value,
-                            combatant: { ...combatant, beam_id: Number(event.target.value) },
-                        })}
-                        value={combatant.beam_id}
+            {setup.starbasePresent && (
+                <div className="battle-sim-fields battle-sim-fields-3">
+                    <NumberInput label="Starbase defense" max={1000} onChange={(starbaseDefense) => update({ starbaseDefense })} value={setup.starbaseDefense} />
+                    <label className="battle-sim-field">
+                        <span>Starbase beam tech</span>
+                        <select
+                            className="battle-sim-select"
+                            onChange={(event) => update({ starbaseBeamTech: Number(event.target.value) })}
+                            value={setup.starbaseBeamTech}
+                        >
+                            <option value={0}>0 / none</option>
+                            {catalog.beams.map((record) => {
+                                const id = intValue(record, "id");
+                                if (id === null) return null;
+                                return <option key={id} value={id}>{id} · {textValue(record, "name") ?? `Beam #${id}`}</option>;
+                            })}
+                        </select>
+                    </label>
+                    <NumberInput label="Starbase fighters" max={100000} onChange={(starbaseFighters) => update({ starbaseFighters })} value={setup.starbaseFighters} />
+                </div>
+            )}
+
+            <div className="battle-sim-derived-strip">
+                <span>Combat mass <strong>{c.mass} KT</strong></span>
+                <span>Beams <strong>{c.beam_count}</strong></span>
+                <span>Beam tech <strong>{c.beam_id || "none"}</strong></span>
+                <span>Bays <strong>{c.bay_count}</strong></span>
+                <span>Total fighters <strong>{c.fighters}</strong></span>
+                <span>Shield <strong>{c.shield}%</strong></span>
+            </div>
+            {setup.planetDefense <= 0 && (
+                <div className="battle-sim-warning">Planet has no defense posts; the starbase cannot fight by itself.</div>
+            )}
+        </div>
+    );
+}
+
+function CombatantEditor({
+    value,
+    catalog,
+    onChange,
+}: {
+    value: MaterializedCombatant;
+    catalog: GameRuleCatalogResponse;
+    onChange: (value: MaterializedCombatant) => void;
+}) {
+    return (
+        <section className="battle-sim-editor">
+            <header>
+                <div>
+                    <span className="eyebrow">SELECTED COMBATANT</span>
+                    <h3>{value.combatant.name ?? "Combatant"}</h3>
+                    <small>{value.combatant.source_kind.replace("_", " ")}{value.combatant.source_id === null ? "" : ` · #${value.combatant.source_id}`}</small>
+                </div>
+            </header>
+            {value.warnings.length > 0 && (
+                <div className="battle-sim-warnings">
+                    {value.warnings.map((warning) => <span key={warning}>⚠ {warning}</span>)}
+                </div>
+            )}
+            {value.setup.kind === "ship" ? (
+                <ShipEditor catalog={catalog} onChange={onChange} value={value} />
+            ) : (
+                <PlanetEditor catalog={catalog} onChange={onChange} value={value} />
+            )}
+        </section>
+    );
+}
+
+function QueueColumn({
+    side,
+    queue,
+    selectedIndex,
+    onSelect,
+    onMove,
+    onRemove,
+}: {
+    side: SideName;
+    queue: MaterializedCombatant[];
+    selectedIndex: number;
+    onSelect: (index: number) => void;
+    onMove: (index: number, delta: number) => void;
+    onRemove: (index: number) => void;
+}) {
+    return (
+        <section className="battle-sim-queue-column">
+            <div className="battle-sim-queue-heading">
+                <span>{side.toUpperCase()}</span>
+                <strong>{queue.length} combatant{queue.length === 1 ? "" : "s"}</strong>
+            </div>
+            <div className="battle-sim-queue-list">
+                {queue.map((item, index) => (
+                    <button
+                        className={`battle-sim-queue-card${selectedIndex === index ? " is-selected" : ""}`}
+                        key={`${item.combatant.source_kind}-${item.combatant.source_id ?? "manual"}-${index}`}
+                        onClick={() => onSelect(index)}
+                        type="button"
                     >
-                        <option value={0}>None / unknown</option>
-                        {catalog.beams.map((record) => {
-                            const id = intValue(record, "id");
-                            if (id === null) return null;
-                            return <option key={id} value={id}>{textValue(record, "name") ?? `Beam #${id}`}</option>;
-                        })}
-                    </select>
-                </label>
-                <label>
-                    <small>Torpedo weapon</small>
-                    <select
-                        onChange={(event) => onChange({
-                            ...value,
-                            combatant: { ...combatant, torpedo_id: Number(event.target.value) },
-                        })}
-                        value={combatant.torpedo_id}
-                    >
-                        <option value={0}>None / unknown</option>
-                        {catalog.torpedos.map((record) => {
-                            const id = intValue(record, "id");
-                            if (id === null) return null;
-                            return <option key={id} value={id}>{textValue(record, "name") ?? `Torpedo #${id}`}</option>;
-                        })}
-                    </select>
-                </label>
+                        <span className="battle-sim-order">{index + 1}</span>
+                        <span className="battle-sim-queue-card-main">
+                            <strong>{item.combatant.name ?? "Combatant"}</strong>
+                            <small>
+                                {item.setup.kind === "planet"
+                                    ? `planet${item.setup.starbasePresent ? " + starbase" : ""}`
+                                    : `${item.combatant.beam_count}B · ${item.combatant.launcher_count}T · ${item.combatant.bay_count} bays`}
+                            </small>
+                        </span>
+                        <span className="battle-sim-queue-actions" onClick={(event) => event.stopPropagation()}>
+                            <button disabled={index === 0} onClick={() => onMove(index, -1)} title="Move up" type="button">↑</button>
+                            <button disabled={index === queue.length - 1} onClick={() => onMove(index, 1)} title="Move down" type="button">↓</button>
+                            <button disabled={queue.length <= 1} onClick={() => onRemove(index)} title="Remove" type="button">×</button>
+                        </span>
+                    </button>
+                ))}
             </div>
         </section>
+    );
+}
+
+function MeanSideCard({
+    label,
+    name,
+    side,
+}: {
+    label: string;
+    name: string;
+    side: NonNullable<BattleSimulatorOddsResponse["sides"]["left"]>;
+}) {
+    return (
+        <article className="battle-sim-stat-card">
+            <span>{label}</span>
+            <h4>{name}</h4>
+            <div className="battle-sim-stat-grid">
+                <div><small>Survived</small><strong>{side.survived_percent}%</strong></div>
+                <div><small>Destroyed</small><strong>{side.destroyed_percent}%</strong></div>
+                <div><small>Captured</small><strong>{side.captured_percent}%</strong></div>
+                <div><small>Avg shield</small><strong>{side.mean_final_shield}%</strong></div>
+                <div><small>Avg damage</small><strong>{side.mean_final_damage}%</strong></div>
+                <div><small>Avg crew</small><strong>{side.mean_final_crew}</strong></div>
+                <div><small>Avg torps</small><strong>{side.mean_final_torpedoes}</strong></div>
+                <div><small>Avg fighters</small><strong>{side.mean_final_fighters}</strong></div>
+            </div>
+        </article>
     );
 }
 
@@ -508,15 +882,20 @@ export function StandaloneBattleSimulator({
 }) {
     const [catalog, setCatalog] = useState<GameRuleCatalogResponse | null>(null);
     const [catalogError, setCatalogError] = useState<string | null>(null);
-    const [leftKey, setLeftKey] = useState<CandidateKey | null>(null);
-    const [rightKey, setRightKey] = useState<CandidateKey | null>(null);
-    const [left, setLeft] = useState<MaterializedCombatant | null>(null);
-    const [right, setRight] = useState<MaterializedCombatant | null>(null);
+    const [leftQueue, setLeftQueue] = useState<MaterializedCombatant[]>([]);
+    const [rightQueue, setRightQueue] = useState<MaterializedCombatant[]>([]);
+    const [selectedSide, setSelectedSide] = useState<SideName>("left");
+    const [selectedLeft, setSelectedLeft] = useState(0);
+    const [selectedRight, setSelectedRight] = useState(0);
+    const [leftAddKey, setLeftAddKey] = useState<CandidateKey | null>(null);
+    const [rightAddKey, setRightAddKey] = useState<CandidateKey | null>(null);
     const [seed, setSeed] = useState(1);
     const [battles, setBattles] = useState(10_000);
     const [running, setRunning] = useState(false);
     const [runResult, setRunResult] = useState<BattleSimulatorRunResponse | null>(null);
+    const [sequenceRun, setSequenceRun] = useState<BattleSimulatorSequenceRunResponse | null>(null);
     const [odds, setOdds] = useState<BattleSimulatorOddsResponse | null>(null);
+    const [sequenceOdds, setSequenceOdds] = useState<BattleSimulatorSequenceOddsResponse | null>(null);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
@@ -541,72 +920,144 @@ export function StandaloneBattleSimulator({
         () => (intel?.planets ?? []).map((planet) => `planet:${planet.planet_id}` as CandidateKey),
         [intel],
     );
-
-    useEffect(() => {
-        if (intel === null || shipKeys.length === 0) return;
-        if (leftKey === null) {
-            const ownSlot = "primary_observer" in intel
-                ? intel.primary_observer.player_slot_id
-                : intel.observer.player_slot_id;
-            const own = intel.ships.find((ship) => ship.owner_id === ownSlot);
-            setLeftKey(`ship:${own?.ship_id ?? intel.ships[0].ship_id}`);
-        }
-        if (rightKey === null) {
-            const leftId = leftKey?.startsWith("ship:") ? Number(leftKey.slice(5)) : null;
-            const enemy = intel.ships.find((ship) => ship.ship_id !== leftId);
-            if (enemy !== undefined) setRightKey(`ship:${enemy.ship_id}`);
-            else if (intel.planets.length > 0) setRightKey(`planet:${intel.planets[0].planet_id}`);
-        }
-    }, [intel, leftKey, rightKey, shipKeys.length]);
-
-    useEffect(() => {
-        if (catalog === null || intel === null || leftKey === null) return;
-        const id = Number(leftKey.split(":")[1]);
-        const ship = intel.ships.find((item) => item.ship_id === id);
-        if (ship !== undefined) setLeft(materializeShip(ship, game, catalog));
-    }, [catalog, game, intel, leftKey]);
-
-    useEffect(() => {
-        if (catalog === null || intel === null || rightKey === null) return;
-        const [kind, rawId] = rightKey.split(":");
-        const id = Number(rawId);
-        if (kind === "ship") {
-            const ship = intel.ships.find((item) => item.ship_id === id);
-            if (ship !== undefined) setRight(materializeShip(ship, game, catalog));
-            return;
-        }
-        const planet = intel.planets.find((item) => item.planet_id === id);
-        if (planet === undefined) return;
-        const base = intel.starbases.find((item) => item.planet_id === id) ?? null;
-        setRight(materializePlanet(planet, base, game, catalog));
-    }, [catalog, game, intel, rightKey]);
+    const hullKeys = useMemo<CandidateKey[]>(
+        () => (catalog?.hulls ?? [])
+            .map((hull) => intValue(hull, "id"))
+            .filter((id): id is number => id !== null && id > 0)
+            .map((id) => `hull:${id}` as CandidateKey),
+        [catalog],
+    );
 
     function invalidate() {
         setRunResult(null);
+        setSequenceRun(null);
         setOdds(null);
+        setSequenceOdds(null);
         setError(null);
     }
 
+    useEffect(() => {
+        if (catalog === null || intel === null || leftQueue.length > 0 || shipKeys.length === 0) return;
+        const ownSlot = "primary_observer" in intel
+            ? intel.primary_observer.player_slot_id
+            : intel.observer.player_slot_id;
+        const own = intel.ships.find((ship) => ship.owner_id === ownSlot) ?? intel.ships[0];
+        const enemy = intel.ships.find((ship) => ship.ship_id !== own.ship_id);
+        const left = materializeShip(own, game, catalog);
+        let right: MaterializedCombatant | null = enemy === undefined
+            ? null
+            : materializeShip(enemy, game, catalog);
+        if (right === null && intel.planets.length > 0) {
+            const planet = intel.planets[0];
+            right = materializePlanet(
+                planet,
+                intel.starbases.find((base) => base.planet_id === planet.planet_id) ?? null,
+                game,
+                catalog,
+            );
+        }
+        setLeftQueue([left]);
+        if (right !== null) setRightQueue([right]);
+        setLeftAddKey(shipKeys[0] ?? hullKeys[0] ?? null);
+        setRightAddKey(shipKeys[0] ?? planetKeys[0] ?? hullKeys[0] ?? null);
+    }, [catalog, game, hullKeys, intel, leftQueue.length, planetKeys, shipKeys]);
+
+    if (intel === null) return <div className="game-dashboard-empty">No private-intel snapshot is available for T{turn}.</div>;
+    if (catalogError !== null) return <div className="error-card">{catalogError}</div>;
+    if (catalog === null) return <div className="loading-card">Loading combat rule catalog…</div>;
+    if (shipKeys.length === 0 && hullKeys.length === 0) return <div className="game-dashboard-empty">No ship hulls are available for simulation.</div>;
+
+    const leftOptions = [...shipKeys, ...hullKeys];
+    const rightOptions = [...shipKeys, ...planetKeys, ...hullKeys];
+    const currentLeftAdd = leftAddKey ?? leftOptions[0] ?? null;
+    const currentRightAdd = rightAddKey ?? rightOptions[0] ?? null;
+    const multi = leftQueue.length > 1 || rightQueue.length > 1;
+    const hasPlanetInSequence = multi && [...leftQueue, ...rightQueue].some((item) => item.setup.kind === "planet");
+    const selected = selectedSide === "left"
+        ? leftQueue[selectedLeft] ?? null
+        : rightQueue[selectedRight] ?? null;
+
+    const setSelectedValue = (next: MaterializedCombatant) => {
+        if (selectedSide === "left") {
+            setLeftQueue((queue) => queue.map((item, index) => index === selectedLeft ? next : item));
+        } else {
+            setRightQueue((queue) => queue.map((item, index) => index === selectedRight ? next : item));
+        }
+        invalidate();
+    };
+
+    function addCombatant(side: SideName, key: CandidateKey | null) {
+        if (key === null) return;
+        const item = materializeCandidate(key, game, intel, catalog);
+        if (item === null) return;
+        if (side === "left" && item.setup.kind === "planet") return;
+        if (side === "left") {
+            setLeftQueue((queue) => [...queue, item]);
+            setSelectedLeft(leftQueue.length);
+        } else {
+            setRightQueue((queue) => [...queue, item]);
+            setSelectedRight(rightQueue.length);
+        }
+        setSelectedSide(side);
+        invalidate();
+    }
+
+    function move(side: SideName, index: number, delta: number) {
+        const setter = side === "left" ? setLeftQueue : setRightQueue;
+        setter((queue) => {
+            const target = index + delta;
+            if (target < 0 || target >= queue.length) return queue;
+            const next = [...queue];
+            [next[index], next[target]] = [next[target], next[index]];
+            return next;
+        });
+        if (side === "left") setSelectedLeft(Math.max(0, index + delta));
+        else setSelectedRight(Math.max(0, index + delta));
+        invalidate();
+    }
+
+    function remove(side: SideName, index: number) {
+        const setter = side === "left" ? setLeftQueue : setRightQueue;
+        setter((queue) => queue.filter((_, itemIndex) => itemIndex !== index));
+        if (side === "left") setSelectedLeft((value) => Math.max(0, Math.min(value, leftQueue.length - 2)));
+        else setSelectedRight((value) => Math.max(0, Math.min(value, rightQueue.length - 2)));
+        invalidate();
+    }
+
     function swapSides() {
-        if (leftKey === null || rightKey === null || !rightKey.startsWith("ship:")) return;
-        const oldLeft = leftKey;
-        setLeftKey(rightKey as CandidateKey);
-        setRightKey(oldLeft);
+        if (rightQueue.some((item) => item.setup.kind === "planet")) return;
+        const oldLeft = leftQueue;
+        setLeftQueue(rightQueue);
+        setRightQueue(oldLeft);
+        setSelectedLeft(0);
+        setSelectedRight(0);
+        setSelectedSide("left");
         invalidate();
     }
 
     async function runOne() {
-        if (left === null || right === null) return;
+        if (leftQueue.length === 0 || rightQueue.length === 0) return;
         setRunning(true);
         setError(null);
+        setRunResult(null);
+        setSequenceRun(null);
         try {
-            const result = await runStandaloneBattle(game.game.id, {
-                left: left.combatant,
-                right: right.combatant,
-                seed,
-                right_balance_bonus: "auto",
-            });
-            setRunResult(result);
+            if (!multi) {
+                const result = await runStandaloneBattle(game.game.id, {
+                    left: leftQueue[0].combatant,
+                    right: rightQueue[0].combatant,
+                    seed,
+                    right_balance_bonus: "auto",
+                });
+                setRunResult(result);
+            } else {
+                const result = await runStandaloneBattleSequence(game.game.id, {
+                    left: leftQueue.map((item) => item.combatant),
+                    right: rightQueue.map((item) => item.combatant),
+                    seed,
+                });
+                setSequenceRun(result);
+            }
         } catch (reason) {
             setError(reason instanceof Error ? reason.message : "Battle simulation failed");
         } finally {
@@ -615,16 +1066,25 @@ export function StandaloneBattleSimulator({
     }
 
     async function runOdds() {
-        if (left === null || right === null) return;
+        if (leftQueue.length === 0 || rightQueue.length === 0) return;
         setRunning(true);
         setError(null);
+        setOdds(null);
+        setSequenceOdds(null);
         try {
-            const result = await runStandaloneBattleOdds(game.game.id, {
-                left: left.combatant,
-                right: right.combatant,
-                battles,
-            });
-            setOdds(result);
+            if (!multi) {
+                setOdds(await runStandaloneBattleOdds(game.game.id, {
+                    left: leftQueue[0].combatant,
+                    right: rightQueue[0].combatant,
+                    battles,
+                }));
+            } else {
+                setSequenceOdds(await runStandaloneBattleSequenceOdds(game.game.id, {
+                    left: leftQueue.map((item) => item.combatant),
+                    right: rightQueue.map((item) => item.combatant),
+                    battles,
+                }));
+            }
         } catch (reason) {
             setError(reason instanceof Error ? reason.message : "Battle odds simulation failed");
         } finally {
@@ -632,117 +1092,124 @@ export function StandaloneBattleSimulator({
         }
     }
 
-    if (intel === null) {
-        return <div className="game-dashboard-empty">No private-intel snapshot is available for T{turn}.</div>;
-    }
-    if (catalogError !== null) return <div className="error-card">{catalogError}</div>;
-    if (catalog === null) return <div className="loading-card">Loading combat rule catalog…</div>;
-    if (shipKeys.length === 0) {
-        return <div className="game-dashboard-empty">No known ships are available to place on the attacking side.</div>;
-    }
-
     return (
-        <div style={{ display: "grid", gap: 14 }}>
-            <section className="panel">
-                <div className="panel-header">
+        <div className="battle-sim-shell">
+            <section className="battle-sim-builder">
+                <header className="battle-sim-section-header">
                     <div>
-                        <div className="eyebrow">STANDALONE · T{turn} INTEL SOURCES</div>
-                        <h3 style={{ margin: "4px 0" }}>Battle setup</h3>
-                        <p>
-                            Pick known ships and known planets directly from the active intel snapshot.
-                            A known starbase is merged into its planet automatically. Imported values remain
-                            simulation inputs and never modify factual observations.
-                        </p>
+                        <span className="eyebrow">BATTLE ORDER · T{turn}</span>
+                        <h3>Combat queues</h3>
+                        <p>Add known intel objects or manual hulls, then reorder them exactly as they should enter combat.</p>
                     </div>
-                    <button
-                        className="secondary-button"
-                        disabled={rightKey === null || !rightKey.startsWith("ship:")}
-                        onClick={swapSides}
-                        type="button"
-                    >
-                        Swap sides
-                    </button>
-                </div>
+                    <button className="secondary-button" disabled={rightQueue.some((item) => item.setup.kind === "planet")} onClick={swapSides} type="button">Swap sides</button>
+                </header>
 
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12, marginBottom: 12 }}>
-                    <label>
-                        <small>LEFT · ship</small>
-                        <select
-                            onChange={(event) => { setLeftKey(event.target.value as CandidateKey); invalidate(); }}
-                            value={leftKey ?? ""}
-                        >
-                            {shipKeys.map((key) => <option key={key} value={key}>{candidateLabel(key, intel)}</option>)}
-                        </select>
-                    </label>
-                    <label>
-                        <small>RIGHT · ship or planet</small>
-                        <select
-                            onChange={(event) => { setRightKey(event.target.value as CandidateKey); invalidate(); }}
-                            value={rightKey ?? ""}
-                        >
+                <div className="battle-sim-add-grid">
+                    <div className="battle-sim-add-row">
+                        <select className="battle-sim-select" onChange={(event) => setLeftAddKey(event.target.value as CandidateKey)} value={currentLeftAdd ?? ""}>
                             <optgroup label="Known ships">
-                                {shipKeys.map((key) => <option key={key} value={key}>{candidateLabel(key, intel)}</option>)}
+                                {shipKeys.map((key) => <option key={key} value={key}>{candidateLabel(key, intel, catalog)}</option>)}
+                            </optgroup>
+                            <optgroup label="Manual hulls">
+                                {hullKeys.map((key) => <option key={key} value={key}>{candidateLabel(key, intel, catalog)}</option>)}
+                            </optgroup>
+                        </select>
+                        <button className="secondary-button" onClick={() => addCombatant("left", currentLeftAdd)} type="button">+ Left</button>
+                    </div>
+                    <div className="battle-sim-add-row">
+                        <select className="battle-sim-select" onChange={(event) => setRightAddKey(event.target.value as CandidateKey)} value={currentRightAdd ?? ""}>
+                            <optgroup label="Known ships">
+                                {shipKeys.map((key) => <option key={key} value={key}>{candidateLabel(key, intel, catalog)}</option>)}
                             </optgroup>
                             <optgroup label="Known planets / starbases">
-                                {planetKeys.map((key) => <option key={key} value={key}>{candidateLabel(key, intel)}</option>)}
+                                {planetKeys.map((key) => <option key={key} value={key}>{candidateLabel(key, intel, catalog)}</option>)}
+                            </optgroup>
+                            <optgroup label="Manual hulls">
+                                {hullKeys.map((key) => <option key={key} value={key}>{candidateLabel(key, intel, catalog)}</option>)}
                             </optgroup>
                         </select>
-                    </label>
+                        <button className="secondary-button" onClick={() => addCombatant("right", currentRightAdd)} type="button">+ Right</button>
+                    </div>
                 </div>
 
-                {left !== null && right !== null && (
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 }}>
-                        <CombatantEditor label="LEFT" value={left} catalog={catalog} onChange={(value) => { setLeft(value); invalidate(); }} />
-                        <CombatantEditor label="RIGHT" value={right} catalog={catalog} onChange={(value) => { setRight(value); invalidate(); }} />
+                <div className="battle-sim-queues">
+                    <QueueColumn
+                        onMove={(index, delta) => move("left", index, delta)}
+                        onRemove={(index) => remove("left", index)}
+                        onSelect={(index) => { setSelectedSide("left"); setSelectedLeft(index); }}
+                        queue={leftQueue}
+                        selectedIndex={selectedSide === "left" ? selectedLeft : -1}
+                        side="left"
+                    />
+                    <QueueColumn
+                        onMove={(index, delta) => move("right", index, delta)}
+                        onRemove={(index) => remove("right", index)}
+                        onSelect={(index) => { setSelectedSide("right"); setSelectedRight(index); }}
+                        queue={rightQueue}
+                        selectedIndex={selectedSide === "right" ? selectedRight : -1}
+                        side="right"
+                    />
+                </div>
+
+                {hasPlanetInSequence && (
+                    <div className="battle-sim-warning">
+                        Multi-wave planet/starbase carry-over is deliberately disabled until separate planet-defense and starbase-defense losses are reconstructed. Single ship-vs-planet combat remains supported.
                     </div>
                 )}
             </section>
 
-            <section className="panel">
-                <div className="panel-header">
-                    <div>
-                        <div className="eyebrow">SIMULATION CONTROLS</div>
-                        <h3 style={{ margin: "4px 0" }}>Run combat</h3>
-                    </div>
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "end" }}>
-                        <label>
-                            <small>Single-run seed</small>
-                            <input min={1} max={118} type="number" value={seed} onChange={(event) => setSeed(Math.max(1, Math.min(118, Number(event.target.value))))} />
-                        </label>
-                        <button className="secondary-button" disabled={running || left === null || right === null} onClick={() => void runOne()} type="button">
-                            Run one
-                        </button>
-                        <label>
-                            <small>Battles</small>
-                            <input min={1} max={100000} type="number" value={battles} onChange={(event) => setBattles(Math.max(1, Math.min(100000, Math.trunc(Number(event.target.value)))))} />
-                        </label>
-                        <button className="primary-button" disabled={running || left === null || right === null} onClick={() => void runOdds()} type="button">
-                            {running ? "Simulating…" : `Run ${battles.toLocaleString()} battles`}
-                        </button>
-                    </div>
+            {selected !== null && (
+                <CombatantEditor catalog={catalog} onChange={setSelectedValue} value={selected} />
+            )}
+
+            <section className="battle-sim-controls">
+                <div>
+                    <span className="eyebrow">SIMULATION CONTROLS</span>
+                    <h3>{multi ? "Run battle sequence" : "Run combat"}</h3>
+                </div>
+                <div className="battle-sim-control-row">
+                    <NumberInput label="Start seed" max={118} min={1} onChange={setSeed} value={seed} />
+                    <button className="secondary-button" disabled={running || leftQueue.length === 0 || rightQueue.length === 0 || hasPlanetInSequence} onClick={() => void runOne()} type="button">
+                        {running ? "Running…" : multi ? "Run sequence once" : "Run visual battle"}
+                    </button>
+                    <NumberInput label="Battles" max={100000} min={1} onChange={setBattles} value={battles} />
+                    <button className="primary-button" disabled={running || leftQueue.length === 0 || rightQueue.length === 0 || hasPlanetInSequence} onClick={() => void runOdds()} type="button">
+                        {running ? "Simulating…" : `Run ${battles.toLocaleString()} battles`}
+                    </button>
                 </div>
                 {error !== null && <div className="error-card">{error}</div>}
             </section>
 
             {runResult !== null && (
-                <section className="panel">
-                    <div className="eyebrow">ONE BATTLE · DERIVED SIMULATION</div>
-                    {!runResult.supported || runResult.left === undefined || runResult.right === undefined ? (
+                <section className="battle-sim-result-panel">
+                    <span className="eyebrow">ONE BATTLE · VISUAL DERIVED SIMULATION</span>
+                    {!runResult.supported ? (
                         <div className="error-card">{runResult.reason ?? "Unsupported combat setup"}</div>
                     ) : (
+                        <CombatReplayPlayer
+                            autoPlay
+                            cycles={runResult.cycles}
+                            frames={runResult.frames}
+                            result={runResult.result}
+                            title={`Seed ${runResult.start_seed ?? seed}${runResult.right_balance?.applied ? " · right +360 KT" : ""}`}
+                        />
+                    )}
+                </section>
+            )}
+
+            {sequenceRun !== null && (
+                <section className="battle-sim-result-panel">
+                    <span className="eyebrow">ONE QUEUED RUN · DERIVED SIMULATION</span>
+                    {!sequenceRun.supported ? (
+                        <div className="error-card">{sequenceRun.reason ?? "Unsupported sequence"}</div>
+                    ) : (
                         <>
-                            <h3>{(runResult.result ?? []).join(" + ").replaceAll("_", " ")}</h3>
-                            <p>
-                                Seed {runResult.start_seed} · cycles {runResult.cycles ?? "—"}
-                                {runResult.right_balance?.applied ? " · right +360 KT balance bonus" : ""}
-                            </p>
-                            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 12 }}>
-                                {[runResult.left, runResult.right].map((side, index) => (
-                                    <div className="summary-card" key={index}>
-                                        <span>{index === 0 ? "LEFT" : "RIGHT"} · {side.name ?? "Combatant"}</span>
-                                        <strong>{side.destroyed ? "Destroyed" : side.captured ? "Captured" : "Survived"}</strong>
-                                        <small>{side.damage}% damage · {side.shield}% shield · crew {side.crew}</small>
-                                        <small>torps {side.torpedoes} · fighters {side.fighters}</small>
+                            <h3>Winner: {sequenceRun.winner}</h3>
+                            <div className="battle-sim-engagement-list">
+                                {(sequenceRun.engagements ?? []).map((engagement) => (
+                                    <div key={engagement.number}>
+                                        <strong>#{engagement.number} · {leftQueue[engagement.left_index]?.combatant.name} vs {rightQueue[engagement.right_index]?.combatant.name}</strong>
+                                        <span>{engagement.result.join(" + ").replaceAll("_", " ")} · seed {engagement.start_seed} · {engagement.cycles} cycles{engagement.right_balance_applied ? " · +360 KT right" : ""}</span>
                                     </div>
                                 ))}
                             </div>
@@ -752,32 +1219,62 @@ export function StandaloneBattleSimulator({
             )}
 
             {odds !== null && (
-                <section className="panel" style={{ borderColor: "rgba(117, 177, 227, 0.55)" }}>
-                    <div className="eyebrow">REPEATED BATTLE SIMULATION</div>
+                <section className="battle-sim-result-panel">
+                    <span className="eyebrow">REPEATED BATTLE SIMULATION</span>
                     {!odds.supported ? (
                         <div className="error-card">{odds.reason ?? "Unsupported combat setup"}</div>
                     ) : (
                         <>
-                            <h3>{odds.sample_count.toLocaleString()} battles</h3>
-                            <div className="table-wrapper">
-                                <table className="players-table game-object-table">
-                                    <thead><tr><th>Outcome</th><th>Count</th><th>Percent</th></tr></thead>
-                                    <tbody>
-                                        {odds.outcomes.map((item) => (
-                                            <tr key={item.outcome}>
-                                                <td className="player-name">{item.outcome.replaceAll("_", " ").replaceAll("+", " + ")}</td>
-                                                <td>{item.count.toLocaleString()}</td>
-                                                <td>{item.percent}%</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                            <div className="battle-sim-result-heading"><h3>{odds.sample_count.toLocaleString()} battles</h3></div>
+                            <div className="battle-sim-outcome-grid">
+                                {odds.outcomes.map((item) => (
+                                    <div key={item.outcome}><strong>{item.percent}%</strong><span>{item.outcome.replaceAll("_", " ").replaceAll("+", " + ")}</span><small>{item.count.toLocaleString()} battles</small></div>
+                                ))}
                             </div>
-                            <p style={{ color: "#91a9c8" }}>
-                                Classic combat seeds are sampled repeatedly. When eligible, the HOST right-side
-                                carrier-balance branch is sampled at 60%; the response records how many unique
-                                deterministic terminal replays were actually required.
-                            </p>
+                            {odds.sides.left !== undefined && odds.sides.right !== undefined && (
+                                <div className="battle-sim-mean-grid">
+                                    <MeanSideCard label="LEFT · MEAN TERMINAL STATE" name={leftQueue[0]?.combatant.name ?? "Left"} side={odds.sides.left} />
+                                    <MeanSideCard label="RIGHT · MEAN TERMINAL STATE" name={rightQueue[0]?.combatant.name ?? "Right"} side={odds.sides.right} />
+                                </div>
+                            )}
+                        </>
+                    )}
+                </section>
+            )}
+
+            {sequenceOdds !== null && (
+                <section className="battle-sim-result-panel">
+                    <span className="eyebrow">REPEATED QUEUED SIMULATION</span>
+                    {!sequenceOdds.supported ? (
+                        <div className="error-card">{sequenceOdds.reason ?? "Unsupported sequence"}</div>
+                    ) : (
+                        <>
+                            <h3>{sequenceOdds.sample_count.toLocaleString()} full simulations</h3>
+                            <div className="battle-sim-outcome-grid">
+                                {(sequenceOdds.outcomes ?? []).map((item) => (
+                                    <div key={item.outcome}><strong>{item.percent}%</strong><span>{item.outcome} wins</span><small>{item.count.toLocaleString()}</small></div>
+                                ))}
+                            </div>
+                            <div className="battle-sim-sequence-stats">
+                                {(["left", "right"] as const).map((side) => (
+                                    <div key={side}>
+                                        <h4>{side.toUpperCase()} queue</h4>
+                                        {(sequenceOdds.sides?.[side] ?? []).map((item) => (
+                                            <article className="battle-sim-stat-card" key={item.index}>
+                                                <span>#{item.index + 1} · fought {item.fought_percent}%</span>
+                                                <h4>{item.name ?? `Combatant ${item.index + 1}`}</h4>
+                                                <div className="battle-sim-stat-grid">
+                                                    <div><small>Avg shield</small><strong>{item.mean_final_shield ?? "—"}%</strong></div>
+                                                    <div><small>Avg damage</small><strong>{item.mean_final_damage ?? "—"}%</strong></div>
+                                                    <div><small>Avg crew</small><strong>{item.mean_final_crew ?? "—"}</strong></div>
+                                                    <div><small>Avg torps</small><strong>{item.mean_final_torpedoes ?? "—"}</strong></div>
+                                                    <div><small>Avg fighters</small><strong>{item.mean_final_fighters ?? "—"}</strong></div>
+                                                </div>
+                                            </article>
+                                        ))}
+                                    </div>
+                                ))}
+                            </div>
                         </>
                     )}
                 </section>
