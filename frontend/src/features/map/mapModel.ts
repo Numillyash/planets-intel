@@ -200,17 +200,32 @@ export function planetLinkNavigationDistance(
     to: { x: number; y: number },
     warpWellRadius = PLANET_WARP_WELL_RADIUS,
 ): number {
-    const centerDistance = Math.hypot(from.x - to.x, from.y - to.y);
+    // The stock starmap link means that a normal W9 ship can reach some
+    // integer coordinate inside the target planet's warp-well grid and then be
+    // snapped into orbit. Do not simply subtract 3 from the continuous
+    // center-to-center distance: the actual destination is an integer map
+    // square and edge cases differ by one light-year after navigation rounding.
+    //
+    // Tesmond (2187,2238) -> Saratoga (2210,2157): center distance 84.20 ly.
+    // The warp-well square at (2210,2160), exactly 3 ly from Saratoga, is
+    // 81.32 ly from Tesmond and therefore has navigation distance round(...)=81.
+    const coordinateRadius = Math.ceil(Math.max(0, warpWellRadius));
+    let best = Math.round(Math.hypot(from.x - to.x, from.y - to.y));
 
-    // A W9 ship does not need to reach the target planet's center. If its
-    // ordinary movement ends inside the documented 3 ly planetary warp well,
-    // Host snaps the ship into orbit. Planets.nu navigation uses whole-light-
-    // year distance at the movement boundary, so test the nearest point of the
-    // target warp-well region before rounding. Example: Tesmond (2187,2238) to
-    // Saratoga (2210,2157) is 84.20 ly center-to-center, but only 81.20 ly to
-    // the 3 ly warp-well boundary; round(81.20) = 81, matching the stock map's
-    // W9 connection.
-    return Math.round(Math.max(0, centerDistance - warpWellRadius));
+    for (let offsetX = -coordinateRadius; offsetX <= coordinateRadius; offsetX += 1) {
+        for (let offsetY = -coordinateRadius; offsetY <= coordinateRadius; offsetY += 1) {
+            if (Math.hypot(offsetX, offsetY) > warpWellRadius + 1e-9) {
+                continue;
+            }
+            const distance = Math.round(Math.hypot(
+                from.x - (to.x + offsetX),
+                from.y - (to.y + offsetY),
+            ));
+            best = Math.min(best, distance);
+        }
+    }
+
+    return best;
 }
 
 export function planetLinks(
