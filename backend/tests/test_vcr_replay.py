@@ -5,6 +5,7 @@ from app.services.vcr_replay_nu import (
     normalize_nu_torpedoes,
     replay_nuhost_from_nu_catalog,
 )
+from app.services.vcr_replay_trace import replay_nuhost_trace
 
 
 BEAMS = [
@@ -190,6 +191,57 @@ class NuHostClassicReplayTests(unittest.TestCase):
         self.assertTrue(result["left"]["survived"])
         self.assertEqual(result["right"]["fighters"], 0)
         self.assertIn("right_destroyed", result["result"])
+
+    def test_visual_trace_hooks_do_not_change_deterministic_combat(self):
+        for payload in (vcr2(), vcr3()):
+            result = replay_nuhost_from_nu_catalog(
+                payload,
+                beams=BEAMS,
+                torpedoes=TORPEDOES,
+                settings=CLASSIC_SETTINGS,
+            )
+            trace = replay_nuhost_trace(
+                payload,
+                beams=BEAMS,
+                torpedoes=TORPEDOES,
+                settings=CLASSIC_SETTINGS,
+            )
+
+            self.assertEqual(trace["result"], result["result"])
+            self.assertEqual(trace["cycles"], result["cycles"])
+            final = trace["frames"][-1]
+            for side_name in ("left", "right"):
+                for key in ("shield", "damage", "crew", "torpedoes", "fighters"):
+                    self.assertEqual(final[side_name][key], result[side_name][key])
+
+        vcr2_trace = replay_nuhost_trace(
+            vcr2(),
+            beams=BEAMS,
+            torpedoes=TORPEDOES,
+            settings=CLASSIC_SETTINGS,
+        )
+        self.assertIn(
+            "torpedo_launch",
+            {
+                effect["kind"]
+                for frame in vcr2_trace["frames"]
+                for effect in frame.get("effects", [])
+            },
+        )
+
+        vcr3_trace = replay_nuhost_trace(
+            vcr3(),
+            beams=BEAMS,
+            torpedoes=TORPEDOES,
+            settings=CLASSIC_SETTINGS,
+        )
+        effect_kinds = {
+            effect["kind"]
+            for frame in vcr3_trace["frames"]
+            for effect in frame.get("effects", [])
+        }
+        self.assertIn("fighter_launch", effect_kinds)
+        self.assertIn("fighter_attack", effect_kinds)
 
     def test_extended_combat_rng_is_rejected(self):
         with self.assertRaises(ReplayUnsupported):
