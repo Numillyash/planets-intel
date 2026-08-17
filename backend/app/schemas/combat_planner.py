@@ -25,9 +25,10 @@ class CombatPlannerRepeatRequest(CombatPlannerScenarioRequest):
 class BattleSimulatorCombatant(BaseModel):
     """Materialized simulation-only combatant.
 
-    The fields mirror the normalized state consumed by the NuHost Classic
-    replay engine. They are never persisted as observations. Source metadata
-    only records how the user populated the simulator setup.
+    ``physical_*`` fields describe installed weapons before damage/racial
+    modifiers. ``*_count`` fields are the effective values for the first
+    engagement. Sequence simulation uses physical counts to recompute the
+    surviving ship's functional weapons after each fight.
     """
 
     source_kind: Literal["known_ship", "known_planet", "vcr", "manual"]
@@ -38,9 +39,15 @@ class BattleSimulatorCombatant(BaseModel):
     race_id: int | None = Field(default=None, ge=0)
     hull_id: int = Field(ge=0)
     has_starbase: bool = False
+
+    physical_beam_count: int | None = Field(default=None, ge=0, le=10)
+    physical_launcher_count: int | None = Field(default=None, ge=0, le=10)
+    physical_bay_count: int | None = Field(default=None, ge=0, le=30)
+    federation_crew_bonus: bool = False
+
     beam_count: int = Field(ge=0, le=10)
     launcher_count: int = Field(ge=0, le=10)
-    bay_count: int = Field(ge=0, le=30)
+    bay_count: int = Field(ge=0, le=33)
     beam_id: int = Field(ge=0)
     torpedo_id: int = Field(ge=0)
     shield: int = Field(ge=0, le=100)
@@ -68,5 +75,19 @@ class BattleSimulatorRunRequest(BaseModel):
 class BattleSimulatorOddsRequest(BaseModel):
     left: BattleSimulatorCombatant
     right: BattleSimulatorCombatant
+    battles: int = Field(default=10_000, ge=1, le=100_000)
+    sampling_seed: int | None = Field(default=None, ge=0, le=2**63 - 1)
+
+
+class BattleSimulatorSequenceRunRequest(BaseModel):
+    left: list[BattleSimulatorCombatant] = Field(min_length=1, max_length=20)
+    right: list[BattleSimulatorCombatant] = Field(min_length=1, max_length=20)
+    seed: int = Field(default=1, ge=1, le=118)
+    sampling_seed: int | None = Field(default=None, ge=0, le=2**63 - 1)
+
+
+class BattleSimulatorSequenceOddsRequest(BaseModel):
+    left: list[BattleSimulatorCombatant] = Field(min_length=1, max_length=20)
+    right: list[BattleSimulatorCombatant] = Field(min_length=1, max_length=20)
     battles: int = Field(default=10_000, ge=1, le=100_000)
     sampling_seed: int | None = Field(default=None, ge=0, le=2**63 - 1)
