@@ -1,15 +1,28 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { getHistoricalCombatEvents } from "../../api/history";
+import {
+    getCombinedPrivateIntel,
+    getGame,
+} from "../../api/client";
+import {
+    getHistoricalCombatEvents,
+    getHistoricalCombinedIntel,
+    getHistoricalPrivateIntel,
+} from "../../api/history";
 import {
     getVcrReplayTrace,
     type VcrReplayTraceResponse,
 } from "../../api/vcrReplay";
+import type { GameDetailsResponse } from "../../types/api";
+import type {
+    PrivateIntelMapResponse,
+} from "../../types/intel";
 import type {
     CombatEventSideSummary,
     CombatEventSummary,
 } from "../../types/history";
 import { BattlePlannerScenario } from "./BattlePlannerScenario";
+import { StandaloneBattleSimulator } from "./StandaloneBattleSimulator";
 
 
 function sideName(side: CombatEventSideSummary): string {
@@ -37,17 +50,75 @@ export function BattlePlannerDashboardPanel({
     linkedAccountId: number;
     turn: number;
 }) {
+    const [game, setGame] = useState<GameDetailsResponse | null>(null);
+    const [intel, setIntel] = useState<PrivateIntelMapResponse | null>(null);
+    const [contextLoading, setContextLoading] = useState(true);
+    const [contextError, setContextError] = useState<string | null>(null);
+
     const [events, setEvents] = useState<CombatEventSummary[]>([]);
     const [selectedVcrId, setSelectedVcrId] = useState<number | null>(null);
     const [trace, setTrace] = useState<VcrReplayTraceResponse | null>(null);
     const [loadingEvents, setLoadingEvents] = useState(true);
     const [loadingTrace, setLoadingTrace] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [vcrError, setVcrError] = useState<string | null>(null);
+
+    useEffect(() => {
+        let cancelled = false;
+        setContextLoading(true);
+        setContextError(null);
+        setGame(null);
+        setIntel(null);
+
+        void (async () => {
+            try {
+                const gameResponse = await getGame(gameId);
+                if (cancelled) return;
+                setGame(gameResponse);
+
+                let intelResponse: PrivateIntelMapResponse | null = null;
+                if (turn === gameResponse.game.turn) {
+                    intelResponse = await getCombinedPrivateIntel(
+                        gameId,
+                        linkedAccountId,
+                    );
+                } else {
+                    intelResponse = await getHistoricalCombinedIntel(
+                        gameId,
+                        linkedAccountId,
+                        turn,
+                    );
+                    if (intelResponse === null) {
+                        intelResponse = await getHistoricalPrivateIntel(
+                            gameId,
+                            linkedAccountId,
+                            turn,
+                        );
+                    }
+                }
+
+                if (!cancelled) setIntel(intelResponse);
+            } catch (reason) {
+                if (!cancelled) {
+                    setContextError(
+                        reason instanceof Error
+                            ? reason.message
+                            : "Failed to prepare battle simulator intel context",
+                    );
+                }
+            } finally {
+                if (!cancelled) setContextLoading(false);
+            }
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [gameId, linkedAccountId, turn]);
 
     useEffect(() => {
         let cancelled = false;
         setLoadingEvents(true);
-        setError(null);
+        setVcrError(null);
         setEvents([]);
         setSelectedVcrId(null);
         setTrace(null);
@@ -63,10 +134,10 @@ export function BattlePlannerDashboardPanel({
             })
             .catch((reason) => {
                 if (!cancelled) {
-                    setError(
+                    setVcrError(
                         reason instanceof Error
                             ? reason.message
-                            : "Failed to load battle planner VCR list",
+                            : "Failed to load VCR validation sources",
                     );
                 }
             })
@@ -82,7 +153,6 @@ export function BattlePlannerDashboardPanel({
     useEffect(() => {
         let cancelled = false;
         setTrace(null);
-        setError(null);
 
         if (selectedVcrId === null) {
             setLoadingTrace(false);
@@ -98,7 +168,7 @@ export function BattlePlannerDashboardPanel({
             })
             .catch((reason) => {
                 if (!cancelled) {
-                    setError(
+                    setVcrError(
                         reason instanceof Error
                             ? reason.message
                             : "Failed to prepare factual VCR baseline",
@@ -120,107 +190,137 @@ export function BattlePlannerDashboardPanel({
     );
 
     return (
-        <section className="panel">
-            <div className="panel-header">
-                <div>
-                    <div className="eyebrow">SIMULATION WORKBENCH · TURN {turn}</div>
-                    <h2>Battle Planner</h2>
-                    <p>
-                        Start from one accessible factual VCR and test ammunition
-                        assumptions with the deterministic NuHost combat engine.
-                        Scenario results are derived and never persisted as intel facts.
-                    </p>
-                </div>
-            </div>
-
-            {loadingEvents ? (
-                <div className="loading-card">Loading factual VCR baselines…</div>
-            ) : error !== null && events.length === 0 ? (
-                <div className="error-card">{error}</div>
-            ) : events.length === 0 ? (
-                <div className="game-dashboard-empty">
-                    No accessible VCRs are stored for turn {turn}. Battle Planner needs
-                    a factual VCR baseline in this MVP.
-                </div>
-            ) : (
-                <div
-                    style={{
-                        display: "grid",
-                        gridTemplateColumns: "minmax(220px, 300px) minmax(0, 1fr)",
-                        gap: 16,
-                        alignItems: "start",
-                    }}
-                >
-                    <aside style={{ display: "grid", gap: 7 }}>
-                        <div className="eyebrow">FACTUAL VCR BASELINES</div>
-                        {events.map((event) => (
-                            <button
-                                className={
-                                    selectedVcrId === event.vcr_id
-                                        ? "primary-button"
-                                        : "secondary-button"
-                                }
-                                key={event.vcr_id}
-                                onClick={() => setSelectedVcrId(event.vcr_id)}
-                                style={{ textAlign: "left" }}
-                                type="button"
-                            >
-                                <strong>VCR #{event.vcr_id}</strong>
-                                <span
-                                    style={{
-                                        display: "block",
-                                        marginTop: 3,
-                                        fontSize: 11,
-                                        opacity: 0.9,
-                                    }}
-                                >
-                                    {eventTitle(event)}
-                                </span>
-                            </button>
-                        ))}
-                    </aside>
-
-                    <div style={{ minWidth: 0 }}>
-                        {selected !== null && (
-                            <div style={{ marginBottom: 12 }}>
-                                <div className="eyebrow">SOURCE VCR #{selected.vcr_id}</div>
-                                <h3 style={{ margin: "4px 0" }}>{eventTitle(selected)}</h3>
-                                <p style={{ margin: 0, color: "#91a9c8" }}>
-                                    T{selected.turn}
-                                    {selected.x !== null && selected.y !== null
-                                        ? ` · ${selected.x}, ${selected.y}`
-                                        : ""}
-                                    {selected.sources.length > 0
-                                        ? ` · observed via ${selected.sources.map((source) => source.planets_username).join(", ")}`
-                                        : ""}
-                                </p>
-                            </div>
-                        )}
-
-                        {error !== null && events.length > 0 && (
-                            <div className="error-card" style={{ marginBottom: 12 }}>
-                                {error}
-                            </div>
-                        )}
-
-                        {loadingTrace ? (
-                            <div className="loading-card">Preparing deterministic baseline…</div>
-                        ) : trace === null ? null : !trace.supported ? (
-                            <div className="error-card">
-                                Exact NuHost replay is unavailable for this VCR: {trace.reason ?? "unsupported combat mode"}
-                            </div>
-                        ) : (
-                            <BattlePlannerScenario
-                                factualTrace={trace}
-                                gameId={gameId}
-                                linkedAccountId={linkedAccountId}
-                                turn={turn}
-                                vcrId={trace.vcr_id}
-                            />
-                        )}
+        <div style={{ display: "grid", gap: 16 }}>
+            <section className="panel">
+                <div className="panel-header">
+                    <div>
+                        <div className="eyebrow">SIMULATION WORKBENCH · TURN {turn}</div>
+                        <h2>Battle Simulator</h2>
+                        <p>
+                            Build future fights directly from known ship, planet and
+                            starbase intel. Imported facts keep their evidence boundary;
+                            unknown values remain explicit simulation assumptions.
+                        </p>
                     </div>
                 </div>
-            )}
-        </section>
+
+                {contextLoading ? (
+                    <div className="loading-card">Loading known combatants…</div>
+                ) : contextError !== null ? (
+                    <div className="error-card">{contextError}</div>
+                ) : game === null ? (
+                    <div className="game-dashboard-empty">
+                        Game combat context is unavailable.
+                    </div>
+                ) : (
+                    <StandaloneBattleSimulator
+                        game={game}
+                        intel={intel}
+                        turn={turn}
+                    />
+                )}
+            </section>
+
+            <section className="panel">
+                <div className="panel-header">
+                    <div>
+                        <div className="eyebrow">VCR-DERIVED VALIDATION LAB</div>
+                        <h2>Replay-based scenarios</h2>
+                        <p>
+                            Optional secondary tool: start from one factual VCR and
+                            change ammunition while keeping its exact combat setup.
+                            This section is not required for standalone simulation.
+                        </p>
+                    </div>
+                </div>
+
+                {loadingEvents ? (
+                    <div className="loading-card">Loading factual VCR baselines…</div>
+                ) : events.length === 0 ? (
+                    <div className="game-dashboard-empty">
+                        No accessible VCRs are stored for turn {turn}. The standalone
+                        simulator above remains available from known intel.
+                    </div>
+                ) : (
+                    <div
+                        style={{
+                            display: "grid",
+                            gridTemplateColumns: "minmax(220px, 300px) minmax(0, 1fr)",
+                            gap: 16,
+                            alignItems: "start",
+                        }}
+                    >
+                        <aside style={{ display: "grid", gap: 7 }}>
+                            <div className="eyebrow">FACTUAL VCR BASELINES</div>
+                            {events.map((event) => (
+                                <button
+                                    className={
+                                        selectedVcrId === event.vcr_id
+                                            ? "primary-button"
+                                            : "secondary-button"
+                                    }
+                                    key={event.vcr_id}
+                                    onClick={() => setSelectedVcrId(event.vcr_id)}
+                                    style={{ textAlign: "left" }}
+                                    type="button"
+                                >
+                                    <strong>VCR #{event.vcr_id}</strong>
+                                    <span
+                                        style={{
+                                            display: "block",
+                                            marginTop: 3,
+                                            fontSize: 11,
+                                            opacity: 0.9,
+                                        }}
+                                    >
+                                        {eventTitle(event)}
+                                    </span>
+                                </button>
+                            ))}
+                        </aside>
+
+                        <div style={{ minWidth: 0 }}>
+                            {selected !== null && (
+                                <div style={{ marginBottom: 12 }}>
+                                    <div className="eyebrow">SOURCE VCR #{selected.vcr_id}</div>
+                                    <h3 style={{ margin: "4px 0" }}>{eventTitle(selected)}</h3>
+                                    <p style={{ margin: 0, color: "#91a9c8" }}>
+                                        T{selected.turn}
+                                        {selected.x !== null && selected.y !== null
+                                            ? ` · ${selected.x}, ${selected.y}`
+                                            : ""}
+                                        {selected.sources.length > 0
+                                            ? ` · observed via ${selected.sources.map((source) => source.planets_username).join(", ")}`
+                                            : ""}
+                                    </p>
+                                </div>
+                            )}
+
+                            {vcrError !== null && (
+                                <div className="error-card" style={{ marginBottom: 12 }}>
+                                    {vcrError}
+                                </div>
+                            )}
+
+                            {loadingTrace ? (
+                                <div className="loading-card">Preparing deterministic baseline…</div>
+                            ) : trace === null ? null : !trace.supported ? (
+                                <div className="error-card">
+                                    Exact NuHost replay is unavailable for this VCR: {trace.reason ?? "unsupported combat mode"}
+                                </div>
+                            ) : (
+                                <BattlePlannerScenario
+                                    factualTrace={trace}
+                                    gameId={gameId}
+                                    linkedAccountId={linkedAccountId}
+                                    turn={turn}
+                                    vcrId={trace.vcr_id}
+                                />
+                            )}
+                        </div>
+                    </div>
+                )}
+            </section>
+        </div>
     );
 }
