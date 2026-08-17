@@ -42,6 +42,27 @@ def _record_game_id(raw: dict[str, Any]) -> int | None:
     return value
 
 
+def _partition_private_activity_by_game(
+    records: list[dict[str, Any]],
+) -> dict[int, list[dict[str, Any]]]:
+    """Partition account-global private activity by its factual raw game id.
+
+    ``account/privateactivity`` is account-global even when a game id is sent.
+    Never assign a record to the game currently being synced by context alone:
+    only an explicit positive ``raw.gameid`` may select its destination game.
+    Nested replies remain attached to the top-level record, matching the
+    existing persistence semantics which flatten a thread after game routing.
+    """
+
+    result: dict[int, list[dict[str, Any]]] = {}
+    for raw in records:
+        game_id = _record_game_id(raw)
+        if game_id is None or game_id <= 0:
+            continue
+        result.setdefault(game_id, []).append(raw)
+    return result
+
+
 def _positive_int(value: Any) -> int | None:
     if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
         return None
@@ -212,8 +233,10 @@ async def sync_private_game(
 
     api_key = decrypt_credential(encrypted_api_key)
     game_activity: list[dict[str, Any]] = []
+    private_activity_by_game: dict[int, list[dict[str, Any]]] = {}
     ingame_activity_seen = 0
     private_activity_seen = 0
+    private_activity_seen_global = 0
     game_activity_error: str | None = None
     private_activity_error: str | None = None
 
@@ -297,11 +320,14 @@ async def sync_private_game(
                     player_id=identity.player_slot_id,
                     planets_account_id=identity.planets_account_id,
                 )
-                private_for_game = [
-                    raw
-                    for raw in private_activity
-                    if _record_game_id(raw) == game_id
-                ]
+                private_activity_by_game = _partition_private_activity_by_game(
+                    private_activity
+                )
+                private_activity_seen_global = sum(
+                    len(records)
+                    for records in private_activity_by_game.values()
+                )
+                private_for_game = private_activity_by_game.get(game_id, [])
                 private_activity_seen = len(private_for_game)
                 game_activity.extend(private_for_game)
             except PlanetsNuError as exc:
@@ -366,6 +392,37 @@ async def sync_private_game(
                 activity=game_activity,
             )
 
+        cross_game_activity_seen = 0
+        cross_game_activity_inserted = 0
+        cross_game_activity_games = 0
+        if turn is None and private_activity_by_game:
+            other_game_ids = [
+                activity_game_id
+                for activity_game_id in private_activity_by_game
+                if activity_game_id != game_id
+            ]
+            known_other_game_ids = set(
+                session.execute(
+                    select(Game.id).where(Game.id.in_(other_game_ids))
+                ).scalars().all()
+            ) if other_game_ids else set()
+
+            for activity_game_id in sorted(known_other_game_ids):
+                records = private_activity_by_game.get(activity_game_id, [])
+                if not records:
+                    continue
+                cross_result = persist_game_activity_observations(
+                    session,
+                    observer_planets_account_id=linked_account_id,
+                    game_id=activity_game_id,
+                    activity=records,
+                )
+                cross_game_activity_seen += cross_result["game_activity_seen"]
+                cross_game_activity_inserted += cross_result[
+                    "game_activity_inserted"
+                ]
+                cross_game_activity_games += 1
+
         session.commit()
 
     response = {
@@ -376,6 +433,10 @@ async def sync_private_game(
         "requested_turn": turn,
         "ingame_activity_seen": ingame_activity_seen,
         "private_activity_seen": private_activity_seen,
+        "private_activity_seen_global": private_activity_seen_global,
+        "cross_game_activity_seen": cross_game_activity_seen,
+        "cross_game_activity_inserted": cross_game_activity_inserted,
+        "cross_game_activity_games": cross_game_activity_games,
         **result,
         **auxiliary,
         **activity_result,
