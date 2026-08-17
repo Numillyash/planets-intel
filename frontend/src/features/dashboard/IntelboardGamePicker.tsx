@@ -27,6 +27,26 @@ function gamePath(observer: string, gameId: number): string {
     return `/intelboard/${encodeURIComponent(observer)}/${gameId}`;
 }
 
+function pickerPath(observer: string): string {
+    return `/intelboard/${encodeURIComponent(observer)}`;
+}
+
+function routedObserver(pathname: string): string | null {
+    const match = pathname.match(/^\/intelboard\/([^/]+)\/?$/i);
+    if (match === null) return null;
+    try {
+        return decodeURIComponent(match[1]);
+    } catch {
+        return match[1];
+    }
+}
+
+function sameObserver(left: string | null, right: string): boolean {
+    return left !== null && left.localeCompare(right, undefined, {
+        sensitivity: "accent",
+    }) === 0;
+}
+
 function isRunning(game: AccountGameSummary): boolean {
     return game.status_id === 2 || game.status_name.toLowerCase() === "running";
 }
@@ -171,11 +191,15 @@ export function IntelboardGamePicker({
                 const response = await getPlanetsAccounts();
                 if (cancelled) return;
                 const active = response.accounts.filter((account) => account.is_active);
+                const routeObserver = routedObserver(window.location.pathname);
+                const routed = active.find((account) =>
+                    sameObserver(routeObserver, account.planets_username),
+                ) ?? null;
                 const rememberedId = readRememberedObserverId();
                 const remembered = rememberedId === null
                     ? null
                     : active.find((account) => account.id === rememberedId) ?? null;
-                const selected = remembered ?? active[0] ?? null;
+                const selected = routed ?? remembered ?? active[0] ?? null;
                 setAccounts(active);
                 setSelectedAccountId(selected?.id ?? null);
                 if (selected !== null) rememberObserverId(selected.id);
@@ -197,6 +221,23 @@ export function IntelboardGamePicker({
             cancelled = true;
         };
     }, []);
+
+    const selectedAccount = accounts.find(
+        (account) => account.id === selectedAccountId,
+    ) ?? null;
+
+    useEffect(() => {
+        if (selectedAccount === null) return;
+        rememberObserverId(selectedAccount.id);
+        const desiredPath = pickerPath(selectedAccount.planets_username);
+        if (window.location.pathname !== desiredPath) {
+            window.history.replaceState(
+                null,
+                "",
+                `${desiredPath}${window.location.search}${window.location.hash}`,
+            );
+        }
+    }, [selectedAccount]);
 
     useEffect(() => {
         let cancelled = false;
@@ -253,10 +294,6 @@ export function IntelboardGamePicker({
             cancelled = true;
         };
     }, [selectedAccountId]);
-
-    const selectedAccount = accounts.find(
-        (account) => account.id === selectedAccountId,
-    ) ?? null;
 
     const sortedGames = useMemo(() => {
         return [...games].sort((left, right) => {
