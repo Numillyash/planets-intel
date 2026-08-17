@@ -26,3 +26,13 @@
     background: #101925;
     color: #8296ad;
 }
+
+.battle-sim-balance-field {
+    width: min(310px, 100%) !important;
+}
+
+.battle-sim-result-note {
+    margin: 0 0 12px;
+    color: #91a9c8;
+    font-size: 12px;
+}
