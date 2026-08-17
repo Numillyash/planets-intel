@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 
 import type {
+    VcrFighterTrack,
+    VcrReplayEffect,
     VcrReplayFrame,
     VcrReplaySideFrame,
 } from "../../api/vcrReplay";
@@ -113,10 +115,111 @@ function SideStatus({ label, side }: { label: string; side: VcrReplaySideFrame }
     );
 }
 
-const TORPEDO_PRESENTATION_FRAMES = 10;
+const TORPEDO_PRESENTATION_FRAMES = 12;
+const MIN_SHIP_VISUAL_GAP_PERCENT = 22;
 
 function combatPercent(x: number): number {
     return Math.max(4, Math.min(96, (x / 640) * 100));
+}
+
+function presentationGeometry(frame: VcrReplayFrame): {
+    left: number;
+    right: number;
+    mapX: (x: number) => number;
+} {
+    const rawLeftPercent = combatPercent(frame.left.x);
+    const rawRightPercent = combatPercent(frame.right.x);
+    const rawGap = Math.max(0.01, rawRightPercent - rawLeftPercent);
+    let left = rawLeftPercent;
+    let right = rawRightPercent;
+
+    // Combat coordinates legitimately close to 30 units, but the original Nu
+    // artwork is much wider than 30/640 of the viewport. Keep simulation
+    // coordinates untouched and expand only their presentation space so large
+    // hull sprites never sit on top of each other.
+    if (right - left < MIN_SHIP_VISUAL_GAP_PERCENT) {
+        const midpoint = (left + right) / 2;
+        left = midpoint - MIN_SHIP_VISUAL_GAP_PERCENT / 2;
+        right = midpoint + MIN_SHIP_VISUAL_GAP_PERCENT / 2;
+        if (left < 5) {
+            right += 5 - left;
+            left = 5;
+        }
+        if (right > 95) {
+            left -= right - 95;
+            right = 95;
+        }
+    }
+
+    const visualGap = right - left;
+    return {
+        left,
+        right,
+        mapX: (x: number) => {
+            const raw = combatPercent(x);
+            const relative = (raw - rawLeftPercent) / rawGap;
+            return Math.max(2, Math.min(98, left + relative * visualGap));
+        },
+    };
+}
+
+function fighterTop(side: "left" | "right", track: VcrFighterTrack): number {
+    const lane = track.index % 7;
+    return side === "left"
+        ? 35 + lane * 3.2
+        : 65 - lane * 3.2;
+}
+
+function lineStyle(
+    start: number,
+    end: number,
+    top: number,
+): React.CSSProperties {
+    return {
+        left: `${Math.min(start, end)}%`,
+        width: `${Math.max(0.6, Math.abs(end - start))}%`,
+        top: `${top}%`,
+    };
+}
+
+function BeamEffect({
+    effect,
+    frame,
+    mapX,
+    index,
+}: {
+    effect: VcrReplayEffect;
+    frame: VcrReplayFrame;
+    mapX: (x: number) => number;
+    index: number;
+}) {
+    if (
+        effect.kind !== "beam_ship"
+        && effect.kind !== "beam_fighter"
+        && effect.kind !== "fighter_attack"
+    ) return null;
+
+    const sourceSide = effect.source === "right" ? frame.right : frame.left;
+    const targetSide = effect.target === "left" ? frame.left : frame.right;
+    const sourceRaw = effect.source_x ?? sourceSide.x;
+    const targetRaw = effect.target_x ?? targetSide.x;
+    const source = mapX(sourceRaw);
+    const target = mapX(targetRaw);
+    const top = effect.kind === "fighter_attack"
+        ? (effect.source === "left" ? 45 : 55)
+        : 50 + ((index % 3) - 1) * 2.2;
+
+    return (
+        <span
+            aria-hidden="true"
+            className={
+                effect.kind === "fighter_attack"
+                    ? "vcr-fighter-shot"
+                    : `vcr-beam-shot is-${effect.source ?? "left"}`
+            }
+            style={lineStyle(source, target, top)}
+        />
+    );
 }
 
 function Battlefield({
@@ -128,60 +231,109 @@ function Battlefield({
     frames: VcrReplayFrame[];
     frameIndex: number;
 }) {
-    const leftPercent = combatPercent(frame.left.x);
-    const rightPercent = combatPercent(frame.right.x);
+    const geometry = presentationGeometry(frame);
     const hitLeft = frame.events.includes("left_hit");
     const hitRight = frame.events.includes("right_hit");
+    const effects = frame.effects ?? [];
+
     const torpedoes: Array<{
         key: string;
         side: "left" | "right";
         x: number;
-        hit: boolean;
+        lane: number;
     }> = [];
 
-    for (const side of ["left", "right"] as const) {
-        const eventName = `${side}_torpedo`;
-        const hitName = side === "left" ? "right_hit" : "left_hit";
-        for (
-            let launchIndex = frameIndex;
-            launchIndex >= Math.max(0, frameIndex - TORPEDO_PRESENTATION_FRAMES + 1);
-            launchIndex -= 1
-        ) {
-            const launchFrame = frames[launchIndex];
-            if (!launchFrame.events.includes(eventName)) continue;
+    for (
+        let launchIndex = frameIndex;
+        launchIndex >= Math.max(0, frameIndex - TORPEDO_PRESENTATION_FRAMES + 1);
+        launchIndex -= 1
+    ) {
+        const launchFrame = frames[launchIndex];
+        for (const [effectIndex, effect] of (launchFrame.effects ?? []).entries()) {
+            if (effect.kind !== "torpedo_launch" || effect.source === undefined) continue;
             const age = frameIndex - launchIndex;
             const progress = Math.min(1, (age + 1) / TORPEDO_PRESENTATION_FRAMES);
-            const launchSide = side === "left" ? launchFrame.left : launchFrame.right;
-            const targetSide = side === "left" ? launchFrame.right : launchFrame.left;
-            torpedoes.push({
-                key: `${side}-${launchIndex}`,
-                side,
-                x: combatPercent(launchSide.x + (targetSide.x - launchSide.x) * progress),
-                hit: launchFrame.events.includes(hitName),
-            });
-            break;
+            const sourceRaw = effect.source_x
+                ?? (effect.source === "left" ? launchFrame.left.x : launchFrame.right.x);
+            const targetRaw = effect.target_x
+                ?? (effect.source === "left" ? launchFrame.right.x : launchFrame.left.x);
+            const count = Math.max(1, effect.count ?? 1);
+            for (let projectile = 0; projectile < Math.min(4, count); projectile += 1) {
+                const rawX = sourceRaw + (targetRaw - sourceRaw) * progress;
+                torpedoes.push({
+                    key: `${launchIndex}-${effectIndex}-${projectile}`,
+                    side: effect.source,
+                    x: geometry.mapX(rawX),
+                    lane: projectile,
+                });
+            }
         }
     }
+
+    const fighterTracks: Array<{
+        side: "left" | "right";
+        track: VcrFighterTrack;
+    }> = [
+        ...(frame.left.fighter_tracks ?? []).map((track) => ({ side: "left" as const, track })),
+        ...(frame.right.fighter_tracks ?? []).map((track) => ({ side: "right" as const, track })),
+    ];
 
     return (
         <div className="vcr-battlefield">
             <div className="vcr-range-line" />
+
+            {effects.map((effect, index) => (
+                <BeamEffect
+                    effect={effect}
+                    frame={frame}
+                    index={index}
+                    key={`beam-${index}-${effect.kind}`}
+                    mapX={geometry.mapX}
+                />
+            ))}
+
             {torpedoes.map((torpedo) => (
                 <span
                     aria-hidden="true"
-                    className={
-                        `vcr-torpedo-projectile is-${torpedo.side}`
-                        + (torpedo.hit ? " is-hit-course" : "")
-                    }
+                    className={`vcr-torpedo-projectile is-${torpedo.side}`}
                     key={torpedo.key}
-                    style={{ left: `${torpedo.x}%` }}
+                    style={{
+                        left: `${torpedo.x}%`,
+                        top: `${48 + (torpedo.lane - 1.5) * 2}%`,
+                    }}
                 >
                     <span />
                 </span>
             ))}
+
+            {fighterTracks.map(({ side, track }) => (
+                <span
+                    aria-hidden="true"
+                    className={`vcr-fighter is-${side}${track.status === 2 ? " is-returning" : ""}`}
+                    key={`${side}-fighter-${track.index}`}
+                    style={{
+                        left: `${geometry.mapX(track.x)}%`,
+                        top: `${fighterTop(side, track)}%`,
+                    }}
+                    title={`${side} fighter ${track.index + 1}`}
+                />
+            ))}
+
+            {effects.map((effect, index) => {
+                if (effect.kind !== "fighter_dogfight_loss") return null;
+                return (
+                    <span
+                        aria-hidden="true"
+                        className="vcr-dogfight-flash"
+                        key={`dogfight-${index}`}
+                        style={{ left: `${geometry.mapX(effect.x ?? 320)}%` }}
+                    >×</span>
+                );
+            })}
+
             <div
                 className={`vcr-combat-object ${sideMarkerClass(frame.left)}${hitLeft ? " is-hit" : ""}`}
-                style={{ left: `${leftPercent}%` }}
+                style={{ left: `${geometry.left}%` }}
             >
                 <CombatObjectArtwork facing="right" side={frame.left} />
                 <strong>{frame.left.name ?? `#${frame.left.object_id ?? "?"}`}</strong>
@@ -189,7 +341,7 @@ function Battlefield({
             </div>
             <div
                 className={`vcr-combat-object ${sideMarkerClass(frame.right)}${hitRight ? " is-hit" : ""}`}
-                style={{ left: `${rightPercent}%` }}
+                style={{ left: `${geometry.right}%` }}
             >
                 <CombatObjectArtwork facing="left" side={frame.right} />
                 <strong>{frame.right.name ?? `#${frame.right.object_id ?? "?"}`}</strong>
