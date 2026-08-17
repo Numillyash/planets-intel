@@ -73,6 +73,29 @@ def _right_balance_eligible(
     )
 
 
+def _balance_applied(
+    *,
+    eligible: bool,
+    mode: str,
+    rng: random.Random,
+) -> bool:
+    if not eligible:
+        return False
+    if mode == "on":
+        return True
+    if mode == "off":
+        return False
+    return rng.random() < 0.60
+
+
+def _balance_probability(eligible: bool, mode: str) -> float:
+    if not eligible or mode == "off":
+        return 0.0
+    if mode == "on":
+        return 1.0
+    return 0.60
+
+
 def _with_right_balance_bonus(
     payload: Mapping[str, Any],
     *,
@@ -262,12 +285,11 @@ def run_battle_simulator_once(
 
     eligible = _right_balance_eligible(left, right)
     rng = random.Random(sampling_seed)
-    if right_balance_bonus == "on":
-        bonus_applied = eligible
-    elif right_balance_bonus == "off":
-        bonus_applied = False
-    else:
-        bonus_applied = eligible and rng.random() < 0.60
+    bonus_applied = _balance_applied(
+        eligible=eligible,
+        mode=right_balance_bonus,
+        rng=rng,
+    )
 
     payload = _build_payload(left=left, right=right, seed=seed)
     payload = _with_right_balance_bonus(payload, applied=bonus_applied)
@@ -341,6 +363,7 @@ def run_battle_simulator_odds(
     left: Mapping[str, Any],
     right: Mapping[str, Any],
     battles: int,
+    right_balance_bonus: str,
     sampling_seed: int | None,
 ) -> dict[str, Any] | None:
     catalog = _catalog(game_id)
@@ -360,7 +383,11 @@ def run_battle_simulator_odds(
     try:
         for _ in range(battles):
             seed = rng.choice(CLASSIC_START_SEEDS)
-            bonus_applied = eligible and rng.random() < 0.60
+            bonus_applied = _balance_applied(
+                eligible=eligible,
+                mode=right_balance_bonus,
+                rng=rng,
+            )
             key = (seed, bonus_applied)
             result = cache.get(key)
             if result is None:
@@ -397,7 +424,11 @@ def run_battle_simulator_odds(
             "sampling_seed": sampling_seed,
             "classic_start_seeds": len(CLASSIC_START_SEEDS),
             "right_balance_eligible": eligible,
-            "right_balance_probability": 0.60 if eligible else 0.0,
+            "right_balance_mode": right_balance_bonus,
+            "right_balance_probability": _balance_probability(
+                eligible,
+                right_balance_bonus,
+            ),
             "unique_terminal_replays_computed": len(cache),
         },
         "sources": {
@@ -521,6 +552,7 @@ def _sequence_trial(
     torpedoes: Sequence[Mapping[str, Any]],
     settings: Mapping[str, Any],
     rng: random.Random,
+    right_balance_bonus: str = "auto",
     first_seed: int | None = None,
     engagement_cache: dict[tuple[Any, ...], dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
@@ -544,7 +576,11 @@ def _sequence_trial(
         else:
             seed = rng.choice(CLASSIC_START_SEEDS)
         eligible = _right_balance_eligible(left_current, right_current)
-        bonus_applied = eligible and rng.random() < 0.60
+        bonus_applied = _balance_applied(
+            eligible=eligible,
+            mode=right_balance_bonus,
+            rng=rng,
+        )
 
         cache_key = (
             _sequence_cache_key(left_current),
@@ -588,6 +624,7 @@ def _sequence_trial(
                 "right_index": right_index,
                 "start_seed": seed,
                 "right_balance_applied": bonus_applied,
+                "right_balance_mode": right_balance_bonus,
                 "result": list(labels) if isinstance(labels, list) else [],
                 "cycles": int(result.get("cycles", 0)),
                 "left": dict(left_terminal),
@@ -707,6 +744,7 @@ def run_battle_simulator_sequence_once(
     left: Sequence[Mapping[str, Any]],
     right: Sequence[Mapping[str, Any]],
     seed: int,
+    right_balance_bonus: str,
     sampling_seed: int | None,
 ) -> dict[str, Any] | None:
     catalog = _catalog(game_id)
@@ -734,6 +772,7 @@ def run_battle_simulator_sequence_once(
             torpedoes=torpedoes,
             settings=settings,
             rng=rng,
+            right_balance_bonus=right_balance_bonus,
             first_seed=seed,
         )
     except ReplayUnsupported as exc:
@@ -752,6 +791,7 @@ def run_battle_simulator_sequence_once(
         "basis": "standalone_battle_sequence",
         "persisted": False,
         "seed_policy": "requested seed for first engagement; sampled Classic seed for later engagements",
+        "right_balance_mode": right_balance_bonus,
         "sequence_model": {
             "damage_ammo_crew_shields_carry": True,
             "federation_shield_recovery_between_fights": True,
@@ -767,6 +807,7 @@ def run_battle_simulator_sequence_odds(
     left: Sequence[Mapping[str, Any]],
     right: Sequence[Mapping[str, Any]],
     battles: int,
+    right_balance_bonus: str,
     sampling_seed: int | None,
 ) -> dict[str, Any] | None:
     catalog = _catalog(game_id)
@@ -799,6 +840,7 @@ def run_battle_simulator_sequence_odds(
                     torpedoes=torpedoes,
                     settings=settings,
                     rng=rng,
+                    right_balance_bonus=right_balance_bonus,
                     engagement_cache=engagement_cache,
                 )
             )
@@ -843,7 +885,11 @@ def run_battle_simulator_sequence_odds(
             "requested_battles": battles,
             "sampling_seed": sampling_seed,
             "classic_start_seeds": len(CLASSIC_START_SEEDS),
-            "right_balance_probability_when_eligible": 0.60,
+            "right_balance_mode": right_balance_bonus,
+            "right_balance_probability_when_eligible": _balance_probability(
+                True,
+                right_balance_bonus,
+            ),
             "unique_engagement_replays_computed": len(engagement_cache),
             "mean_engagements": round(sum(engagement_counts) / battles, 2),
         },
