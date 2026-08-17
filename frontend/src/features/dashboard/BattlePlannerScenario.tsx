@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import {
     runCombatPlannerOdds,
+    runCombatPlannerRepeatOdds,
     runCombatPlannerScenario,
     type CombatPlannerOddsResponse,
     type CombatPlannerScenarioRequest,
@@ -16,6 +17,16 @@ function parseAmmo(value: string): number | null {
     if (!/^\d+$/.test(normalized)) return null;
     const parsed = Number(normalized);
     return Number.isSafeInteger(parsed) && parsed >= 0 && parsed <= 100_000
+        ? parsed
+        : null;
+}
+
+
+function parseBattles(value: string): number | null {
+    const normalized = value.trim();
+    if (!/^\d+$/.test(normalized)) return null;
+    const parsed = Number(normalized);
+    return Number.isSafeInteger(parsed) && parsed >= 1 && parsed <= 100_000
         ? parsed
         : null;
 }
@@ -59,6 +70,110 @@ function TerminalState({
 }
 
 
+function OddsResultPanel({
+    result,
+    factualStart,
+    mode,
+}: {
+    result: CombatPlannerOddsResponse;
+    factualStart: VcrReplayTraceResponse["frames"][number];
+    mode: "repeat" | "series";
+}) {
+    const repeat = mode === "repeat";
+    return (
+        <section
+            className="panel"
+            style={{ borderColor: "rgba(117, 177, 227, 0.55)" }}
+        >
+            {!result.supported ? (
+                <div className="error-card">
+                    Simulation unavailable: {result.reason ?? "unsupported combat mode"}
+                </div>
+            ) : (
+                <>
+                    <div className="eyebrow">
+                        {repeat
+                            ? "REPEATED BATTLE SAMPLE · DERIVED SIMULATION"
+                            : "FULL CLASSIC SEED SERIES · DERIVED SIMULATION"}
+                    </div>
+                    <h3 style={{ margin: "4px 0 10px" }}>
+                        {result.sample_count} {repeat ? "battles simulated" : "start seeds evaluated"}
+                    </h3>
+
+                    <div
+                        style={{
+                            display: "grid",
+                            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                            gap: 14,
+                            marginBottom: 14,
+                        }}
+                    >
+                        {(["left", "right"] as const).map((sideName) => {
+                            const side = result.sides[sideName];
+                            if (side === undefined) return null;
+                            const source = sideName === "left"
+                                ? factualStart.left
+                                : factualStart.right;
+                            return (
+                                <div className="summary-card" key={sideName}>
+                                    <span>
+                                        {sideName.toUpperCase()} · {source.name ?? `#${source.object_id ?? "?"}`}
+                                    </span>
+                                    <strong>
+                                        Survival frequency {side.survival_seed_frequency_percent}%
+                                    </strong>
+                                    <small>
+                                        survived {side.survived_count} · destroyed {side.destroyed_count}
+                                        {side.captured_count > 0 ? ` · captured ${side.captured_count}` : ""}
+                                    </small>
+                                    <small>
+                                        mean final: {side.mean_final_damage}% damage · {side.mean_final_shield}% shield
+                                        {" · "}crew {side.mean_final_crew}
+                                        {" · "}torps {side.mean_final_torpedoes}
+                                        {" · "}fighters {side.mean_final_fighters}
+                                    </small>
+                                </div>
+                            );
+                        })}
+                    </div>
+
+                    <div className="table-wrapper">
+                        <table className="players-table game-object-table">
+                            <thead>
+                                <tr>
+                                    <th>Outcome</th>
+                                    <th>{repeat ? "Battles" : "Seeds"}</th>
+                                    <th>Frequency</th>
+                                    <th>Example seed</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {result.outcomes.map((outcome) => (
+                                    <tr key={outcome.outcome}>
+                                        <td className="player-name">
+                                            {outcomeLabel(outcome.outcome)}
+                                        </td>
+                                        <td>{outcome.count}</td>
+                                        <td>{outcome.seed_frequency_percent}%</td>
+                                        <td>{outcome.representative_seed ?? "—"}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <p style={{ marginTop: 10, color: "#91a9c8" }}>
+                        {repeat
+                            ? "Repeated mode samples Classic combat start seeds with replacement and reports empirical battle frequencies, matching the long-running simulator workflow. Results are simulation only and are never persisted as factual intel."
+                            : "Series mode evaluates every documented Classic start seed exactly once. It is useful for deterministic engine validation and has no sampling noise."}
+                    </p>
+                </>
+            )}
+        </section>
+    );
+}
+
+
 export function BattlePlannerScenario({
     gameId,
     linkedAccountId,
@@ -80,11 +195,14 @@ export function BattlePlannerScenario({
     const [leftTorps, setLeftTorps] = useState("");
     const [rightFighters, setRightFighters] = useState("");
     const [rightTorps, setRightTorps] = useState("");
+    const [battleCount, setBattleCount] = useState("10000");
     const [scenario, setScenario] =
         useState<CombatPlannerScenarioResponse | null>(null);
     const [odds, setOdds] = useState<CombatPlannerOddsResponse | null>(null);
+    const [series, setSeries] = useState<CombatPlannerOddsResponse | null>(null);
     const [running, setRunning] = useState(false);
     const [analyzing, setAnalyzing] = useState(false);
+    const [seriesRunning, setSeriesRunning] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
@@ -95,6 +213,7 @@ export function BattlePlannerScenario({
         setRightTorps(String(factualStart.right.torpedoes));
         setScenario(null);
         setOdds(null);
+        setSeries(null);
         setError(null);
     }, [
         vcrId,
@@ -109,12 +228,19 @@ export function BattlePlannerScenario({
         leftTorps: parseAmmo(leftTorps),
         rightFighters: parseAmmo(rightFighters),
         rightTorps: parseAmmo(rightTorps),
-    }), [leftFighters, leftTorps, rightFighters, rightTorps]);
+        battles: parseBattles(battleCount),
+    }), [battleCount, leftFighters, leftTorps, rightFighters, rightTorps]);
 
     if (factualStart === null || !factualTrace.supported) return null;
 
-    const valid = Object.values(parsed).every((value) => value !== null);
-    const changed = valid && (
+    const validAmmo = [
+        parsed.leftFighters,
+        parsed.leftTorps,
+        parsed.rightFighters,
+        parsed.rightTorps,
+    ].every((value) => value !== null);
+    const valid = validAmmo && parsed.battles !== null;
+    const changed = validAmmo && (
         parsed.leftFighters !== factualStart.left.fighters
         || parsed.leftTorps !== factualStart.left.torpedoes
         || parsed.rightFighters !== factualStart.right.fighters
@@ -125,7 +251,7 @@ export function BattlePlannerScenario({
         : null;
 
     function requestBody(): CombatPlannerScenarioRequest | null {
-        if (!valid) return null;
+        if (!validAmmo) return null;
         return {
             left: {
                 fighters: parsed.leftFighters === factualStart.left.fighters
@@ -149,6 +275,7 @@ export function BattlePlannerScenario({
     function invalidateResults() {
         setScenario(null);
         setOdds(null);
+        setSeries(null);
         setError(null);
     }
 
@@ -180,8 +307,38 @@ export function BattlePlannerScenario({
 
     async function analyzeOdds() {
         const request = requestBody();
-        if (request === null) return;
+        if (request === null || parsed.battles === null) return;
         setAnalyzing(true);
+        setError(null);
+        try {
+            const response = await runCombatPlannerRepeatOdds(
+                gameId,
+                linkedAccountId,
+                turn,
+                vcrId,
+                {
+                    ...request,
+                    battles: parsed.battles,
+                    sampling_seed: null,
+                },
+            );
+            setOdds(response);
+        } catch (reason) {
+            setOdds(null);
+            setError(
+                reason instanceof Error
+                    ? reason.message
+                    : "Repeated battle simulation failed",
+            );
+        } finally {
+            setAnalyzing(false);
+        }
+    }
+
+    async function runFullSeries() {
+        const request = requestBody();
+        if (request === null) return;
+        setSeriesRunning(true);
         setError(null);
         try {
             const response = await runCombatPlannerOdds(
@@ -191,16 +348,16 @@ export function BattlePlannerScenario({
                 vcrId,
                 request,
             );
-            setOdds(response);
+            setSeries(response);
         } catch (reason) {
-            setOdds(null);
+            setSeries(null);
             setError(
                 reason instanceof Error
                     ? reason.message
-                    : "Battle seed sweep failed",
+                    : "Full Classic seed series failed",
             );
         } finally {
-            setAnalyzing(false);
+            setSeriesRunning(false);
         }
     }
 
@@ -211,8 +368,11 @@ export function BattlePlannerScenario({
         setRightTorps(String(factualStart.right.torpedoes));
         setScenario(null);
         setOdds(null);
+        setSeries(null);
         setError(null);
     }
+
+    const busy = running || analyzing || seriesRunning;
 
     return (
         <div style={{ display: "grid", gap: 14 }}>
@@ -233,10 +393,24 @@ export function BattlePlannerScenario({
                             hull, weapons, race and combat rules stay factual.
                         </p>
                     </div>
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "end" }}>
+                        <label style={{ width: 120 }}>
+                            <small>Battles</small>
+                            <input
+                                max={100000}
+                                min={1}
+                                onChange={(event) => {
+                                    setBattleCount(event.target.value);
+                                    invalidateResults();
+                                }}
+                                style={{ width: "100%" }}
+                                type="number"
+                                value={battleCount}
+                            />
+                        </label>
                         <button
                             className="secondary-button"
-                            disabled={running || analyzing || !changed}
+                            disabled={busy || !changed}
                             onClick={resetFactual}
                             type="button"
                         >
@@ -244,15 +418,15 @@ export function BattlePlannerScenario({
                         </button>
                         <button
                             className="secondary-button"
-                            disabled={running || analyzing || !valid}
-                            onClick={() => void analyzeOdds()}
+                            disabled={busy || !validAmmo}
+                            onClick={() => void runFullSeries()}
                             type="button"
                         >
-                            {analyzing ? "Sweeping seeds…" : "Analyze all 118 seeds"}
+                            {seriesRunning ? "Running series…" : "Full 118-seed series"}
                         </button>
                         <button
-                            className="primary-button"
-                            disabled={running || analyzing || !valid}
+                            className="secondary-button"
+                            disabled={busy || !validAmmo}
                             onClick={() => void runScenario()}
                             type="button"
                         >
@@ -261,6 +435,16 @@ export function BattlePlannerScenario({
                                 : changed
                                     ? "Run source-seed what-if"
                                     : "Replay source seed"}
+                        </button>
+                        <button
+                            className="primary-button"
+                            disabled={busy || !valid}
+                            onClick={() => void analyzeOdds()}
+                            type="button"
+                        >
+                            {analyzing
+                                ? "Running battles…"
+                                : `Run ${parsed.battles ?? "?"} battles`}
                         </button>
                     </div>
                 </div>
@@ -340,9 +524,14 @@ export function BattlePlannerScenario({
                     ))}
                 </div>
 
-                {!valid && (
+                {!validAmmo && (
                     <p style={{ color: "#e0a7a7", marginTop: 12 }}>
                         Scenario ammo values must be integers from 0 to 100000.
+                    </p>
+                )}
+                {parsed.battles === null && (
+                    <p style={{ color: "#e0a7a7", marginTop: 12 }}>
+                        Battle count must be an integer from 1 to 100000.
                     </p>
                 )}
                 {error !== null && (
@@ -351,92 +540,19 @@ export function BattlePlannerScenario({
             </section>
 
             {odds !== null && (
-                <section
-                    className="panel"
-                    style={{ borderColor: "rgba(117, 177, 227, 0.55)" }}
-                >
-                    {!odds.supported ? (
-                        <div className="error-card">
-                            Seed sweep unavailable: {odds.reason ?? "unsupported combat mode"}
-                        </div>
-                    ) : (
-                        <>
-                            <div className="eyebrow">EXHAUSTIVE CLASSIC SEED SWEEP</div>
-                            <h3 style={{ margin: "4px 0 10px" }}>
-                                {odds.sample_count} documented start seeds evaluated
-                            </h3>
+                <OddsResultPanel
+                    factualStart={factualStart}
+                    mode="repeat"
+                    result={odds}
+                />
+            )}
 
-                            <div
-                                style={{
-                                    display: "grid",
-                                    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                                    gap: 14,
-                                    marginBottom: 14,
-                                }}
-                            >
-                                {(["left", "right"] as const).map((sideName) => {
-                                    const side = odds.sides[sideName];
-                                    if (side === undefined) return null;
-                                    const source = sideName === "left"
-                                        ? factualStart.left
-                                        : factualStart.right;
-                                    return (
-                                        <div className="summary-card" key={sideName}>
-                                            <span>
-                                                {sideName.toUpperCase()} · {source.name ?? `#${source.object_id ?? "?"}`}
-                                            </span>
-                                            <strong>
-                                                Survival seed frequency {side.survival_seed_frequency_percent}%
-                                            </strong>
-                                            <small>
-                                                survived {side.survived_count} · destroyed {side.destroyed_count}
-                                                {side.captured_count > 0 ? ` · captured ${side.captured_count}` : ""}
-                                            </small>
-                                            <small>
-                                                mean final: {side.mean_final_damage}% damage · {side.mean_final_shield}% shield
-                                                {" · "}crew {side.mean_final_crew}
-                                                {" · "}torps {side.mean_final_torpedoes}
-                                                {" · "}fighters {side.mean_final_fighters}
-                                            </small>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-
-                            <div className="table-wrapper">
-                                <table className="players-table game-object-table">
-                                    <thead>
-                                        <tr>
-                                            <th>Outcome</th>
-                                            <th>Seeds</th>
-                                            <th>Frequency</th>
-                                            <th>Example seed</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {odds.outcomes.map((outcome) => (
-                                            <tr key={outcome.outcome}>
-                                                <td className="player-name">
-                                                    {outcomeLabel(outcome.outcome)}
-                                                </td>
-                                                <td>{outcome.count}</td>
-                                                <td>{outcome.seed_frequency_percent}%</td>
-                                                <td>{outcome.representative_seed ?? "—"}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-
-                            <p style={{ marginTop: 10, color: "#91a9c8" }}>
-                                This is an exhaustive frequency over the 118 documented
-                                Classic start seeds, not a claim that Host selects those
-                                seeds uniformly. It has no Monte Carlo sampling noise and
-                                is never persisted as factual intel.
-                            </p>
-                        </>
-                    )}
-                </section>
+            {series !== null && (
+                <OddsResultPanel
+                    factualStart={factualStart}
+                    mode="series"
+                    result={series}
+                />
             )}
 
             {factualEnd !== null && (
