@@ -6,6 +6,8 @@ export type BattleSimulatorSourceKind =
     | "vcr"
     | "manual";
 
+export type RightBalanceMode = "auto" | "on" | "off";
+
 export interface BattleSimulatorCombatant {
     source_kind: BattleSimulatorSourceKind;
     source_id: number | null;
@@ -68,7 +70,7 @@ export interface BattleSimulatorRunResponse {
     start_seed?: number;
     right_balance?: {
         eligible: boolean;
-        mode: "auto" | "on" | "off";
+        mode: RightBalanceMode;
         applied: boolean;
         mass_bonus: number;
     };
@@ -100,6 +102,7 @@ export interface BattleSimulatorOddsResponse {
         sampling_seed: number | null;
         classic_start_seeds: number;
         right_balance_eligible: boolean;
+        right_balance_mode: RightBalanceMode;
         right_balance_probability: number;
         unique_terminal_replays_computed: number;
     };
@@ -125,6 +128,7 @@ export interface BattleSimulatorSequenceEngagement {
     right_index: number;
     start_seed: number;
     right_balance_applied: boolean;
+    right_balance_mode?: RightBalanceMode;
     result: string[];
     cycles: number;
     left: BattleSimulatorTerminalSide;
@@ -137,6 +141,7 @@ export interface BattleSimulatorSequenceRunResponse {
     reason: string | null;
     basis: "standalone_battle_sequence";
     persisted: false;
+    right_balance_mode?: RightBalanceMode;
     winner?: "left" | "right" | "draw" | "timeout" | "unknown";
     engagements?: BattleSimulatorSequenceEngagement[];
     left?: BattleSimulatorSequenceTerminalCombatant[];
@@ -177,6 +182,7 @@ export interface BattleSimulatorSequenceOddsResponse {
         requested_battles: number;
         sampling_seed: number | null;
         classic_start_seeds: number;
+        right_balance_mode: RightBalanceMode;
         right_balance_probability_when_eligible: number;
         unique_engagement_replays_computed: number;
         mean_engagements: number;
@@ -205,7 +211,7 @@ export function runStandaloneBattle(
         left: BattleSimulatorCombatant;
         right: BattleSimulatorCombatant;
         seed: number;
-        right_balance_bonus: "auto" | "on" | "off";
+        right_balance_bonus: RightBalanceMode;
         sampling_seed?: number | null;
     },
 ): Promise<BattleSimulatorRunResponse> {
@@ -222,6 +228,7 @@ export function runStandaloneBattleOdds(
         left: BattleSimulatorCombatant;
         right: BattleSimulatorCombatant;
         battles: number;
+        right_balance_bonus: RightBalanceMode;
         sampling_seed?: number | null;
     },
 ): Promise<BattleSimulatorOddsResponse> {
@@ -238,6 +245,7 @@ export function runStandaloneBattleSequence(
         left: BattleSimulatorCombatant[];
         right: BattleSimulatorCombatant[];
         seed: number;
+        right_balance_bonus: RightBalanceMode;
         sampling_seed?: number | null;
     },
 ): Promise<BattleSimulatorSequenceRunResponse> {
@@ -254,6 +262,7 @@ export function runStandaloneBattleSequenceOdds(
         left: BattleSimulatorCombatant[];
         right: BattleSimulatorCombatant[];
         battles: number;
+        right_balance_bonus: RightBalanceMode;
         sampling_seed?: number | null;
     },
 ): Promise<BattleSimulatorSequenceOddsResponse> {
