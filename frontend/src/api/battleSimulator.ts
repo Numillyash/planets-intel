@@ -12,6 +12,7 @@ export interface BattleSimulatorCombatant {
     owner_id: number | null;
     race_id: number | null;
     hull_id: number;
+    has_starbase: boolean;
     beam_count: number;
     launcher_count: number;
     bay_count: number;
