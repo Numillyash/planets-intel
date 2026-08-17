@@ -3,8 +3,14 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from app.api.dependencies.auth import require_user
 from app.models.user import AppUser
 from app.schemas.combat_planner import (
+    BattleSimulatorOddsRequest,
+    BattleSimulatorRunRequest,
     CombatPlannerRepeatRequest,
     CombatPlannerScenarioRequest,
+)
+from app.services.battle_simulator import (
+    run_battle_simulator_odds,
+    run_battle_simulator_once,
 )
 from app.services.combat_replay_sampling import get_combat_replay_repeat_odds
 from app.services.combat_replay_trace import (
@@ -125,5 +131,48 @@ def combat_replay_repeat_odds(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Accessible VCR repeated-simulation source not found",
+        )
+    return result
+
+
+@router.post("/games/{game_id}/battle-simulator/run")
+def standalone_battle_simulator_run(
+    body: BattleSimulatorRunRequest,
+    game_id: int = Path(gt=0),
+    _user: AppUser = Depends(require_user),
+) -> dict[str, object]:
+    result = run_battle_simulator_once(
+        game_id=game_id,
+        left=body.left.model_dump(),
+        right=body.right.model_dump(),
+        seed=body.seed,
+        right_balance_bonus=body.right_balance_bonus,
+        sampling_seed=body.sampling_seed,
+    )
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Game combat rule catalog not found",
+        )
+    return result
+
+
+@router.post("/games/{game_id}/battle-simulator/odds")
+def standalone_battle_simulator_odds(
+    body: BattleSimulatorOddsRequest,
+    game_id: int = Path(gt=0),
+    _user: AppUser = Depends(require_user),
+) -> dict[str, object]:
+    result = run_battle_simulator_odds(
+        game_id=game_id,
+        left=body.left.model_dump(),
+        right=body.right.model_dump(),
+        battles=body.battles,
+        sampling_seed=body.sampling_seed,
+    )
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Game combat rule catalog not found",
         )
     return result
