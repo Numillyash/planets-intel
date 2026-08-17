@@ -166,7 +166,12 @@ function App() {
 
     if (!user) return <LoginScreen onLogin={handleLogin} />;
 
-    const gamePickerRoute = /^\/intelboard\/?$/i.test(window.location.pathname);
+    // /intelboard is a bootstrap URL. Once the picker resolves an observer it
+    // canonicalizes itself to /intelboard/<observer>. Keep both forms routed to
+    // the picker; /intelboard/<observer>/<game> remains the dashboard route.
+    const gamePickerRoute = /^\/intelboard(?:\/[^/]+)?\/?$/i.test(
+        window.location.pathname,
+    );
     if (gamePickerRoute) {
         return <IntelboardGamePicker onLogout={handleLogout} user={user} />;
     }
