@@ -5,6 +5,10 @@ import {
     getGame,
     getPlanetsAccounts,
 } from "../../api/client";
+import {
+    readRememberedObserverId,
+    rememberObserverId,
+} from "../../lib/observerSelection";
 import type {
     AccountGameSummary,
     CurrentUserResponse,
@@ -61,9 +65,12 @@ function GameCard({
     return (
         <button
             className="intelboard-game-card"
-            onClick={() => window.location.assign(
-                gamePath(account.planets_username, game.id),
-            )}
+            onClick={() => {
+                rememberObserverId(account.id);
+                window.location.assign(
+                    gamePath(account.planets_username, game.id),
+                );
+            }}
             type="button"
         >
             <div className="intelboard-game-card-heading">
@@ -164,8 +171,14 @@ export function IntelboardGamePicker({
                 const response = await getPlanetsAccounts();
                 if (cancelled) return;
                 const active = response.accounts.filter((account) => account.is_active);
+                const rememberedId = readRememberedObserverId();
+                const remembered = rememberedId === null
+                    ? null
+                    : active.find((account) => account.id === rememberedId) ?? null;
+                const selected = remembered ?? active[0] ?? null;
                 setAccounts(active);
-                setSelectedAccountId(active[0]?.id ?? null);
+                setSelectedAccountId(selected?.id ?? null);
+                if (selected !== null) rememberObserverId(selected.id);
             } catch (reason) {
                 if (!cancelled) {
                     setError(
@@ -196,6 +209,7 @@ export function IntelboardGamePicker({
             };
         }
 
+        rememberObserverId(selectedAccountId);
         const accountId = selectedAccountId;
 
         async function loadGames() {
@@ -295,9 +309,11 @@ export function IntelboardGamePicker({
                     <select
                         className="secondary-button"
                         disabled={loadingAccounts || accounts.length === 0}
-                        onChange={(event) =>
-                            setSelectedAccountId(Number(event.target.value))
-                        }
+                        onChange={(event) => {
+                            const accountId = Number(event.target.value);
+                            rememberObserverId(accountId);
+                            setSelectedAccountId(accountId);
+                        }}
                         value={selectedAccountId ?? ""}
                     >
                         {accounts.map((account) => (
