@@ -11,7 +11,11 @@ from app.models.game_rule_catalog import GameRuleCatalog
 from app.models.private_observation_batch import PrivateObservationBatch
 from app.services.intel_access import accessible_intel_accounts
 from app.services.vcr_replay import ReplayUnsupported
+from app.services.vcr_replay_nu import replay_nuhost_from_nu_catalog
 from app.services.vcr_replay_trace import replay_nuhost_trace
+
+
+CLASSIC_START_SEEDS = tuple(range(1, 119))
 
 
 def _positive_int(value: Any) -> int | None:
@@ -213,6 +217,78 @@ def _run_trace(
     return trace
 
 
+def _mean(values: list[int]) -> float:
+    return round(sum(values) / len(values), 2) if values else 0.0
+
+
+def _summarize_seed_results(
+    trials: list[dict[str, Any]],
+) -> dict[str, Any]:
+    total = len(trials)
+    outcome_counts: dict[str, int] = {}
+    representative_seeds: dict[str, int] = {}
+
+    for trial in trials:
+        labels = trial.get("result")
+        if not isinstance(labels, list):
+            labels = []
+        key = "+".join(str(label) for label in labels) if labels else "unknown"
+        outcome_counts[key] = outcome_counts.get(key, 0) + 1
+        seed = trial.get("start_seed")
+        if key not in representative_seeds and isinstance(seed, int):
+            representative_seeds[key] = seed
+
+    outcomes = [
+        {
+            "outcome": key,
+            "count": count,
+            "seed_frequency_percent": round(count * 100 / total, 2) if total else 0.0,
+            "representative_seed": representative_seeds.get(key),
+        }
+        for key, count in sorted(
+            outcome_counts.items(),
+            key=lambda item: (-item[1], item[0]),
+        )
+    ]
+
+    sides: dict[str, Any] = {}
+    for side_name in ("left", "right"):
+        side_trials = [
+            trial[side_name]
+            for trial in trials
+            if isinstance(trial.get(side_name), dict)
+        ]
+        destroyed = sum(bool(side.get("destroyed")) for side in side_trials)
+        captured = sum(bool(side.get("captured")) for side in side_trials)
+        survived = sum(bool(side.get("survived")) for side in side_trials)
+        sides[side_name] = {
+            "destroyed_count": destroyed,
+            "captured_count": captured,
+            "survived_count": survived,
+            "survival_seed_frequency_percent": (
+                round(survived * 100 / total, 2) if total else 0.0
+            ),
+            "mean_final_shield": _mean([int(side.get("shield", 0)) for side in side_trials]),
+            "mean_final_damage": _mean([int(side.get("damage", 0)) for side in side_trials]),
+            "mean_final_crew": _mean([int(side.get("crew", 0)) for side in side_trials]),
+            "mean_final_torpedoes": _mean([int(side.get("torpedoes", 0)) for side in side_trials]),
+            "mean_final_fighters": _mean([int(side.get("fighters", 0)) for side in side_trials]),
+        }
+
+    return {
+        "sample_count": total,
+        "seed_space": {
+            "kind": "documented_classic_start_seeds",
+            "first": CLASSIC_START_SEEDS[0],
+            "last": CLASSIC_START_SEEDS[-1],
+            "count": len(CLASSIC_START_SEEDS),
+            "assumption": "seed_frequency_is_reported_without_asserting_host_seed_uniformity",
+        },
+        "outcomes": outcomes,
+        "sides": sides,
+    }
+
+
 def get_combat_replay_trace(
     *,
     user_id: int,
@@ -324,4 +400,84 @@ def get_combat_replay_scenario(
         "persisted": False,
         "baseline": baseline,
         "assumptions": applied,
+    }
+
+
+def get_combat_replay_odds(
+    *,
+    user_id: int,
+    game_id: int,
+    linked_account_id: int,
+    turn: int,
+    vcr_id: int,
+    left_overrides: Mapping[str, int | None],
+    right_overrides: Mapping[str, int | None],
+) -> dict[str, Any] | None:
+    """Evaluate one VCR-derived setup across every documented Classic start seed.
+
+    The response deliberately reports seed frequencies rather than asserting that
+    Host selects these seeds uniformly. No factual or analyst-reviewed state is
+    persisted.
+    """
+    context = _load_replay_context(
+        user_id=user_id,
+        game_id=game_id,
+        linked_account_id=linked_account_id,
+        turn=turn,
+        vcr_id=vcr_id,
+    )
+    if context is None:
+        return None
+
+    payload, beams, torpedoes, settings, _hulls = context
+    baseline = _combat_ammo_snapshot(payload)
+
+    try:
+        scenario_payload, applied = apply_combat_scenario_overrides(
+            payload,
+            left=left_overrides,
+            right=right_overrides,
+        )
+        trials: list[dict[str, Any]] = []
+        for seed in CLASSIC_START_SEEDS:
+            trial_payload = deepcopy(scenario_payload)
+            trial_payload["seed"] = seed
+            result = replay_nuhost_from_nu_catalog(
+                trial_payload,
+                beams=beams,
+                torpedoes=torpedoes,
+                settings=settings,
+            )
+            result["start_seed"] = seed
+            trials.append(result)
+    except ReplayUnsupported as exc:
+        return {
+            "game_id": game_id,
+            "turn": turn,
+            "vcr_id": vcr_id,
+            "supported": False,
+            "reason": str(exc),
+            "basis": "battle_planner_seed_sweep",
+            "source_basis": "factual_vcr",
+            "persisted": False,
+            "baseline": baseline,
+            "assumptions": {"left": {}, "right": {}},
+            "sample_count": 0,
+            "outcomes": [],
+            "sides": {},
+        }
+
+    return {
+        "game_id": game_id,
+        "turn": turn,
+        "vcr_id": vcr_id,
+        "supported": True,
+        "reason": None,
+        "basis": "battle_planner_seed_sweep",
+        "source_basis": "factual_vcr",
+        "engine_basis": "nuhost_classic_119",
+        "persisted": False,
+        "baseline": baseline,
+        "assumptions": applied,
+        **_summarize_seed_results(trials),
     }
