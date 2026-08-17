@@ -9,6 +9,7 @@ import {
     type BattleSimulatorRunResponse,
     type BattleSimulatorSequenceOddsResponse,
     type BattleSimulatorSequenceRunResponse,
+    type RightBalanceMode,
 } from "../../api/battleSimulator";
 import type { GameRuleCatalogResponse } from "../../api/ruleCatalog";
 import type { GameDetailsResponse } from "../../types/api";
@@ -19,7 +20,6 @@ import {
     candidateLabel,
     intValue,
     materializeCandidate,
-    textValue,
     type CandidateKey,
     type MaterializedCombatant,
     type SideName,
@@ -249,6 +249,7 @@ export function BattleSimulatorWorkbench({
     const [rightAddKey, setRightAddKey] = useState<CandidateKey | null>(null);
     const [seed, setSeed] = useState(1);
     const [battles, setBattles] = useState(10_000);
+    const [rightBalanceMode, setRightBalanceMode] = useState<RightBalanceMode>("auto");
     const [running, setRunning] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [runResult, setRunResult] = useState<BattleSimulatorRunResponse | null>(null);
@@ -390,13 +391,14 @@ export function BattleSimulatorWorkbench({
                     left: leftQueue.map((item) => item.combatant),
                     right: rightQueue.map((item) => item.combatant),
                     seed,
+                    right_balance_bonus: rightBalanceMode,
                 }));
             } else {
                 setRunResult(await runStandaloneBattle(game.game.id, {
                     left: leftQueue[0].combatant,
                     right: rightQueue[0].combatant,
                     seed,
-                    right_balance_bonus: "auto",
+                    right_balance_bonus: rightBalanceMode,
                 }));
             }
         } catch (reason) {
@@ -418,12 +420,14 @@ export function BattleSimulatorWorkbench({
                     left: leftQueue.map((item) => item.combatant),
                     right: rightQueue.map((item) => item.combatant),
                     battles,
+                    right_balance_bonus: rightBalanceMode,
                 }));
             } else {
                 setOdds(await runStandaloneBattleOdds(game.game.id, {
                     left: leftQueue[0].combatant,
                     right: rightQueue[0].combatant,
                     battles,
+                    right_balance_bonus: rightBalanceMode,
                 }));
             }
         } catch (reason) {
@@ -442,7 +446,8 @@ export function BattleSimulatorWorkbench({
                         <h3>Combat queues</h3>
                         <p>
                             Add known ships, known planets/starbases or manual hulls.
-                            The queue order is the order in which ships enter combat.
+                            Left/right are explicit combat positions; identical hulls can fight on opposite sides.
+                            Queue order controls which ship enters the next engagement.
                         </p>
                     </div>
                     <button
@@ -507,9 +512,9 @@ export function BattleSimulatorWorkbench({
 
                 {multiHasPlanet && (
                     <div className="battle-sim-warning">
-                        Multi-wave planet/starbase carry-over is intentionally disabled
-                        until separate planetary and starbase defense losses are modeled.
-                        Single ship-vs-planet simulation is supported.
+                        Planet/starbase multi-wave carry-over is still fail-closed:
+                        the simulator will not invent post-battle planet/base defense state.
+                        Ship-only queues and single ship-vs-planet simulation remain available.
                     </div>
                 )}
             </section>
@@ -528,6 +533,21 @@ export function BattleSimulatorWorkbench({
                     <h3>{multi ? "Run battle sequence" : "Run combat"}</h3>
                 </div>
                 <div className="battle-sim-control-row">
+                    <label className="battle-sim-field battle-sim-balance-field">
+                        <span>HOST right carrier balance</span>
+                        <select
+                            className="battle-sim-select"
+                            onChange={(event) => {
+                                setRightBalanceMode(event.target.value as RightBalanceMode);
+                                invalidateResults();
+                            }}
+                            value={rightBalanceMode}
+                        >
+                            <option value="auto">Auto · sample HOST branch</option>
+                            <option value="on">Force +360 KT when eligible</option>
+                            <option value="off">Disabled</option>
+                        </select>
+                    </label>
                     <NumberInput
                         label="Start seed"
                         max={118}
@@ -633,6 +653,12 @@ export function BattleSimulatorWorkbench({
                         <>
                             <h3>{odds.sample_count.toLocaleString()} battles</h3>
                             <OutcomeGrid outcomes={odds.outcomes} />
+                            {odds.sampling !== undefined && (
+                                <p className="battle-sim-result-note">
+                                    Right carrier balance: {odds.sampling.right_balance_mode}
+                                    {` · sampled probability ${(odds.sampling.right_balance_probability * 100).toFixed(0)}% when eligible`}
+                                </p>
+                            )}
                             {odds.sides.left !== undefined && odds.sides.right !== undefined && (
                                 <div className="battle-sim-mean-grid">
                                     <MeanSideCard
@@ -663,6 +689,12 @@ export function BattleSimulatorWorkbench({
                         <>
                             <h3>{sequenceOdds.sample_count.toLocaleString()} full simulations</h3>
                             <OutcomeGrid outcomes={sequenceOdds.outcomes ?? []} />
+                            {sequenceOdds.sampling !== undefined && (
+                                <p className="battle-sim-result-note">
+                                    Right carrier balance: {sequenceOdds.sampling.right_balance_mode}
+                                    {` · ${(sequenceOdds.sampling.right_balance_probability_when_eligible * 100).toFixed(0)}% when an engagement is eligible`}
+                                </p>
+                            )}
                             <div className="battle-sim-sequence-stats">
                                 {(["left", "right"] as const).map((side) => (
                                     <div key={side}>
