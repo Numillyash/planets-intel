@@ -3,6 +3,9 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
+RightBalanceMode = Literal["auto", "on", "off"]
+
+
 class CombatPlannerSideOverrides(BaseModel):
     fighters: int | None = Field(default=None, ge=0, le=100_000)
     torpedoes: int | None = Field(default=None, ge=0, le=100_000)
@@ -68,7 +71,7 @@ class BattleSimulatorRunRequest(BaseModel):
     left: BattleSimulatorCombatant
     right: BattleSimulatorCombatant
     seed: int = Field(default=1, ge=1, le=118)
-    right_balance_bonus: Literal["auto", "on", "off"] = "auto"
+    right_balance_bonus: RightBalanceMode = "auto"
     sampling_seed: int | None = Field(default=None, ge=0, le=2**63 - 1)
 
 
@@ -76,6 +79,7 @@ class BattleSimulatorOddsRequest(BaseModel):
     left: BattleSimulatorCombatant
     right: BattleSimulatorCombatant
     battles: int = Field(default=10_000, ge=1, le=100_000)
+    right_balance_bonus: RightBalanceMode = "auto"
     sampling_seed: int | None = Field(default=None, ge=0, le=2**63 - 1)
 
 
@@ -83,6 +87,7 @@ class BattleSimulatorSequenceRunRequest(BaseModel):
     left: list[BattleSimulatorCombatant] = Field(min_length=1, max_length=20)
     right: list[BattleSimulatorCombatant] = Field(min_length=1, max_length=20)
     seed: int = Field(default=1, ge=1, le=118)
+    right_balance_bonus: RightBalanceMode = "auto"
     sampling_seed: int | None = Field(default=None, ge=0, le=2**63 - 1)
 
 
@@ -90,4 +95,5 @@ class BattleSimulatorSequenceOddsRequest(BaseModel):
     left: list[BattleSimulatorCombatant] = Field(min_length=1, max_length=20)
     right: list[BattleSimulatorCombatant] = Field(min_length=1, max_length=20)
     battles: int = Field(default=10_000, ge=1, le=100_000)
+    right_balance_bonus: RightBalanceMode = "auto"
     sampling_seed: int | None = Field(default=None, ge=0, le=2**63 - 1)
