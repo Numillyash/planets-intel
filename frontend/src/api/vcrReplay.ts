@@ -68,6 +68,58 @@ export interface CombatPlannerScenarioResponse extends VcrReplayTraceResponse {
     };
 }
 
+export interface CombatPlannerOddsOutcome {
+    outcome: string;
+    count: number;
+    seed_frequency_percent: number;
+    representative_seed: number | null;
+}
+
+export interface CombatPlannerOddsSide {
+    destroyed_count: number;
+    captured_count: number;
+    survived_count: number;
+    survival_seed_frequency_percent: number;
+    mean_final_shield: number;
+    mean_final_damage: number;
+    mean_final_crew: number;
+    mean_final_torpedoes: number;
+    mean_final_fighters: number;
+}
+
+export interface CombatPlannerOddsResponse {
+    game_id: number;
+    turn: number;
+    vcr_id: number;
+    supported: boolean;
+    reason: string | null;
+    basis: "battle_planner_seed_sweep";
+    source_basis: "factual_vcr";
+    engine_basis?: string;
+    persisted: false;
+    baseline: {
+        left: CombatPlannerAmmoState;
+        right: CombatPlannerAmmoState;
+    };
+    assumptions: {
+        left: Record<string, number>;
+        right: Record<string, number>;
+    };
+    sample_count: number;
+    seed_space?: {
+        kind: string;
+        first: number;
+        last: number;
+        count: number;
+        assumption: string;
+    };
+    outcomes: CombatPlannerOddsOutcome[];
+    sides: {
+        left?: CombatPlannerOddsSide;
+        right?: CombatPlannerOddsSide;
+    };
+}
+
 export async function getVcrReplayTrace(
     gameId: number,
     linkedAccountId: number,
@@ -116,4 +168,32 @@ export async function runCombatPlannerScenario(
         );
     }
     return response.json() as Promise<CombatPlannerScenarioResponse>;
+}
+
+export async function runCombatPlannerOdds(
+    gameId: number,
+    linkedAccountId: number,
+    turn: number,
+    vcrId: number,
+    scenario: CombatPlannerScenarioRequest,
+): Promise<CombatPlannerOddsResponse> {
+    const response = await fetch(
+        `/api/games/${gameId}/private-intel/history/combat-events/${turn}/${vcrId}/odds`
+        + `?linked_account_id=${linkedAccountId}`,
+        {
+            method: "POST",
+            credentials: "same-origin",
+            headers: {
+                Accept: "application/json",
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify(scenario),
+        },
+    );
+    if (!response.ok) {
+        throw new Error(
+            `Battle odds request failed: ${response.status} ${response.statusText}`,
+        );
+    }
+    return response.json() as Promise<CombatPlannerOddsResponse>;
 }
