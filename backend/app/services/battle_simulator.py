@@ -38,7 +38,7 @@ def _combatant_payload(raw: Mapping[str, Any]) -> dict[str, Any]:
         "crewdefensepercent": int(raw.get("crew_defense_rate", 0)),
         "torpedos": int(raw.get("torpedoes", 0)),
         "fighters": int(raw.get("fighters", 0)),
-        "hasstarbase": bool(is_planet and raw.get("source_kind") == "known_planet"),
+        "hasstarbase": bool(is_planet and raw.get("has_starbase")),
     }
 
 
