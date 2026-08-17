@@ -20,6 +20,7 @@ import {
 import { BattleSimulatorWorkbench } from "./BattleSimulatorWorkbench";
 import "./battle-simulator.css";
 import "./battle-simulator-workbench.css";
+import "./battle-planner-inputs.css";
 
 interface VcrShipCandidate {
     ship: ShipObservationResponse;
