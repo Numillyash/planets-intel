@@ -23,6 +23,8 @@ interface IntelboardGamePickerProps {
     onLogout: () => Promise<void>;
 }
 
+const GAME_PICKER_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+
 function gamePath(observer: string, gameId: number): string {
     return `/intelboard/${encodeURIComponent(observer)}/${gameId}`;
 }
@@ -253,16 +255,17 @@ export function IntelboardGamePicker({
         rememberObserverId(selectedAccountId);
         const accountId = selectedAccountId;
 
-        async function loadGames() {
-            setLoadingGames(true);
+        async function loadGames(initial: boolean) {
+            if (initial) {
+                setLoadingGames(true);
+                setGames([]);
+                setDetailsByGameId(new Map());
+            }
             setError(null);
-            setGames([]);
-            setDetailsByGameId(new Map());
 
             try {
                 const response = await getAccountGames(accountId);
                 if (cancelled) return;
-                setGames(response.games);
 
                 const details = await Promise.allSettled(
                     response.games.map((game) => getGame(game.id)),
@@ -275,6 +278,7 @@ export function IntelboardGamePicker({
                         next.set(response.games[index].id, result.value);
                     }
                 });
+                setGames(response.games);
                 setDetailsByGameId(next);
             } catch (reason) {
                 if (!cancelled) {
@@ -285,13 +289,18 @@ export function IntelboardGamePicker({
                     );
                 }
             } finally {
-                if (!cancelled) setLoadingGames(false);
+                if (!cancelled && initial) setLoadingGames(false);
             }
         }
 
-        void loadGames();
+        void loadGames(true);
+        const intervalId = window.setInterval(
+            () => void loadGames(false),
+            GAME_PICKER_REFRESH_INTERVAL_MS,
+        );
         return () => {
             cancelled = true;
+            window.clearInterval(intervalId);
         };
     }, [selectedAccountId]);
 
