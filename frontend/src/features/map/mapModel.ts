@@ -45,6 +45,7 @@ export interface ShipVisualPosition {
 }
 
 export const PLANET_LINK_RANGE = 81;
+export const PLANET_WARP_WELL_RADIUS = 3;
 export const PLANET_RADIUS = 7;
 // Visual separation only. Keep it compact enough that a ship still reads as
 // being at the planet rather than physically many light-years away.
@@ -194,6 +195,24 @@ export function planetLabel(
     return planet.name ?? `#${planet.planet_id}`;
 }
 
+export function planetLinkNavigationDistance(
+    from: { x: number; y: number },
+    to: { x: number; y: number },
+    warpWellRadius = PLANET_WARP_WELL_RADIUS,
+): number {
+    const centerDistance = Math.hypot(from.x - to.x, from.y - to.y);
+
+    // A W9 ship does not need to reach the target planet's center. If its
+    // ordinary movement ends inside the documented 3 ly planetary warp well,
+    // Host snaps the ship into orbit. Planets.nu navigation uses whole-light-
+    // year distance at the movement boundary, so test the nearest point of the
+    // target warp-well region before rounding. Example: Tesmond (2187,2238) to
+    // Saratoga (2210,2157) is 84.20 ly center-to-center, but only 81.20 ly to
+    // the 3 ly warp-well boundary; round(81.20) = 81, matching the stock map's
+    // W9 connection.
+    return Math.round(Math.max(0, centerDistance - warpWellRadius));
+}
+
 export function planetLinks(
     planets: MapPlanetObservation[],
     maxDistance = PLANET_LINK_RANGE,
@@ -208,16 +227,7 @@ export function planetLinks(
         for (let right = left + 1; right < positioned.length; right += 1) {
             const from = positioned[left];
             const to = positioned[right];
-            const dx = from.x - to.x;
-            const dy = from.y - to.y;
-
-            // Planets navigation presents distance as whole light-years and
-            // edge-of-range W9 destinations are treated according to that
-            // rounded navigation distance. Using the raw Euclidean float here
-            // incorrectly dropped pairs such as Taurus (2027,1691) and Cue
-            // Ball (2093,1644): sqrt(66^2 + 47^2) = 81.0247..., displayed as
-            // 81 ly and reachable at the W9 boundary.
-            const navigationDistance = Math.round(Math.hypot(dx, dy));
+            const navigationDistance = planetLinkNavigationDistance(from, to);
             if (navigationDistance <= maxDistance) {
                 links.push({ from, to });
             }
