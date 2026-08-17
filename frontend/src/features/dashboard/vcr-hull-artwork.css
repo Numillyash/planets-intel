@@ -1,8 +1,8 @@
 .vcr-hull-artwork-shell {
     position: relative;
     display: flex;
-    width: 118px;
-    height: 76px;
+    width: 104px;
+    height: 70px;
     align-items: center;
     justify-content: center;
     overflow: visible;
@@ -10,8 +10,8 @@
 
 .vcr-hull-artwork {
     display: block;
-    width: 280px;
-    height: 180px;
+    width: 220px;
+    height: 145px;
     max-width: none;
     object-fit: contain;
     pointer-events: none;
@@ -51,7 +51,7 @@
 
 .vcr-torpedo-projectile {
     position: absolute;
-    z-index: 4;
+    z-index: 5;
     top: 50%;
     display: block;
     width: 34px;
@@ -79,9 +79,84 @@
     transform: translate(-50%, -50%) scaleX(-1);
 }
 
-.vcr-torpedo-projectile.is-hit-course > span {
-    box-shadow:
-        -7px 0 6px rgba(255, 204, 76, 0.95),
-        -18px 0 12px rgba(255, 77, 47, 0.65),
-        0 0 11px rgba(255, 247, 188, 1);
+.vcr-fighter {
+    position: absolute;
+    z-index: 7;
+    display: block;
+    width: 11px;
+    height: 7px;
+    border: 1px solid rgba(222, 241, 255, 0.92);
+    background: #58b5ee;
+    clip-path: polygon(100% 50%, 0 0, 22% 50%, 0 100%);
+    transform: translate(-50%, -50%);
+    box-shadow: 0 0 7px rgba(91, 190, 255, 0.75);
+    pointer-events: none;
+    transition: left 45ms linear, top 45ms linear;
+}
+
+.vcr-fighter.is-right {
+    background: #f1a55d;
+    box-shadow: 0 0 7px rgba(255, 168, 91, 0.75);
+    transform: translate(-50%, -50%) scaleX(-1);
+}
+
+.vcr-fighter.is-returning.is-left {
+    transform: translate(-50%, -50%) scaleX(-1);
+}
+
+.vcr-fighter.is-returning.is-right {
+    transform: translate(-50%, -50%);
+}
+
+.vcr-beam-shot,
+.vcr-fighter-shot {
+    position: absolute;
+    z-index: 8;
+    display: block;
+    height: 2px;
+    transform: translateY(-50%);
+    transform-origin: center;
+    pointer-events: none;
+}
+
+.vcr-beam-shot {
+    background: linear-gradient(90deg, rgba(119, 218, 255, 0.2), #d8fbff, rgba(119, 218, 255, 0.2));
+    box-shadow: 0 0 5px rgba(97, 219, 255, 0.95);
+}
+
+.vcr-beam-shot.is-right {
+    background: linear-gradient(90deg, rgba(255, 164, 91, 0.2), #fff0b8, rgba(255, 164, 91, 0.2));
+    box-shadow: 0 0 5px rgba(255, 179, 93, 0.95);
+}
+
+.vcr-fighter-shot {
+    height: 1px;
+    background: rgba(140, 255, 166, 0.95);
+    box-shadow: 0 0 4px rgba(86, 255, 122, 0.85);
+}
+
+.vcr-dogfight-flash {
+    position: absolute;
+    z-index: 9;
+    top: 50%;
+    display: flex;
+    width: 18px;
+    height: 18px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(255, 103, 47, 0.72);
+    color: #fff2b7;
+    font-size: 13px;
+    font-weight: 900;
+    box-shadow: 0 0 14px rgba(255, 79, 42, 0.95);
+    pointer-events: none;
+}
+
+@media (max-width: 900px) {
+    .vcr-hull-artwork {
+        width: 180px;
+        height: 120px;
+    }
 }
