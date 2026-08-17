@@ -8,6 +8,7 @@ import type { GameDetailsResponse } from "../../types/api";
 import type { PrivateIntelMapResponse } from "../../types/intel";
 import { BattleSimulatorWorkbench } from "./BattleSimulatorWorkbench";
 import "./battle-simulator.css";
+import "./battle-simulator-workbench.css";
 
 export function StandaloneBattleSimulator({
     game,
