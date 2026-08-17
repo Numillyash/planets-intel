@@ -80,6 +80,28 @@ function RaceSelect({
     );
 }
 
+function ModifierToggle({
+    label,
+    enabled,
+    onChange,
+}: {
+    label: string;
+    enabled: boolean;
+    onChange: (enabled: boolean) => void;
+}) {
+    return (
+        <label className="battle-sim-toggle-field">
+            <span>{label}</span>
+            <input
+                checked={enabled}
+                onChange={(event) => onChange(event.target.checked)}
+                type="checkbox"
+            />
+            <strong>{enabled ? "Enabled" : "Disabled"}</strong>
+        </label>
+    );
+}
+
 function ShipEditor({
     value,
     catalog,
@@ -150,7 +172,41 @@ function ShipEditor({
                 {c.federation_crew_bonus && (
                     <span><strong>Fed Crew Bonus active</strong></span>
                 )}
+                {c.race_id === 2 && (
+                    <span><strong>Lizard 150% damage limit</strong></span>
+                )}
             </div>
+
+            {(c.race_id === 4 || c.race_id === 5) && (
+                <div className="battle-sim-fields battle-sim-fields-3">
+                    {c.race_id === 4 && (
+                        <ModifierToggle
+                            enabled={c.beam_charge_rate > 1}
+                            label="Fury 2× beam recharge"
+                            onChange={(enabled) => onChange({
+                                ...value,
+                                combatant: {
+                                    ...c,
+                                    beam_charge_rate: enabled ? 2 : 1,
+                                },
+                            })}
+                        />
+                    )}
+                    {c.race_id === 5 && (
+                        <ModifierToggle
+                            enabled={c.beam_kill_rate > 1}
+                            label="Privateer 3× beam crew kill"
+                            onChange={(enabled) => onChange({
+                                ...value,
+                                combatant: {
+                                    ...c,
+                                    beam_kill_rate: enabled ? 3 : 1,
+                                },
+                            })}
+                        />
+                    )}
+                </div>
+            )}
 
             {setup.physicalBeams > 0 && (
                 <div className="battle-sim-weapon-row">
