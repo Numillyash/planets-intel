@@ -23,7 +23,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "Inspect games belonging to a linked Planets.nu account and, "
-            "optionally, compare games/list turnstatus with loadinfo player state."
+            "optionally, compare games/list with loadinfo turn-state sources."
         )
     )
 
@@ -68,12 +68,14 @@ def _print_turn_state_diagnostic(
         print("loadinfo diagnostic unavailable: invalid game/players payload")
         return
 
-    turnstatus = game_list_record.get("turnstatus")
+    list_turnstatus = game_list_record.get("turnstatus")
+    info_turnstatus = game.get("turnstatus")
     print()
     print("===== TURN STATE DIAGNOSTIC =====")
     print(f"games/list turn: {game_list_record.get('turn')!r}")
     print(f"loadinfo turn:   {game.get('turn')!r}")
-    print(f"games/list turnstatus: {turnstatus!r}")
+    print(f"games/list game.turnstatus: {list_turnstatus!r}")
+    print(f"loadinfo game.turnstatus:   {info_turnstatus!r}")
     print()
 
     for raw in sorted(
@@ -84,11 +86,12 @@ def _print_turn_state_diagnostic(
         if isinstance(slot_id, bool) or not isinstance(slot_id, int) or slot_id <= 0:
             continue
         print(
-            "slot={slot} marker={marker!r} username={username!r} "
-            "race={race!r} status={status!r} turnready={turnready!r} "
-            "turnstatus={player_turnstatus!r}".format(
+            "slot={slot} list_marker={list_marker!r} info_marker={info_marker!r} "
+            "username={username!r} race={race!r} status={status!r} "
+            "turnready={turnready!r} player_turnstatus={player_turnstatus!r}".format(
                 slot=slot_id,
-                marker=_marker(turnstatus, slot_id),
+                list_marker=_marker(list_turnstatus, slot_id),
+                info_marker=_marker(info_turnstatus, slot_id),
                 username=raw.get("username"),
                 race=raw.get("raceid"),
                 status=raw.get("status"),
