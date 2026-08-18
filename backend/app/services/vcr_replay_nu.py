@@ -6,7 +6,6 @@ This adapter owns Planets.nu's actual RST field names and semantics.
 
 from __future__ import annotations
 
-from copy import deepcopy
 from typing import Any, Mapping, Sequence
 
 from app.services.vcr_replay import (
@@ -77,34 +76,6 @@ def normalize_nu_torpedoes(
     return result
 
 
-def _without_lizard_planet_damage_bonus(
-    payload: Mapping[str, Any],
-) -> Mapping[str, Any]:
-    """Neutralize only the Lizard 150% survival rule for ship-vs-planet.
-
-    Planets.nu still reports the attacking ship's factual race id in the VCR,
-    but the Lizard Crew Bonus explicitly does not allow survival past 100%
-    damage against a planet. The classic core currently derives its damage
-    limit from ``raceid``; supplying a replay-only neutral race here preserves
-    every other factual combat field while selecting the correct limit.
-    """
-
-    raw_left = payload.get("left")
-    raw_right = payload.get("right")
-    if not isinstance(raw_left, Mapping) or not isinstance(raw_right, Mapping):
-        return payload
-    if _integer(raw_right, "hullid") is None or int(raw_right.get("hullid", 1)) > 0:
-        return payload
-    if _integer(raw_left, "raceid") != 2:
-        return payload
-
-    adjusted = deepcopy(dict(payload))
-    adjusted_left = adjusted.get("left")
-    if isinstance(adjusted_left, dict):
-        adjusted_left["raceid"] = 0
-    return adjusted
-
-
 def replay_nuhost_from_nu_catalog(
     payload: Mapping[str, Any],
     *,
@@ -112,7 +83,15 @@ def replay_nuhost_from_nu_catalog(
     torpedoes: Sequence[Mapping[str, Any]],
     settings: Mapping[str, Any],
 ) -> dict[str, Any]:
-    """Replay a Nu VCR using the persisted Planets.nu game rule catalog."""
+    """Replay a Nu VCR using the persisted Planets.nu game rule catalog.
+
+    Lizard race identity is intentionally preserved for planet combat. The
+    classic engine lets the Lizard crew keep the ship functioning above 100%
+    during the engagement, while its planet-result path marks a Lizard ship at
+    >=100% damage destroyed after combat. That is the Nu tidal-force behavior
+    required for a ship to survive long enough to capture the planet and then
+    be lost.
+    """
 
     combat_rng = combat_rng_from_settings(settings)
     if combat_rng is None:
@@ -121,7 +100,7 @@ def replay_nuhost_from_nu_catalog(
         )
 
     return replay_nuhost_classic(
-        _without_lizard_planet_damage_bonus(payload),
+        payload,
         beams=normalize_nu_beams(beams),
         torpedoes=normalize_nu_torpedoes(torpedoes),
         combat_rng=combat_rng,
