@@ -12,19 +12,26 @@ from app.models.player_turn_activity_observation import (
 from app.models.score_observation import ScoreObservation
 
 
-def _latest_scores(
+def _current_scores(
     game_id: int,
     current_turn: int,
 ) -> dict[int, ScoreObservation]:
+    """Return score facts for exactly the canonical current turn.
+
+    Historical score rows remain valuable history, but presenting a previous
+    turn's planets/ships/bases inside the current ``/games/{id}`` fallback would
+    silently turn a historical fact into a current fact. Missing current-turn
+    data therefore stays missing.
+    """
+
     with SessionLocal() as session:
         rows = session.execute(
             select(ScoreObservation)
             .where(
                 ScoreObservation.game_id == game_id,
-                ScoreObservation.turn <= current_turn,
+                ScoreObservation.turn == current_turn,
             )
             .order_by(
-                ScoreObservation.turn.desc(),
                 ScoreObservation.observed_at.desc(),
                 ScoreObservation.id.desc(),
             )
@@ -36,19 +43,24 @@ def _latest_scores(
     return result
 
 
-def _latest_activity(
+def _current_activity(
     game_id: int,
     current_turn: int,
 ) -> dict[int, PlayerTurnActivityObservation]:
+    """Return turn-state facts for exactly the canonical current turn.
+
+    In particular, a READY observation from Tn must never make a player appear
+    READY in Tn+1 merely because the public endpoint is temporarily offline.
+    """
+
     with SessionLocal() as session:
         rows = session.execute(
             select(PlayerTurnActivityObservation)
             .where(
                 PlayerTurnActivityObservation.game_id == game_id,
-                PlayerTurnActivityObservation.turn <= current_turn,
+                PlayerTurnActivityObservation.turn == current_turn,
             )
             .order_by(
-                PlayerTurnActivityObservation.turn.desc(),
                 PlayerTurnActivityObservation.observed_at.desc(),
                 PlayerTurnActivityObservation.id.desc(),
             )
@@ -67,6 +79,7 @@ def get_cached_game_details_payload(
 
     This is an availability fallback only. Fields that are not persisted as
     canonical facts remain empty/null instead of receiving placeholder values.
+    Historical facts are never promoted to current state merely to fill a gap.
     """
     with SessionLocal() as session:
         game = session.get(Game, game_id)
@@ -96,8 +109,8 @@ def get_cached_game_details_payload(
 
     settings.setdefault("turn", current_turn)
 
-    scores = _latest_scores(game_id, current_turn)
-    activities = _latest_activity(game_id, current_turn)
+    scores = _current_scores(game_id, current_turn)
+    activities = _current_activity(game_id, current_turn)
 
     players: list[dict[str, Any]] = []
     for slot in slots:
@@ -111,6 +124,8 @@ def get_cached_game_details_payload(
                 "username": slot.username,
                 "raceid": slot.race_id,
                 "status": slot.status,
+                # Compact games/list marker is not persisted here. Keep it
+                # unknown rather than deriving it from another source.
                 "turnstatus": None,
                 "planets": score.planets if score is not None else None,
                 "ships": (
