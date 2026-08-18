@@ -7,6 +7,7 @@ export interface GameInfo {
     status_name: string;
     turn: number;
     slots: number;
+    turn_status: string | null;
     next_host: string;
     turns_per_week: number | null;
     is_private: boolean;
