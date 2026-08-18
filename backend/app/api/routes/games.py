@@ -27,6 +27,10 @@ def _optional_nonnegative_int(value: Any) -> int | None:
     return value
 
 
+def _optional_string(value: Any) -> str | None:
+    return value if isinstance(value, str) else None
+
+
 def build_game_info(raw: dict[str, Any]) -> GameInfo:
     return GameInfo(
         id=raw["id"],
@@ -37,6 +41,7 @@ def build_game_info(raw: dict[str, Any]) -> GameInfo:
         status_name=raw["statusname"],
         turn=raw["turn"],
         slots=raw["slots"],
+        turn_status=_optional_string(raw.get("turnstatus")),
         next_host=raw["nexthost"],
         turns_per_week=raw["turnsperweek"],
         is_private=raw["isprivate"],
