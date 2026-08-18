@@ -14,6 +14,8 @@ def _game_record_from_remote(raw: dict[str, Any]) -> dict[str, Any] | None:
     if not isinstance(game_id, int):
         return None
 
+    raw_turn_status = raw.get("turnstatus")
+
     return {
         "id": game_id,
         "name": str(raw.get("name", "")),
@@ -22,6 +24,11 @@ def _game_record_from_remote(raw: dict[str, Any]) -> dict[str, Any] | None:
         "status_name": str(raw.get("statusname", "")),
         "turn": int(raw.get("turn", 0)),
         "slots": int(raw.get("slots", 0)),
+        "turn_status": (
+            raw_turn_status
+            if isinstance(raw_turn_status, str)
+            else None
+        ),
         "next_host": str(raw.get("nexthost", "")),
         "time_to_host": str(raw.get("timetohost", "")),
         "is_private": bool(raw.get("isprivate", False)),
@@ -39,6 +46,10 @@ def _game_record_from_cache(game: Game) -> dict[str, Any]:
         "status_name": game.status_name,
         "turn": game.current_turn,
         "slots": game.slots,
+        # The compact all-player status rail comes from games/list. It is not
+        # persisted canonically, so cache fallback must keep it unknown rather
+        # than fabricating unopened states.
+        "turn_status": None,
         "next_host": "",
         "time_to_host": "",
         "is_private": game.is_private,
