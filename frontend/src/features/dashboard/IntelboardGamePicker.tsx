@@ -286,6 +286,17 @@ function AccountColumn({
     onSelect: () => void;
 }) {
     const orderedGames = useMemo(() => sortedGames(games), [games]);
+    const [profileImageFailed, setProfileImageFailed] = useState(false);
+
+    useEffect(() => {
+        setProfileImageFailed(false);
+    }, [account.profile_image_url]);
+
+    const showProfileImage = (
+        account.profile_image_url !== null
+        && account.profile_image_url.trim() !== ""
+        && !profileImageFailed
+    );
 
     return (
         <section className={`intelboard-account-column${selected ? " is-selected" : ""}`}>
@@ -294,8 +305,21 @@ function AccountColumn({
                 onClick={onSelect}
                 type="button"
             >
-                <div className="intelboard-account-avatar" aria-hidden="true">
-                    {accountInitials(account.planets_username)}
+                <div className="intelboard-account-avatar">
+                    {showProfileImage ? (
+                        <img
+                            alt=""
+                            decoding="async"
+                            loading="lazy"
+                            onError={() => setProfileImageFailed(true)}
+                            referrerPolicy="no-referrer"
+                            src={account.profile_image_url ?? undefined}
+                        />
+                    ) : (
+                        <span aria-hidden="true">
+                            {accountInitials(account.planets_username)}
+                        </span>
+                    )}
                 </div>
                 <div>
                     <span>Planets.nu observer</span>
