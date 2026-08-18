@@ -21,13 +21,19 @@ class BackgroundPrivateRefreshTests(unittest.TestCase):
                 return_value=[(7, 1001), (7, 1002)],
             ),
             patch(
+                "app.services.background_private_refresh.accessible_refresh_account_ids",
+                return_value=(11, 12),
+            ),
+            patch(
                 "app.services.background_private_refresh.refresh_accessible_private_intel",
                 async_refresh,
             ),
         ):
             result = asyncio.run(refresh_all_running_private_intel_once())
 
+        self.assertEqual(result["raw_targets"], 2)
         self.assertEqual(result["targets"], 2)
+        self.assertEqual(result["deduplicated"], 0)
         self.assertEqual(len(result["results"]), 2)
         self.assertTrue(all(item["status"] == "ok" for item in result["results"]))
         calls = {
@@ -35,6 +41,73 @@ class BackgroundPrivateRefreshTests(unittest.TestCase):
             for call in async_refresh.await_args_list
         }
         self.assertEqual(calls, {(7, 1001), (7, 1002)})
+
+    def test_identical_shared_observer_sets_are_refreshed_once_per_game(self) -> None:
+        async_refresh = AsyncMock(
+            return_value={
+                "turn": 4,
+                "refreshed": 4,
+                "cached": 0,
+                "skipped": 0,
+                "failed": 0,
+            }
+        )
+
+        with (
+            patch(
+                "app.services.background_private_refresh.running_private_refresh_targets",
+                return_value=[(1, 683335), (2, 683335)],
+            ),
+            patch(
+                "app.services.background_private_refresh.accessible_refresh_account_ids",
+                side_effect=lambda _user_id: (1, 2, 3, 4),
+            ),
+            patch(
+                "app.services.background_private_refresh.refresh_accessible_private_intel",
+                async_refresh,
+            ),
+        ):
+            result = asyncio.run(refresh_all_running_private_intel_once())
+
+        self.assertEqual(result["raw_targets"], 2)
+        self.assertEqual(result["targets"], 1)
+        self.assertEqual(result["deduplicated"], 1)
+        self.assertEqual(async_refresh.await_count, 1)
+        self.assertEqual(async_refresh.await_args.kwargs["game_id"], 683335)
+
+    def test_different_shared_observer_sets_are_not_collapsed(self) -> None:
+        async_refresh = AsyncMock(
+            return_value={
+                "turn": 4,
+                "refreshed": 1,
+                "cached": 0,
+                "skipped": 0,
+                "failed": 0,
+            }
+        )
+
+        def access_set(user_id: int) -> tuple[int, ...]:
+            return (1, 2, 3, 4) if user_id == 1 else (2, 4)
+
+        with (
+            patch(
+                "app.services.background_private_refresh.running_private_refresh_targets",
+                return_value=[(1, 683335), (2, 683335)],
+            ),
+            patch(
+                "app.services.background_private_refresh.accessible_refresh_account_ids",
+                side_effect=access_set,
+            ),
+            patch(
+                "app.services.background_private_refresh.refresh_accessible_private_intel",
+                async_refresh,
+            ),
+        ):
+            result = asyncio.run(refresh_all_running_private_intel_once())
+
+        self.assertEqual(result["targets"], 2)
+        self.assertEqual(result["deduplicated"], 0)
+        self.assertEqual(async_refresh.await_count, 2)
 
     def test_one_failed_game_does_not_abort_other_games(self) -> None:
         async_refresh = AsyncMock(
@@ -47,6 +120,10 @@ class BackgroundPrivateRefreshTests(unittest.TestCase):
             patch(
                 "app.services.background_private_refresh.running_private_refresh_targets",
                 return_value=[(3, 2001), (3, 2002)],
+            ),
+            patch(
+                "app.services.background_private_refresh.accessible_refresh_account_ids",
+                return_value=(31,),
             ),
             patch(
                 "app.services.background_private_refresh.refresh_accessible_private_intel",
