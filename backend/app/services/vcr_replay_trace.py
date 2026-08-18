@@ -12,7 +12,6 @@ from app.services.vcr_replay import (
     torpedo_specs_from_catalog,
 )
 from app.services.vcr_replay_nu import (
-    _without_lizard_planet_damage_bonus,
     normalize_nu_beams,
     normalize_nu_torpedoes,
 )
@@ -290,13 +289,12 @@ def replay_nuhost_trace(
             f"combat RNG mode {combat_rng!r} is not supported by the visual replay"
         )
 
-    replay_payload = _without_lizard_planet_damage_bonus(payload)
-    raw_left = replay_payload.get("left")
-    raw_right = replay_payload.get("right")
+    raw_left = payload.get("left")
+    raw_right = payload.get("right")
     if not isinstance(raw_left, Mapping) or not isinstance(raw_right, Mapping):
         raise ReplayUnsupported("VCR left/right payload is missing")
 
-    seed = replay_payload.get("seed")
+    seed = payload.get("seed")
     if isinstance(seed, bool) or not isinstance(seed, int):
         raise ReplayUnsupported("VCR seed is missing")
 
@@ -307,11 +305,11 @@ def replay_nuhost_trace(
         seed=seed,
         left=CombatObject.from_payload(
             raw_left,
-            owner_id=_optional_int(replay_payload, "leftownerid"),
+            owner_id=_optional_int(payload, "leftownerid"),
         ),
         right=CombatObject.from_payload(
             raw_right,
-            owner_id=_optional_int(replay_payload, "rightownerid"),
+            owner_id=_optional_int(payload, "rightownerid"),
         ),
         beams=beam_specs_from_catalog(normalized_beams),
         torpedoes=torpedo_specs_from_catalog(normalized_torpedoes),
