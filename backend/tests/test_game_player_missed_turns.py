@@ -1,6 +1,10 @@
 import unittest
 
-from app.api.routes.games import _optional_nonnegative_int, build_player_info
+from app.api.routes.games import (
+    _optional_nonnegative_int,
+    build_game_info,
+    build_player_info,
+)
 
 
 BASE_PLAYER = {
@@ -14,6 +18,22 @@ BASE_PLAYER = {
     "ships": 7,
     "starbases": 1,
     "turnready": False,
+}
+
+BASE_GAME = {
+    "id": 682932,
+    "name": "Estes Sector",
+    "description": "",
+    "shortdescription": "Standard",
+    "status": 2,
+    "statusname": "Running",
+    "turn": 11,
+    "slots": 9,
+    "nexthost": "",
+    "turnsperweek": 3,
+    "isprivate": False,
+    "iscustom": False,
+    "wincondition": 1,
 }
 
 
@@ -33,6 +53,16 @@ class GamePlayerMissedTurnsTests(unittest.TestCase):
 
     def test_zero_is_preserved_as_known_zero(self) -> None:
         self.assertEqual(_optional_nonnegative_int(0), 0)
+
+    def test_loadinfo_game_compact_turnstatus_is_preserved(self) -> None:
+        game = build_game_info({**BASE_GAME, "turnstatus": "_o3xc____"})
+        self.assertEqual(game.turn_status, "_o3xc____")
+
+    def test_invalid_loadinfo_game_turnstatus_stays_unknown(self) -> None:
+        missing = build_game_info(BASE_GAME)
+        malformed = build_game_info({**BASE_GAME, "turnstatus": ["_"]})
+        self.assertIsNone(missing.turn_status)
+        self.assertIsNone(malformed.turn_status)
 
 
 if __name__ == "__main__":
