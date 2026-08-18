@@ -124,9 +124,11 @@ def get_cached_game_details_payload(
                 "username": slot.username,
                 "raceid": slot.race_id,
                 "status": slot.status,
-                # Compact games/list marker is not persisted here. Keep it
-                # unknown rather than deriving it from another source.
+                # Compact games/list marker and consecutive missed-turn streak
+                # are not persisted canonically. Keep both unknown rather than
+                # filling them from historical or inferred data.
                 "turnstatus": None,
+                "turnsmissed": None,
                 "planets": score.planets if score is not None else None,
                 "ships": (
                     score.capital_ships + score.freighters
