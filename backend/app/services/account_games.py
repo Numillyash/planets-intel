@@ -1,6 +1,6 @@
 from typing import Any
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 
 from app.db.session import SessionLocal
 from app.models.game import Game
@@ -58,9 +58,29 @@ def _game_record_from_cache(game: Game) -> dict[str, Any]:
     }
 
 
-def _cached_games_for_account(account: PlanetsAccount) -> list[dict[str, Any]]:
-    normalized_username = account.planets_username.strip().casefold()
+def _cached_membership_condition(account: PlanetsAccount):
+    """Match a linked account to a cached roster without sentinel-id leakage."""
 
+    normalized_username = account.planets_username.strip().casefold()
+    predicates = []
+
+    # Zero/sentinel ids occur in edge/dead identity records. Matching them as
+    # real account ids can make unrelated games appear in a cached game list.
+    if account.planets_account_id is not None and account.planets_account_id > 0:
+        predicates.append(GamePlayerSlot.account_id == account.planets_account_id)
+    if normalized_username:
+        predicates.append(
+            func.lower(func.trim(GamePlayerSlot.username)) == normalized_username
+        )
+
+    if not predicates:
+        # A linked account with no usable identity proves no cached membership.
+        # Upstream games/list can still provide the authoritative live list.
+        return False
+    return or_(*predicates)
+
+
+def _cached_games_for_account(account: PlanetsAccount) -> list[dict[str, Any]]:
     with SessionLocal() as session:
         stmt = (
             select(Game)
@@ -68,18 +88,7 @@ def _cached_games_for_account(account: PlanetsAccount) -> list[dict[str, Any]]:
                 GamePlayerSlot,
                 GamePlayerSlot.game_id == Game.id,
             )
-            .where(
-                or_(
-                    (
-                        GamePlayerSlot.account_id
-                        == account.planets_account_id
-                    )
-                    if account.planets_account_id is not None
-                    else False,
-                    func.lower(GamePlayerSlot.username)
-                    == normalized_username,
-                )
-            )
+            .where(_cached_membership_condition(account))
             .distinct()
         )
         rows = list(session.execute(stmt).scalars().all())
