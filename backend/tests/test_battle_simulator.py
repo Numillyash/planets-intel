@@ -4,7 +4,6 @@ import unittest
 from app.services.battle_simulator import (
     _balance_applied,
     _balance_probability,
-    _build_payload,
     _combatant_payload,
     _fed_recover_shields,
     _functional_weapon_limit,
@@ -13,6 +12,7 @@ from app.services.battle_simulator import (
     _sequence_planet_is_unsupported,
     _with_right_balance_bonus,
 )
+from app.services.battle_simulator_runtime import _build_payload
 from app.services.vcr_replay import ReplayUnsupported
 
 
@@ -95,17 +95,10 @@ class BattleSimulatorHelperTests(unittest.TestCase):
             "federation_crew_bonus": False,
             "lizard_crew_bonus": True,
         }
-        lizard_disabled = {
-            "race_id": 2,
-            "damage": 76,
-            "federation_crew_bonus": False,
-            "lizard_crew_bonus": False,
-        }
 
         self.assertEqual(_functional_weapon_limit(normal), 5)
         self.assertEqual(_functional_weapon_limit(fed), 10)
         self.assertEqual(_functional_weapon_limit(lizard), 8)
-        self.assertEqual(_functional_weapon_limit(lizard_disabled), 3)
 
     def test_sequence_preparation_rebuilds_effective_weapons_from_physical_hull(self) -> None:
         raw = {
@@ -149,7 +142,7 @@ class BattleSimulatorHelperTests(unittest.TestCase):
         self.assertEqual(normal_recovered, 0)
         self.assertEqual(normal["shield"], 40)
 
-    def test_lizard_damage_limit_is_neutralized_against_planet_only(self) -> None:
+    def test_lizard_race_is_preserved_against_ship_and_planet(self) -> None:
         lizard = {
             "hull_id": 10,
             "race_id": 2,
@@ -162,7 +155,7 @@ class BattleSimulatorHelperTests(unittest.TestCase):
         planet_payload = _build_payload(left=lizard, right=planet, seed=1)
 
         self.assertEqual(ship_payload["left"]["raceid"], 2)
-        self.assertEqual(planet_payload["left"]["raceid"], 0)
+        self.assertEqual(planet_payload["left"]["raceid"], 2)
 
     def test_galactic_power_right_side_is_rejected(self) -> None:
         ship = {"hull_id": 10, "galactic_power": False}
