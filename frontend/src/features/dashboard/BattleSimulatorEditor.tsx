@@ -1,6 +1,7 @@
 import type { GameRuleCatalogResponse } from "../../api/ruleCatalog";
 import {
     intValue,
+    isGalacticPowerEligible,
     normalizeShipForRace,
     raceLabel,
     rebuildPlanet,
@@ -84,13 +85,15 @@ function ModifierToggle({
     label,
     enabled,
     onChange,
+    detail,
 }: {
     label: string;
     enabled: boolean;
     onChange: (enabled: boolean) => void;
+    detail?: string;
 }) {
     return (
-        <label className="battle-sim-toggle-field">
+        <label className="battle-sim-toggle-field" title={detail}>
             <span>{label}</span>
             <input
                 checked={enabled}
@@ -114,6 +117,11 @@ function ShipEditor({
     if (value.setup.kind !== "ship") return null;
     const setup: ShipSetup = value.setup;
     const c = value.combatant;
+    const galacticPowerEligible = isGalacticPowerEligible(
+        catalog,
+        c.hull_id,
+        c.race_id,
+    );
 
     const normalizedWith = (
         patch: Partial<ShipSetup>,
@@ -169,18 +177,44 @@ function ShipEditor({
                     <strong> {c.beam_count}B / {c.launcher_count}T / {c.bay_count} bays</strong>
                 </span>
                 <span>Race <strong>{raceLabel(catalog, c.race_id)}</strong></span>
-                {c.federation_crew_bonus && (
-                    <span><strong>Fed Crew Bonus active</strong></span>
-                )}
-                {c.race_id === 2 && (
-                    <span><strong>Lizard 150% damage limit</strong></span>
-                )}
+                {c.federation_crew_bonus && <span><strong>Fed Crew Bonus</strong></span>}
+                {c.lizard_crew_bonus && <span><strong>Lizard Crew Bonus</strong></span>}
+                {c.galactic_power && <span><strong>Galactic Power · force left</strong></span>}
             </div>
 
-            {(c.race_id === 4 || c.race_id === 5) && (
+            {(
+                c.race_id === 1
+                || c.race_id === 2
+                || c.race_id === 4
+                || c.race_id === 5
+                || galacticPowerEligible
+            ) && (
                 <div className="battle-sim-fields battle-sim-fields-3">
+                    {c.race_id === 1 && (
+                        <ModifierToggle
+                            detail="+50 KT combat mass, +3 carrier bays, full weapons despite damage, and shield recovery between sequential fights."
+                            enabled={c.federation_crew_bonus}
+                            label="Federation Crew Bonus"
+                            onChange={(enabled) => normalizedWith(
+                                {},
+                                { federation_crew_bonus: enabled },
+                            )}
+                        />
+                    )}
+                    {c.race_id === 2 && (
+                        <ModifierToggle
+                            detail="Allows the ship to survive to 150% damage against enemy ships. It does not apply against planets."
+                            enabled={c.lizard_crew_bonus}
+                            label="Lizard 150% Crew Bonus"
+                            onChange={(enabled) => normalizedWith(
+                                {},
+                                { lizard_crew_bonus: enabled },
+                            )}
+                        />
+                    )}
                     {c.race_id === 4 && (
                         <ModifierToggle
+                            detail="Optional advantage; not active in Classic settings."
                             enabled={c.beam_charge_rate > 1}
                             label="Fury 2× beam recharge"
                             onChange={(enabled) => onChange({
@@ -201,6 +235,20 @@ function ShipEditor({
                                 combatant: {
                                     ...c,
                                     beam_kill_rate: enabled ? 3 : 1,
+                                },
+                            })}
+                        />
+                    )}
+                    {galacticPowerEligible && (
+                        <ModifierToggle
+                            detail="When active, an Evil Empire Gorbie must fight from the left side. Disabled by default in Campaign; active in new Standard games."
+                            enabled={c.galactic_power}
+                            label="Galactic Power · force left"
+                            onChange={(enabled) => onChange({
+                                ...value,
+                                combatant: {
+                                    ...c,
+                                    galactic_power: enabled,
                                 },
                             })}
                         />
@@ -363,44 +411,80 @@ function PlanetEditor({
                     />
                     <strong>{setup.starbasePresent ? "Present" : "None"}</strong>
                 </label>
+                {c.race_id === 4 && (
+                    <ModifierToggle
+                        detail="Fury 2× beam recharge applies to Fury planets too when the optional advantage is active."
+                        enabled={c.beam_charge_rate > 1}
+                        label="Fury 2× planet beams"
+                        onChange={(enabled) => onChange(rebuildPlanet(
+                            {
+                                ...value,
+                                combatant: {
+                                    ...c,
+                                    beam_charge_rate: enabled ? 2 : 1,
+                                },
+                            },
+                            setup,
+                            c.race_id,
+                        ))}
+                    />
+                )}
             </div>
 
             {setup.starbasePresent && (
-                <div className="battle-sim-fields battle-sim-fields-3">
-                    <NumberInput
-                        label="Starbase defense"
-                        max={1000}
-                        onChange={(starbaseDefense) => update({ starbaseDefense })}
-                        value={setup.starbaseDefense}
-                    />
-                    <label className="battle-sim-field">
-                        <span>Starbase beam tech</span>
-                        <select
-                            className="battle-sim-select"
-                            onChange={(event) => update({
-                                starbaseBeamTech: Number(event.target.value),
+                <>
+                    <div className="battle-sim-fields battle-sim-fields-4">
+                        <NumberInput
+                            label="Starbase defense"
+                            max={1000}
+                            onChange={(starbaseDefense) => update({ starbaseDefense })}
+                            value={setup.starbaseDefense}
+                        />
+                        <label className="battle-sim-field">
+                            <span>Starbase beam tech</span>
+                            <select
+                                className="battle-sim-select"
+                                onChange={(event) => update({
+                                    starbaseBeamTech: Number(event.target.value),
+                                })}
+                                value={setup.starbaseBeamTech}
+                            >
+                                <option value={0}>0 / none</option>
+                                {catalog.beams.map((record) => {
+                                    const id = intValue(record, "id");
+                                    if (id === null) return null;
+                                    return (
+                                        <option key={id} value={id}>
+                                            {id} · {textValue(record, "name") ?? `Beam #${id}`}
+                                        </option>
+                                    );
+                                })}
+                            </select>
+                        </label>
+                        <NumberInput
+                            label="Starbase fighters"
+                            max={100000}
+                            onChange={(starbaseFighters) => update({ starbaseFighters })}
+                            value={setup.starbaseFighters}
+                        />
+                        <NumberInput
+                            label="Starbase accumulated damage %"
+                            max={9999}
+                            onChange={(starbaseDamage) => update({ starbaseDamage })}
+                            value={setup.starbaseDamage}
+                        />
+                    </div>
+                    <div className="battle-sim-fields battle-sim-fields-3">
+                        <ModifierToggle
+                            detail="Shielded starbases in a radiation halo receive +200 KT combat mass; Robots do not receive this bonus."
+                            enabled={setup.starbaseMassBonus === 200}
+                            label="Shielded base +200 KT"
+                            onChange={(enabled) => update({
+                                starbaseMassBonus: enabled ? 200 : 0,
                             })}
-                            value={setup.starbaseBeamTech}
-                        >
-                            <option value={0}>0 / none</option>
-                            {catalog.beams.map((record) => {
-                                const id = intValue(record, "id");
-                                if (id === null) return null;
-                                return (
-                                    <option key={id} value={id}>
-                                        {id} · {textValue(record, "name") ?? `Beam #${id}`}
-                                    </option>
-                                );
-                            })}
-                        </select>
-                    </label>
-                    <NumberInput
-                        label="Starbase fighters"
-                        max={100000}
-                        onChange={(starbaseFighters) => update({ starbaseFighters })}
-                        value={setup.starbaseFighters}
-                    />
-                </div>
+                        />
+                    </div>
+                </>
             )}
 
             <div className="battle-sim-derived-strip">
@@ -410,6 +494,9 @@ function PlanetEditor({
                 <span>Bays <strong>{c.bay_count}</strong></span>
                 <span>Total fighters <strong>{c.fighters}</strong></span>
                 <span>Shield <strong>{c.shield}%</strong></span>
+                {setup.starbasePresent && (
+                    <span>Base damage <strong>{setup.starbaseDamage}%</strong></span>
+                )}
             </div>
 
             {setup.planetDefense <= 0 && (
