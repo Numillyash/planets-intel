@@ -26,7 +26,14 @@ interface IntelboardGamePickerProps {
 
 const GAME_PICKER_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
-type PlayerTurnState = "ready" | "viewed" | "unopened" | "inactive" | "computer" | "empty";
+type PlayerTurnState =
+    | "ready"
+    | "viewed"
+    | "unopened"
+    | "unknown"
+    | "inactive"
+    | "computer"
+    | "empty";
 
 function gamePath(observer: string, gameId: number): string {
     return `/intelboard/${encodeURIComponent(observer)}/${gameId}`;
@@ -56,10 +63,18 @@ function isRunning(game: AccountGameSummary): boolean {
     return game.status_id === 2 || game.status_name.toLowerCase() === "running";
 }
 
+function gameStatusRank(game: AccountGameSummary): number {
+    if (isRunning(game)) return 0;
+    const normalized = game.status_name.trim().toLowerCase();
+    if (normalized === "joining") return 1;
+    if (normalized === "finished") return 3;
+    return 2;
+}
+
 function sortedGames(games: AccountGameSummary[]): AccountGameSummary[] {
     return [...games].sort((left, right) => {
-        const runningDifference = Number(isRunning(right)) - Number(isRunning(left));
-        if (runningDifference !== 0) return runningDifference;
+        const statusDifference = gameStatusRank(left) - gameStatusRank(right);
+        if (statusDifference !== 0) return statusDifference;
         if (right.turn !== left.turn) return right.turn - left.turn;
         return left.name.localeCompare(right.name);
     });
@@ -84,12 +99,13 @@ function observerPlayer(
     ) ?? null;
 }
 
-function fallbackPlayerTurnState(player: PlayerInfo): PlayerTurnState {
+function loadInfoTurnState(player: PlayerInfo): PlayerTurnState {
     if (player.race_id >= 100) return "computer";
     if (player.status !== 1) return "inactive";
     if (player.turn_ready === true) return "ready";
     if (player.turn_status !== null && player.turn_status > 0) return "viewed";
-    return "unopened";
+    if (player.turn_status === 0) return "unopened";
+    return "unknown";
 }
 
 function officialTurnMarkerState(marker: string | undefined): PlayerTurnState | null {
@@ -110,29 +126,61 @@ function gameTurnState(
     turnStatus: string | null,
     slot: number,
     player: PlayerInfo | null,
+    loadInfoMatchesTurn: boolean,
 ): PlayerTurnState {
     const official = officialTurnMarkerState(turnStatus?.[slot - 1]);
-    if (official !== null) return official;
-    return player === null ? "empty" : fallbackPlayerTurnState(player);
+
+    if (player === null) return official ?? "empty";
+
+    // Structural player state is stronger than a compact turn-progress marker.
+    // This prevents an '_' marker from making a dead slot look merely unopened.
+    if (loadInfoMatchesTurn) {
+        if (player.race_id >= 100) return "computer";
+        if (player.status !== 1) return "inactive";
+    }
+
+    const loadInfo = loadInfoMatchesTurn
+        ? loadInfoTurnState(player)
+        : "unknown";
+
+    // For an active player, opening/submitting a turn is monotonic within one
+    // turn. games/list and loadinfo can be refreshed at slightly different
+    // moments, so the most advanced compatible factual state wins. This fixes
+    // stale '_' markers hiding a later VIEWED state without guessing anything.
+    if (official === "ready" || loadInfo === "ready") return "ready";
+    if (official === "viewed" || loadInfo === "viewed") return "viewed";
+    if (official === "unopened" || loadInfo === "unopened") return "unopened";
+
+    // If the compact marker claims a structural state that conflicts with a
+    // same-turn active loadinfo player, fail closed instead of inventing which
+    // endpoint is newer.
+    if (official === "inactive" || official === "computer") {
+        return loadInfoMatchesTurn ? "unknown" : official;
+    }
+
+    return "unknown";
 }
 
 function turnStateLabel(state: PlayerTurnState): string {
     switch (state) {
         case "ready": return "turn complete";
         case "viewed": return "viewed / incomplete";
+        case "unopened": return "not viewed";
         case "computer": return "computer player";
         case "inactive": return "inactive / dead";
-        case "empty": return "empty / status unknown";
-        default: return "not viewed";
+        case "empty": return "empty slot / status unknown";
+        default: return "turn status unknown";
     }
 }
 
 function PlayerTurnRail({
     details,
+    gameTurn,
     slots,
     turnStatus,
 }: {
     details: GameDetailsResponse | undefined;
+    gameTurn: number;
     slots: number;
     turnStatus: string | null;
 }) {
@@ -149,15 +197,27 @@ function PlayerTurnRail({
     );
     if (slotCount <= 0) return null;
 
+    const loadInfoMatchesTurn = details?.game.turn === gameTurn;
+    const densityClass = slotCount > 20
+        ? " is-very-dense"
+        : slotCount > 14
+            ? " is-dense"
+            : "";
+
     return (
         <div
             aria-label={`Turn status for ${slotCount} player slots`}
-            className={`intelboard-turn-rail${slotCount > 14 ? " is-dense" : ""}`}
+            className={`intelboard-turn-rail${densityClass}`}
         >
             {Array.from({ length: slotCount }, (_, index) => {
                 const slot = index + 1;
                 const player = bySlot.get(slot) ?? null;
-                const state = gameTurnState(turnStatus, slot, player);
+                const state = gameTurnState(
+                    turnStatus,
+                    slot,
+                    player,
+                    loadInfoMatchesTurn,
+                );
 
                 if (player === null) {
                     return (
@@ -197,9 +257,15 @@ function GameRow({
 }) {
     const player = observerPlayer(details, account);
     const running = isRunning(game);
-    const ownState = player === null
+    const loadInfoMatchesTurn = details?.game.turn === game.turn;
+    const ownState = !running || player === null
         ? null
-        : gameTurnState(game.turn_status, player.slot_id, player);
+        : gameTurnState(
+            game.turn_status,
+            player.slot_id,
+            player,
+            loadInfoMatchesTurn,
+        );
     const typeLabel = game.is_custom
         ? "Custom"
         : game.is_private
@@ -254,11 +320,14 @@ function GameRow({
                 </div>
             )}
 
-            <PlayerTurnRail
-                details={details}
-                slots={game.slots}
-                turnStatus={game.turn_status}
-            />
+            {running && (
+                <PlayerTurnRail
+                    details={details}
+                    gameTurn={game.turn}
+                    slots={game.slots}
+                    turnStatus={game.turn_status}
+                />
+            )}
         </button>
     );
 }
@@ -329,21 +398,28 @@ function AccountColumn({
                 {selected && <strong className="intelboard-account-current">current</strong>}
             </button>
 
-            {error !== null ? (
+            {error !== null && orderedGames.length === 0 ? (
                 <div className="intelboard-account-state is-error">{error}</div>
             ) : orderedGames.length === 0 ? (
                 <div className="intelboard-account-state">No games for this observer.</div>
             ) : (
-                <div className="intelboard-game-list">
-                    {orderedGames.map((game) => (
-                        <GameRow
-                            account={account}
-                            details={detailsByGameId.get(game.id)}
-                            game={game}
-                            key={game.id}
-                        />
-                    ))}
-                </div>
+                <>
+                    {error !== null && (
+                        <div className="intelboard-account-warning">
+                            Live Planets.nu game-list metadata is unavailable; showing known games. {error}
+                        </div>
+                    )}
+                    <div className="intelboard-game-list">
+                        {orderedGames.map((game) => (
+                            <GameRow
+                                account={account}
+                                details={detailsByGameId.get(game.id)}
+                                game={game}
+                                key={game.id}
+                            />
+                        ))}
+                    </div>
+                </>
             )}
         </section>
     );
@@ -439,13 +515,13 @@ export function IntelboardGamePicker({
                         const response = await getAccountGames(account.id);
                         return {
                             accountId: account.id,
-                            games: response.games,
+                            games: response.games as AccountGameSummary[] | null,
                             error: response.upstream_error,
                         };
                     } catch (reason) {
                         return {
                             accountId: account.id,
-                            games: [] as AccountGameSummary[],
+                            games: null as AccountGameSummary[] | null,
                             error: reason instanceof Error ? reason.message : "Failed to load games",
                         };
                     }
@@ -453,26 +529,36 @@ export function IntelboardGamePicker({
             );
             if (cancelled) return;
 
-            const nextGames: Record<number, AccountGameSummary[]> = {};
             const nextErrors: Record<number, string | null> = {};
             const gameIds = new Set<number>();
             for (const result of results) {
-                nextGames[result.accountId] = result.games;
                 nextErrors[result.accountId] = result.error;
-                for (const game of result.games) gameIds.add(game.id);
+                for (const game of result.games ?? []) gameIds.add(game.id);
             }
 
             const ids = Array.from(gameIds);
             const details = await Promise.allSettled(ids.map((gameId) => getGame(gameId)));
             if (cancelled) return;
-            const nextDetails = new Map<number, GameDetailsResponse>();
+            const refreshedDetails = new Map<number, GameDetailsResponse>();
             details.forEach((result, index) => {
-                if (result.status === "fulfilled") nextDetails.set(ids[index], result.value);
+                if (result.status === "fulfilled") refreshedDetails.set(ids[index], result.value);
             });
 
-            setGamesByAccountId(nextGames);
+            setGamesByAccountId((previous) => {
+                const next = { ...previous };
+                for (const result of results) {
+                    if (result.games !== null) next[result.accountId] = result.games;
+                }
+                return next;
+            });
             setErrorsByAccountId(nextErrors);
-            setDetailsByGameId(nextDetails);
+            setDetailsByGameId((previous) => {
+                const next = new Map(previous);
+                for (const [gameId, detailsValue] of refreshedDetails) {
+                    next.set(gameId, detailsValue);
+                }
+                return next;
+            });
             if (initial) setLoadingGames(false);
         }
 
