@@ -132,8 +132,10 @@ function gameTurnState(
 
     if (player === null) return official ?? "empty";
 
-    // Structural player state is stronger than a compact turn-progress marker.
-    // This prevents an '_' marker from making a dead slot look merely unopened.
+    // Structural states are monotonic inside one game turn. Once Planets.nu
+    // reports a slot dead/inactive or computer, stale progress metadata from
+    // the other endpoint must not resurrect it as merely viewed/unopened.
+    if (official === "inactive" || official === "computer") return official;
     if (loadInfoMatchesTurn) {
         if (player.race_id >= 100) return "computer";
         if (player.status !== 1) return "inactive";
@@ -150,13 +152,6 @@ function gameTurnState(
     if (official === "ready" || loadInfo === "ready") return "ready";
     if (official === "viewed" || loadInfo === "viewed") return "viewed";
     if (official === "unopened" || loadInfo === "unopened") return "unopened";
-
-    // If the compact marker claims a structural state that conflicts with a
-    // same-turn active loadinfo player, fail closed instead of inventing which
-    // endpoint is newer.
-    if (official === "inactive" || official === "computer") {
-        return loadInfoMatchesTurn ? "unknown" : official;
-    }
 
     return "unknown";
 }
