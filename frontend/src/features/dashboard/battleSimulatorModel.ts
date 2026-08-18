@@ -95,6 +95,10 @@ function playerRaceId(game: GameDetailsResponse, ownerId: number | null): number
     return game.players.find((player) => player.slot_id === ownerId)?.race_id ?? null;
 }
 
+function isVcrCombatObservation(ship: ShipObservationResponse): boolean {
+    return textValue(ship.payload, "simulatorintelbasis") === "vcr_combat_observation";
+}
+
 export function observerRaceId(
     game: GameDetailsResponse,
     intel: PrivateIntelMapResponse,
@@ -202,6 +206,14 @@ function materializeShip(
     const facts = shipFacts(ship);
     const hull = hullRecord(catalog, ship.hull_id);
     const raceId = playerRaceId(game, ship.owner_id);
+    const vcrOnly = isVcrCombatObservation(ship);
+    const vcrTurn = intValue(ship.payload, "simulatorintelturn");
+    if (vcrOnly) {
+        warnings.push(
+            `VCR-only combat-time evidence${vcrTurn === null ? "" : ` from T${vcrTurn}`}: `
+            + "equipment is historical fact; mutable combat state remains explicit simulation assumptions.",
+        );
+    }
     const physicalBeams = facts.beams
         ?? (hull === null ? 0 : intValue(hull, "beams", "beamcount") ?? 0);
     const physicalLaunchers = facts.tubes
@@ -253,7 +265,7 @@ function materializeShip(
             physicalBays,
         },
         combatant: {
-            source_kind: "known_ship",
+            source_kind: vcrOnly ? "vcr" : "known_ship",
             source_id: ship.ship_id,
             name: ship.name ?? facts.hullName ?? `Ship #${ship.ship_id}`,
             object_id: ship.ship_id,
@@ -559,9 +571,9 @@ export function candidateLabel(
     const id = Number(rawId);
     if (kind === "ship") {
         const ship = intel.ships.find((item) => item.ship_id === id);
-        return ship === undefined
-            ? `Ship #${id}`
-            : `${ship.name ?? `Ship #${id}`} · #${id}`;
+        if (ship === undefined) return `Ship #${id}`;
+        const basis = isVcrCombatObservation(ship) ? " · combat-time VCR evidence" : "";
+        return `${ship.name ?? `Ship #${id}`} · #${id}${basis}`;
     }
     if (kind === "planet") {
         const planet = intel.planets.find((item) => item.planet_id === id);
