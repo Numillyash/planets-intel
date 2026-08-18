@@ -35,26 +35,46 @@ def _marker_for_slot(game: dict[str, Any], slot_id: int) -> str | None:
     return raw[slot_id - 1]
 
 
+def _player_turn_status(value: Any) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value
+
+
 def _activity_state(
     *,
     marker: str | None,
     turn_ready: bool,
+    player_turn_status: int | None,
     player_status: int | None,
 ) -> str:
     if player_status is not None and player_status != 1:
         return "dead"
     if turn_ready:
         return "ready"
-    if marker == "o":
-        return "open"
-    if marker == "_":
-        return "unopened"
-    if marker == "x":
+
+    normalized_marker = marker.casefold() if isinstance(marker, str) else None
+    if normalized_marker == "x":
         return "dead"
-    if marker == "c":
+    if normalized_marker == "c":
         return "computer"
-    if marker:
+
+    # Any remaining non-empty compact marker is Planets.nu's completed-turn
+    # race marker. It is stronger than the less-specific per-player numeric
+    # turnstatus field.
+    if marker and normalized_marker not in {"_", "o", "x", "c"}:
         return "ready_marker"
+
+    # games/list/loadinfo compact markers and loadinfo.players[].turnstatus can
+    # be refreshed at slightly different moments. Opening/submitting a turn is
+    # monotonic within a single turn, so an OPEN indication from either factual
+    # source must not be hidden by a stale '_' from the other source.
+    if normalized_marker == "o" or (
+        player_turn_status is not None and player_turn_status > 0
+    ):
+        return "open"
+    if normalized_marker == "_" or player_turn_status == 0:
+        return "unopened"
     return "unknown"
 
 
@@ -97,12 +117,14 @@ def persist_public_player_activity(
             continue
         marker = _marker_for_slot(game, slot_id)
         turn_ready = bool(raw.get("turnready"))
+        player_turn_status = _player_turn_status(raw.get("turnstatus"))
         player_status = raw.get("status")
         if isinstance(player_status, bool) or not isinstance(player_status, int):
             player_status = None
         state = _activity_state(
             marker=marker,
             turn_ready=turn_ready,
+            player_turn_status=player_turn_status,
             player_status=player_status,
         )
         turn_ready_at = _parse_planets_date(raw.get("turnreadydate"))
