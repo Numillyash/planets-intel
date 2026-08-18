@@ -1,6 +1,7 @@
 import random
 import unittest
 
+from app.services import battle_simulator
 from app.services.battle_simulator import (
     _balance_applied,
     _balance_probability,
@@ -12,11 +13,18 @@ from app.services.battle_simulator import (
     _sequence_planet_is_unsupported,
     _with_right_balance_bonus,
 )
+from app.services import battle_simulator_runtime
 from app.services.battle_simulator_runtime import _build_payload
 from app.services.vcr_replay import ReplayUnsupported
 
 
 class BattleSimulatorHelperTests(unittest.TestCase):
+    def test_runtime_facade_installs_authoritative_payload_builder(self) -> None:
+        self.assertIs(
+            battle_simulator._build_payload,
+            battle_simulator_runtime._build_payload,
+        )
+
     def test_planet_starbase_flag_is_explicit(self) -> None:
         plain = _combatant_payload(
             {
