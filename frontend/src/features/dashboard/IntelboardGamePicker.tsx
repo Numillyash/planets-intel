@@ -122,20 +122,50 @@ function officialTurnMarkerState(marker: string | undefined): PlayerTurnState | 
     return marker.trim() === "" ? null : "ready";
 }
 
+function compactTurnStates(
+    accountTurnStatus: string | null,
+    loadInfoTurnStatus: string | null,
+    slot: number,
+    loadInfoMatchesTurn: boolean,
+): PlayerTurnState[] {
+    const states: PlayerTurnState[] = [];
+    const account = officialTurnMarkerState(accountTurnStatus?.[slot - 1]);
+    if (account !== null) states.push(account);
+
+    if (loadInfoMatchesTurn) {
+        const loadInfo = officialTurnMarkerState(loadInfoTurnStatus?.[slot - 1]);
+        if (loadInfo !== null) states.push(loadInfo);
+    }
+    return states;
+}
+
 function gameTurnState(
-    turnStatus: string | null,
+    accountTurnStatus: string | null,
+    loadInfoTurnStatus: string | null,
     slot: number,
     player: PlayerInfo | null,
     loadInfoMatchesTurn: boolean,
 ): PlayerTurnState {
-    const official = officialTurnMarkerState(turnStatus?.[slot - 1]);
+    const compactStates = compactTurnStates(
+        accountTurnStatus,
+        loadInfoTurnStatus,
+        slot,
+        loadInfoMatchesTurn,
+    );
 
-    if (player === null) return official ?? "empty";
+    // Structural states are monotonic inside one game turn. Once either public
+    // game object reports a slot dead/inactive or computer, stale progress
+    // metadata from another endpoint must not resurrect it.
+    if (compactStates.includes("inactive")) return "inactive";
+    if (compactStates.includes("computer")) return "computer";
 
-    // Structural states are monotonic inside one game turn. Once Planets.nu
-    // reports a slot dead/inactive or computer, stale progress metadata from
-    // the other endpoint must not resurrect it as merely viewed/unopened.
-    if (official === "inactive" || official === "computer") return official;
+    if (player === null) {
+        if (compactStates.includes("ready")) return "ready";
+        if (compactStates.includes("viewed")) return "viewed";
+        if (compactStates.includes("unopened")) return "unopened";
+        return "empty";
+    }
+
     if (loadInfoMatchesTurn) {
         if (player.race_id >= 100) return "computer";
         if (player.status !== 1) return "inactive";
@@ -145,13 +175,14 @@ function gameTurnState(
         ? loadInfoTurnState(player)
         : "unknown";
 
-    // For an active player, opening/submitting a turn is monotonic within one
-    // turn. games/list and loadinfo can be refreshed at slightly different
-    // moments, so the most advanced compatible factual state wins. This fixes
-    // stale '_' markers hiding a later VIEWED state without guessing anything.
-    if (official === "ready" || loadInfo === "ready") return "ready";
-    if (official === "viewed" || loadInfo === "viewed") return "viewed";
-    if (official === "unopened" || loadInfo === "unopened") return "unopened";
+    // Opening/submitting a turn is monotonic within one turn. games/list, the
+    // loadinfo game object, and loadinfo.players[] can be refreshed at slightly
+    // different moments, so the most advanced compatible factual state wins.
+    // This is especially important when one compact rail still says '_' while
+    // another public source already reports VIEWED.
+    if (compactStates.includes("ready") || loadInfo === "ready") return "ready";
+    if (compactStates.includes("viewed") || loadInfo === "viewed") return "viewed";
+    if (compactStates.includes("unopened") || loadInfo === "unopened") return "unopened";
 
     return "unknown";
 }
@@ -230,15 +261,19 @@ function PlayerTurnRail({
         if (player.slot_id > 0) bySlot.set(player.slot_id, player);
     }
 
+    const loadInfoMatchesTurn = details?.game.turn === gameTurn;
+    const loadInfoTurnStatus = loadInfoMatchesTurn
+        ? details?.game.turn_status ?? null
+        : null;
     const slotCount = Math.max(
         slots,
         turnStatus?.length ?? 0,
+        loadInfoTurnStatus?.length ?? 0,
         ...Array.from(bySlot.keys()),
         0,
     );
     if (slotCount <= 0) return null;
 
-    const loadInfoMatchesTurn = details?.game.turn === gameTurn;
     const densityClass = slotCount > 20
         ? " is-very-dense"
         : slotCount > 14
@@ -255,6 +290,7 @@ function PlayerTurnRail({
                 const player = bySlot.get(slot) ?? null;
                 const state = gameTurnState(
                     turnStatus,
+                    loadInfoTurnStatus,
                     slot,
                     player,
                     loadInfoMatchesTurn,
@@ -312,10 +348,14 @@ function GameRow({
     const player = observerPlayer(details, account);
     const running = isRunning(game);
     const loadInfoMatchesTurn = details?.game.turn === game.turn;
+    const loadInfoTurnStatus = loadInfoMatchesTurn
+        ? details?.game.turn_status ?? null
+        : null;
     const ownState = !running || player === null
         ? null
         : gameTurnState(
             game.turn_status,
+            loadInfoTurnStatus,
             player.slot_id,
             player,
             loadInfoMatchesTurn,
