@@ -21,6 +21,8 @@ export interface BattleSimulatorCombatant {
     physical_launcher_count: number | null;
     physical_bay_count: number | null;
     federation_crew_bonus: boolean;
+    lizard_crew_bonus: boolean;
+    galactic_power: boolean;
     beam_count: number;
     launcher_count: number;
     bay_count: number;
@@ -37,6 +39,12 @@ export interface BattleSimulatorCombatant {
     torp_charge_rate: number;
     torp_miss_rate: number;
     crew_defense_rate: number;
+    planet_defense: number | null;
+    starbase_defense: number | null;
+    starbase_fighters: number | null;
+    starbase_beam_tech: number | null;
+    starbase_damage: number | null;
+    starbase_mass_bonus: number | null;
     notes: string[];
 }
 
@@ -146,6 +154,7 @@ export interface BattleSimulatorSequenceRunResponse {
     engagements?: BattleSimulatorSequenceEngagement[];
     left?: BattleSimulatorSequenceTerminalCombatant[];
     right?: BattleSimulatorSequenceTerminalCombatant[];
+    sequence_model?: Record<string, unknown>;
 }
 
 export interface BattleSimulatorSequenceCombatantOdds {
@@ -187,6 +196,7 @@ export interface BattleSimulatorSequenceOddsResponse {
         unique_engagement_replays_computed: number;
         mean_engagements: number;
     };
+    sequence_model?: Record<string, unknown>;
 }
 
 async function postJson<T>(url: string, body: unknown, label: string): Promise<T> {
@@ -269,6 +279,6 @@ export function runStandaloneBattleSequenceOdds(
     return postJson<BattleSimulatorSequenceOddsResponse>(
         `/api/games/${gameId}/battle-simulator/sequence/odds`,
         body,
-        "Battle sequence odds request failed",
+        "Battle sequence odds failed",
     );
 }
