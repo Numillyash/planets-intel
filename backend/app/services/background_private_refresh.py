@@ -11,7 +11,10 @@ from app.db.session import SessionLocal
 from app.models.game import Game
 from app.models.game_player_slot import GamePlayerSlot
 from app.models.planets_account import PlanetsAccount
-from app.services.private_refresh import refresh_accessible_private_intel
+from app.services.private_refresh import (
+    accessible_refresh_account_ids,
+    refresh_accessible_private_intel,
+)
 
 
 # Uvicorn installs handlers for its own logger hierarchy, while arbitrary
@@ -27,7 +30,7 @@ MAX_CONCURRENT_GAME_REFRESHES = 2
 
 
 def running_private_refresh_targets() -> list[tuple[int, int]]:
-    """Return unique ``(local_user_id, game_id)`` background refresh targets.
+    """Return candidate ``(local_user_id, game_id)`` background refresh targets.
 
     Membership is matched against canonical game slots by verified external
     account id, with canonical username as a conservative fallback for dead or
@@ -72,8 +75,34 @@ def running_private_refresh_targets() -> list[tuple[int, int]]:
     return sorted({(int(user_id), int(game_id)) for user_id, game_id in rows})
 
 
+def deduplicate_private_refresh_targets(
+    targets: list[tuple[int, int]],
+) -> list[tuple[int, int]]:
+    """Collapse equivalent local-user jobs without collapsing different shares.
+
+    Two local users can mutually share the same four Planets.nu observers. In
+    that case running the same game twice only repeats public sync work; the
+    second private pass is immediately throttled anyway. A target is equivalent
+    only when both the game id and the exact accessible linked-account id set
+    match. Different share topologies therefore remain separate jobs.
+    """
+
+    unique: list[tuple[int, int]] = []
+    seen: set[tuple[int, tuple[int, ...]]] = set()
+
+    for user_id, game_id in targets:
+        signature = (game_id, accessible_refresh_account_ids(user_id))
+        if signature in seen:
+            continue
+        seen.add(signature)
+        unique.append((user_id, game_id))
+
+    return unique
+
+
 async def refresh_all_running_private_intel_once() -> dict[str, Any]:
-    targets = running_private_refresh_targets()
+    raw_targets = running_private_refresh_targets()
+    targets = deduplicate_private_refresh_targets(raw_targets)
     semaphore = asyncio.Semaphore(MAX_CONCURRENT_GAME_REFRESHES)
 
     async def refresh_target(user_id: int, game_id: int) -> dict[str, Any]:
@@ -123,7 +152,9 @@ async def refresh_all_running_private_intel_once() -> dict[str, Any]:
         *(refresh_target(user_id, game_id) for user_id, game_id in targets)
     )
     return {
+        "raw_targets": len(raw_targets),
         "targets": len(targets),
+        "deduplicated": len(raw_targets) - len(targets),
         "results": results,
     }
 
@@ -141,8 +172,11 @@ async def background_private_refresh_loop() -> None:
         try:
             summary = await refresh_all_running_private_intel_once()
             LOGGER.info(
-                "background private refresh iteration complete targets=%s",
+                "background private refresh iteration complete "
+                "raw_targets=%s targets=%s deduplicated=%s",
+                summary.get("raw_targets", 0),
                 summary.get("targets", 0),
+                summary.get("deduplicated", 0),
             )
         except asyncio.CancelledError:
             raise
