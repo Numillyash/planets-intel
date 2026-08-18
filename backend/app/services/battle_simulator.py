@@ -8,6 +8,12 @@ from sqlalchemy import select
 
 from app.db.session import SessionLocal
 from app.models.game_rule_catalog import GameRuleCatalog
+from app.services.battle_simulator_planet import (
+    PLANET_CARRYOVER_BASIS,
+    apply_planet_carryover,
+    planet_sequence_shape_supported,
+    rebuild_planet_combatant,
+)
 from app.services.vcr_replay import ReplayUnsupported
 from app.services.vcr_replay_nu import replay_nuhost_from_nu_catalog
 from app.services.vcr_replay_trace import replay_nuhost_trace
@@ -18,6 +24,13 @@ CLASSIC_START_SEEDS = tuple(range(1, 119))
 
 def _combatant_payload(raw: Mapping[str, Any]) -> dict[str, Any]:
     is_planet = int(raw.get("hull_id", 0)) <= 0
+    race_id = raw.get("race_id")
+    # The classic engine only uses race id here for the Lizard 150% damage
+    # limit. Keep the player's selected race as simulator metadata, but feed a
+    # neutral engine race when that optional crew bonus is explicitly disabled.
+    engine_race_id = race_id
+    if race_id == 2 and not bool(raw.get("lizard_crew_bonus")):
+        engine_race_id = 0
     return {
         "objectid": raw.get("object_id"),
         "name": raw.get("name"),
@@ -31,7 +44,7 @@ def _combatant_payload(raw: Mapping[str, Any]) -> dict[str, Any]:
         "damage": int(raw.get("damage", 0)),
         "crew": int(raw.get("crew", 0)),
         "mass": int(raw.get("mass", 100)),
-        "raceid": raw.get("race_id"),
+        "raceid": engine_race_id,
         "beamkillbonus": int(raw.get("beam_kill_rate", 1)),
         "beamchargerate": int(raw.get("beam_charge_rate", 1)),
         "torpchargerate": int(raw.get("torp_charge_rate", 1)),
@@ -49,6 +62,26 @@ def _build_payload(
     right: Mapping[str, Any],
     seed: int,
 ) -> dict[str, Any]:
+    if int(left.get("hull_id", 0)) <= 0:
+        raise ReplayUnsupported(
+            "planetary combatants can only occupy the right/defending side"
+        )
+    if bool(right.get("galactic_power")):
+        raise ReplayUnsupported(
+            "Galactic Power forces this Evil Empire Gorbie to the left side; "
+            "swap sides or disable the advantage for this scenario"
+        )
+
+    left_payload = _combatant_payload(left)
+    right_payload = _combatant_payload(right)
+
+    # Nu/Host explicitly removes the Lizard 150% survival bonus in combat
+    # against an enemy planet. Weapon availability for pre-existing damage was
+    # already materialized before this point; only the engine damage limit is
+    # neutralized for this engagement.
+    if int(right.get("hull_id", 0)) <= 0 and left.get("race_id") == 2:
+        left_payload["raceid"] = 0
+
     return {
         "id": 0,
         "turn": 0,
@@ -56,8 +89,8 @@ def _build_payload(
         "battletype": 1,
         "leftownerid": left.get("owner_id"),
         "rightownerid": right.get("owner_id"),
-        "left": _combatant_payload(left),
-        "right": _combatant_payload(right),
+        "left": left_payload,
+        "right": right_payload,
     }
 
 
@@ -291,10 +324,14 @@ def run_battle_simulator_once(
         rng=rng,
     )
 
-    payload = _build_payload(left=left, right=right, seed=seed)
-    payload = _with_right_balance_bonus(payload, applied=bonus_applied)
-
     try:
+        prepared_right = (
+            rebuild_planet_combatant(right, shield=int(right.get("shield", 100)))
+            if int(right.get("hull_id", 0)) <= 0
+            else dict(right)
+        )
+        payload = _build_payload(left=left, right=prepared_right, seed=seed)
+        payload = _with_right_balance_bonus(payload, applied=bonus_applied)
         trace = replay_nuhost_trace(
             payload,
             beams=beams,
@@ -371,12 +408,14 @@ def run_battle_simulator_odds(
         return None
     beams, torpedoes, settings, _hulls = catalog
 
-    eligible = _right_balance_eligible(left, right)
+    prepared_right = (
+        rebuild_planet_combatant(right, shield=int(right.get("shield", 100)))
+        if int(right.get("hull_id", 0)) <= 0
+        else dict(right)
+    )
+    eligible = _right_balance_eligible(left, prepared_right)
     rng = random.Random(sampling_seed)
 
-    # Cache deterministic terminal states. A Classic single engagement only
-    # varies here by combat start seed and the independent HOST 360kt balance
-    # branch. Large user samples therefore need at most 236 actual replays.
     cache: dict[tuple[int, bool], dict[str, Any]] = {}
     trials: list[dict[str, Any]] = []
 
@@ -391,7 +430,7 @@ def run_battle_simulator_odds(
             key = (seed, bonus_applied)
             result = cache.get(key)
             if result is None:
-                payload = _build_payload(left=left, right=right, seed=seed)
+                payload = _build_payload(left=left, right=prepared_right, seed=seed)
                 payload = _with_right_balance_bonus(payload, applied=bonus_applied)
                 result = replay_nuhost_from_nu_catalog(
                     payload,
@@ -456,10 +495,9 @@ def _physical_count(raw: Mapping[str, Any], physical_key: str, effective_key: st
 
 def _functional_weapon_limit(raw: Mapping[str, Any]) -> int:
     damage = max(0, int(raw.get("damage", 0)))
-    race_id = raw.get("race_id")
     if bool(raw.get("federation_crew_bonus")):
         return 10
-    if race_id == 2:
+    if bool(raw.get("lizard_crew_bonus")):
         return max(0, min(10, 15 - damage // 10))
     return max(0, min(10, 10 - damage // 10))
 
@@ -467,7 +505,10 @@ def _functional_weapon_limit(raw: Mapping[str, Any]) -> int:
 def _prepare_sequence_combatant(raw: Mapping[str, Any]) -> dict[str, Any]:
     result = deepcopy(dict(raw))
     if int(result.get("hull_id", 0)) <= 0:
-        return result
+        return rebuild_planet_combatant(
+            result,
+            shield=int(result.get("shield", 100)),
+        )
 
     physical_beams = _physical_count(result, "physical_beam_count", "beam_count")
     physical_launchers = _physical_count(
@@ -493,6 +534,9 @@ def _sequence_cache_key(raw: Mapping[str, Any]) -> tuple[Any, ...]:
     keys = (
         "hull_id",
         "race_id",
+        "federation_crew_bonus",
+        "lizard_crew_bonus",
+        "galactic_power",
         "beam_count",
         "launcher_count",
         "bay_count",
@@ -510,6 +554,12 @@ def _sequence_cache_key(raw: Mapping[str, Any]) -> tuple[Any, ...]:
         "torp_miss_rate",
         "crew_defense_rate",
         "has_starbase",
+        "planet_defense",
+        "starbase_defense",
+        "starbase_fighters",
+        "starbase_beam_tech",
+        "starbase_damage",
+        "starbase_mass_bonus",
     )
     return tuple(raw.get(key) for key in keys)
 
@@ -528,20 +578,16 @@ def _fed_recover_shields(raw: dict[str, Any]) -> int:
     shield = max(0, min(100, int(raw.get("shield", 0))))
     loss = 100 - shield
     recovered = (loss + 2) // 4
-    raw["shield"] = min(100, shield + recovered)
-    return recovered
+    max_shield = max(0, 100 - max(0, int(raw.get("damage", 0))))
+    raw["shield"] = min(max_shield, shield + recovered)
+    return max(0, raw["shield"] - shield)
 
 
 def _sequence_planet_is_unsupported(
     left: Sequence[Mapping[str, Any]],
     right: Sequence[Mapping[str, Any]],
 ) -> bool:
-    if len(left) == 1 and len(right) == 1:
-        return False
-    return any(
-        int(item.get("hull_id", 0)) <= 0
-        for item in [*left, *right]
-    )
+    return not planet_sequence_shape_supported(tuple(left), tuple(right))
 
 
 def _sequence_trial(
@@ -609,28 +655,49 @@ def _sequence_trial(
         right_terminal = result.get("right")
         if not isinstance(left_terminal, Mapping) or not isinstance(right_terminal, Mapping):
             raise ReplayUnsupported("sequence engagement returned invalid terminal state")
-        _apply_terminal_state(left_states[left_index], left_terminal)
-        _apply_terminal_state(right_states[right_index], right_terminal)
 
         left_defeated = bool(left_terminal.get("destroyed") or left_terminal.get("captured"))
         right_defeated = bool(right_terminal.get("destroyed") or right_terminal.get("captured"))
+        right_is_planet = int(right_current.get("hull_id", 0)) <= 0
         labels = result.get("result")
         timeout = isinstance(labels, list) and "timeout" in labels
 
-        engagements.append(
-            {
-                "number": len(engagements) + 1,
-                "left_index": left_index,
-                "right_index": right_index,
-                "start_seed": seed,
-                "right_balance_applied": bonus_applied,
-                "right_balance_mode": right_balance_bonus,
-                "result": list(labels) if isinstance(labels, list) else [],
-                "cycles": int(result.get("cycles", 0)),
-                "left": dict(left_terminal),
-                "right": dict(right_terminal),
+        _apply_terminal_state(left_states[left_index], left_terminal)
+        carryover_summary: dict[str, Any] | None = None
+        if right_is_planet and not right_defeated:
+            next_planet = apply_planet_carryover(
+                right_states[right_index],
+                right_current,
+                right_terminal,
+            )
+            right_states[right_index] = next_planet
+            carryover_summary = {
+                "basis": PLANET_CARRYOVER_BASIS,
+                "planet_defense": next_planet.get("planet_defense"),
+                "starbase_present": next_planet.get("has_starbase"),
+                "starbase_defense": next_planet.get("starbase_defense"),
+                "starbase_fighters": next_planet.get("starbase_fighters"),
+                "starbase_beam_tech": next_planet.get("starbase_beam_tech"),
+                "starbase_damage": next_planet.get("starbase_damage"),
             }
-        )
+        else:
+            _apply_terminal_state(right_states[right_index], right_terminal)
+
+        engagement_record = {
+            "number": len(engagements) + 1,
+            "left_index": left_index,
+            "right_index": right_index,
+            "start_seed": seed,
+            "right_balance_applied": bonus_applied,
+            "right_balance_mode": right_balance_bonus,
+            "result": list(labels) if isinstance(labels, list) else [],
+            "cycles": int(result.get("cycles", 0)),
+            "left": dict(left_terminal),
+            "right": dict(right_terminal),
+        }
+        if carryover_summary is not None:
+            engagement_record["planet_carryover"] = carryover_summary
+        engagements.append(engagement_record)
 
         if timeout and not left_defeated and not right_defeated:
             left_status[left_index] = "survived"
@@ -657,7 +724,8 @@ def _sequence_trial(
         if not left_defeated and right_defeated and right_index < len(right_states):
             _fed_recover_shields(left_states[left_index])
         if not right_defeated and left_defeated and left_index < len(left_states):
-            _fed_recover_shields(right_states[right_index])
+            if not right_is_planet:
+                _fed_recover_shields(right_states[right_index])
 
         if not left_defeated and not right_defeated:
             timed_out = True
@@ -715,7 +783,7 @@ def _sequence_side_aggregate(
             if not fought:
                 return None
             return round(
-                sum(int(row.get(key, 0)) for row in fought) / len(fought),
+                sum(int(row.get(key, 0) or 0) for row in fought) / len(fought),
                 2,
             )
 
@@ -756,8 +824,9 @@ def run_battle_simulator_sequence_once(
             "game_id": game_id,
             "supported": False,
             "reason": (
-                "multi-engagement planet/starbase carry-over is not modelled yet; "
-                "planet and base defense losses would otherwise be guessed"
+                "planet sequences currently support a ship queue attacking one "
+                "fixed planet/starbase on the right; planets cannot be queued "
+                "with ships or placed on the left"
             ),
             "basis": "standalone_battle_sequence",
             "persisted": False,
@@ -784,6 +853,7 @@ def run_battle_simulator_sequence_once(
             "persisted": False,
         }
 
+    has_planet = any(int(item.get("hull_id", 0)) <= 0 for item in right)
     return {
         "game_id": game_id,
         "supported": True,
@@ -795,7 +865,10 @@ def run_battle_simulator_sequence_once(
         "sequence_model": {
             "damage_ammo_crew_shields_carry": True,
             "federation_shield_recovery_between_fights": True,
-            "planet_multiwave_supported": False,
+            "planet_multiwave_supported": has_planet,
+            "planet_starbase_carryover_basis": (
+                PLANET_CARRYOVER_BASIS if has_planet else None
+            ),
         },
         **result,
     }
@@ -819,8 +892,9 @@ def run_battle_simulator_sequence_odds(
             "game_id": game_id,
             "supported": False,
             "reason": (
-                "multi-engagement planet/starbase carry-over is not modelled yet; "
-                "planet and base defense losses would otherwise be guessed"
+                "planet sequences currently support a ship queue attacking one "
+                "fixed planet/starbase on the right; planets cannot be queued "
+                "with ships or placed on the left"
             ),
             "basis": "standalone_battle_sequence_sampling",
             "persisted": False,
@@ -873,6 +947,7 @@ def run_battle_simulator_sequence_odds(
             key=lambda item: (-item[1], item[0]),
         )
     ]
+    has_planet = any(int(item.get("hull_id", 0)) <= 0 for item in right)
 
     return {
         "game_id": game_id,
@@ -901,6 +976,9 @@ def run_battle_simulator_sequence_odds(
         "sequence_model": {
             "damage_ammo_crew_shields_carry": True,
             "federation_shield_recovery_between_fights": True,
-            "planet_multiwave_supported": False,
+            "planet_multiwave_supported": has_planet,
+            "planet_starbase_carryover_basis": (
+                PLANET_CARRYOVER_BASIS if has_planet else None
+            ),
         },
     }
