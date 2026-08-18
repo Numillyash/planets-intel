@@ -9,14 +9,14 @@ export interface RaceVisual {
 }
 
 
-// Fixed categorical palette for the eleven classic races.  The mapping is
-// intentionally race-based rather than player-slot-based so the same race has
-// the same visual identity in every game and for every observer.
+// Fixed categorical palette for the classic races plus Horwasp. The mapping
+// is intentionally race-based rather than player-slot-based so the same race
+// has the same visual identity in every game and for every observer.
 export const RACES: readonly RaceVisual[] = [
     { id: 1, name: "Federation", color: 0x4d7cfe, cssColor: "#4D7CFE" },
     { id: 2, name: "Lizards", color: 0x2fd566, cssColor: "#2FD566" },
     { id: 3, name: "Bird Men", color: 0xb56cff, cssColor: "#B56CFF" },
-    { id: 4, name: "Fascists", color: 0xff4055, cssColor: "#FF4055" },
+    { id: 4, name: "Fury", color: 0xff4055, cssColor: "#FF4055" },
     { id: 5, name: "Privateers", color: 0xff4db8, cssColor: "#FF4DB8" },
     { id: 6, name: "Cyborg", color: 0x00d8e8, cssColor: "#00D8E8" },
     { id: 7, name: "Crystal People", color: 0xf4f7ff, cssColor: "#F4F7FF" },
@@ -24,12 +24,18 @@ export const RACES: readonly RaceVisual[] = [
     { id: 9, name: "Robots", color: 0x00a88f, cssColor: "#00A88F" },
     { id: 10, name: "Rebels", color: 0xa8e63c, cssColor: "#A8E63C" },
     { id: 11, name: "Colonies", color: 0xffdf3a, cssColor: "#FFDF3A" },
+    { id: 12, name: "Horwasp", color: 0xd87a31, cssColor: "#D87A31" },
 ] as const;
 
 
 const RACE_BY_ID = new Map(
     RACES.map((race) => [race.id, race]),
 );
+
+
+function normalizedRaceId(raceId: number): number {
+    return raceId >= 101 && raceId <= 112 ? raceId - 100 : raceId;
+}
 
 
 export function raceVisual(
@@ -39,7 +45,7 @@ export function raceVisual(
         return null;
     }
 
-    return RACE_BY_ID.get(raceId) ?? null;
+    return RACE_BY_ID.get(normalizedRaceId(raceId)) ?? null;
 }
 
 
