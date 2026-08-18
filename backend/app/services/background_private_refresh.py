@@ -14,7 +14,12 @@ from app.models.planets_account import PlanetsAccount
 from app.services.private_refresh import refresh_accessible_private_intel
 
 
-LOGGER = logging.getLogger(__name__)
+# Uvicorn installs handlers for its own logger hierarchy, while arbitrary
+# module loggers can stay below the configured output level. Background
+# collection is operational infrastructure, so route its INFO diagnostics
+# through uvicorn.error to make successful scheduler passes observable in
+# container logs without promoting them to warnings.
+LOGGER = logging.getLogger("uvicorn.error")
 
 BACKGROUND_REFRESH_INTERVAL_SECONDS = 5 * 60
 BACKGROUND_REFRESH_STARTUP_DELAY_SECONDS = 15
@@ -126,10 +131,19 @@ async def refresh_all_running_private_intel_once() -> dict[str, Any]:
 async def background_private_refresh_loop() -> None:
     """Refresh all active games forever, independently of the frontend."""
 
+    LOGGER.info(
+        "background private refresh scheduler started startup_delay=%ss interval=%ss",
+        BACKGROUND_REFRESH_STARTUP_DELAY_SECONDS,
+        BACKGROUND_REFRESH_INTERVAL_SECONDS,
+    )
     await asyncio.sleep(BACKGROUND_REFRESH_STARTUP_DELAY_SECONDS)
     while True:
         try:
-            await refresh_all_running_private_intel_once()
+            summary = await refresh_all_running_private_intel_once()
+            LOGGER.info(
+                "background private refresh iteration complete targets=%s",
+                summary.get("targets", 0),
+            )
         except asyncio.CancelledError:
             raise
         except Exception:
