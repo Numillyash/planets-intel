@@ -137,6 +137,7 @@ export interface PlanetsAccountResponse {
     id: number;
     planets_username: string;
     planets_account_id: number | null;
+    profile_image_url: string | null;
     is_active: boolean;
     last_verified_at: string | null;
     last_error: string | null;
