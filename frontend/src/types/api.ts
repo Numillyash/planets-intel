@@ -153,6 +153,7 @@ export interface AccountGameSummary {
     status_name: string;
     turn: number;
     slots: number;
+    turn_status: string | null;
     next_host: string;
     time_to_host: string;
     is_private: boolean;
