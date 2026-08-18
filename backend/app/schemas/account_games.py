@@ -11,6 +11,7 @@ class AccountGameSummary(BaseModel):
 
     turn: int
     slots: int
+    turn_status: str | None = None
 
     next_host: str
     time_to_host: str
