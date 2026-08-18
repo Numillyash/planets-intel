@@ -55,6 +55,7 @@ export interface PlayerInfo {
     race_id: number;
     status: number;
     turn_status: number | null;
+    turns_missed: number | null;
     planets: number | null;
     ships: number | null;
     starbases: number | null;
