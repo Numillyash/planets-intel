@@ -26,7 +26,7 @@ interface IntelboardGamePickerProps {
 
 const GAME_PICKER_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
-type PlayerTurnState = "ready" | "viewed" | "unopened" | "inactive" | "computer";
+type PlayerTurnState = "ready" | "viewed" | "unopened" | "inactive" | "computer" | "empty";
 
 function gamePath(observer: string, gameId: number): string {
     return `/intelboard/${encodeURIComponent(observer)}/${gameId}`;
@@ -113,7 +113,7 @@ function gameTurnState(
 ): PlayerTurnState {
     const official = officialTurnMarkerState(turnStatus?.[slot - 1]);
     if (official !== null) return official;
-    return player === null ? "unopened" : fallbackPlayerTurnState(player);
+    return player === null ? "empty" : fallbackPlayerTurnState(player);
 }
 
 function turnStateLabel(state: PlayerTurnState): string {
@@ -122,6 +122,7 @@ function turnStateLabel(state: PlayerTurnState): string {
         case "viewed": return "viewed / incomplete";
         case "computer": return "computer player";
         case "inactive": return "inactive / dead";
+        case "empty": return "empty / status unknown";
         default: return "not viewed";
     }
 }
