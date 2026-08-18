@@ -1,18 +1,53 @@
 from datetime import datetime, timezone
+from urllib.parse import urljoin
 
 from sqlalchemy import delete, or_, select
 
+from app.core.config import get_settings
 from app.core.credentials import encrypt_credential
 from app.db.session import SessionLocal
 from app.models.dashboard_intel_share import DashboardIntelShare
 from app.models.planets_account import PlanetsAccount
-from app.planetsnu.client import PlanetsNuClient
+from app.planetsnu.client import PlanetsNuClient, PlanetsNuError
 
 
 def normalize_planets_username(
     username: str,
 ) -> str:
     return username.strip().casefold()
+
+
+async def load_planets_profile_image_url(
+    username: str,
+) -> str | None:
+    """Load optional public profile presentation metadata.
+
+    Profile images are deliberately not persisted as game/intel facts.  A
+    profile or image lookup failure must not make linked accounts unavailable.
+    """
+    try:
+        payload = await PlanetsNuClient().get(
+            "account/loadprofile",
+            params={"username": username.strip()},
+        )
+    except PlanetsNuError:
+        return None
+
+    if not isinstance(payload, dict):
+        return None
+
+    account = payload.get("account")
+    if not isinstance(account, dict):
+        return None
+
+    raw_image_url = account.get("imageurl")
+    if not isinstance(raw_image_url, str) or not raw_image_url.strip():
+        return None
+
+    return urljoin(
+        get_settings().planetsnu_api_base_url.rstrip("/") + "/",
+        raw_image_url.strip(),
+    )
 
 
 async def link_planets_account(
