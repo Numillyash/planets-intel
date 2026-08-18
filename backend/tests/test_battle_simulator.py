@@ -4,6 +4,7 @@ import unittest
 from app.services.battle_simulator import (
     _balance_applied,
     _balance_probability,
+    _build_payload,
     _combatant_payload,
     _fed_recover_shields,
     _functional_weapon_limit,
@@ -12,6 +13,7 @@ from app.services.battle_simulator import (
     _sequence_planet_is_unsupported,
     _with_right_balance_bonus,
 )
+from app.services.vcr_replay import ReplayUnsupported
 
 
 class BattleSimulatorHelperTests(unittest.TestCase):
@@ -74,32 +76,44 @@ class BattleSimulatorHelperTests(unittest.TestCase):
         self.assertEqual(payload["right"]["mass"], 160)
         self.assertEqual(adjusted["right"]["mass"], 520)
 
-    def test_damage_reduces_non_fed_weapons_but_not_fed_weapons(self) -> None:
+    def test_damage_reduces_non_fed_weapons_but_not_explicit_crew_bonuses(self) -> None:
         normal = {
             "race_id": 3,
             "damage": 56,
             "federation_crew_bonus": False,
+            "lizard_crew_bonus": False,
         }
         fed = {
             "race_id": 1,
             "damage": 56,
             "federation_crew_bonus": True,
+            "lizard_crew_bonus": False,
         }
         lizard = {
             "race_id": 2,
             "damage": 76,
             "federation_crew_bonus": False,
+            "lizard_crew_bonus": True,
+        }
+        lizard_disabled = {
+            "race_id": 2,
+            "damage": 76,
+            "federation_crew_bonus": False,
+            "lizard_crew_bonus": False,
         }
 
         self.assertEqual(_functional_weapon_limit(normal), 5)
         self.assertEqual(_functional_weapon_limit(fed), 10)
         self.assertEqual(_functional_weapon_limit(lizard), 8)
+        self.assertEqual(_functional_weapon_limit(lizard_disabled), 3)
 
     def test_sequence_preparation_rebuilds_effective_weapons_from_physical_hull(self) -> None:
         raw = {
             "hull_id": 10,
             "race_id": 3,
             "damage": 56,
+            "federation_crew_bonus": False,
+            "lizard_crew_bonus": False,
             "physical_beam_count": 10,
             "physical_launcher_count": 8,
             "physical_bay_count": 7,
@@ -115,30 +129,55 @@ class BattleSimulatorHelperTests(unittest.TestCase):
         self.assertEqual(prepared["bay_count"], 5)
         self.assertEqual(raw["beam_count"], 10)
 
-    def test_fed_recovers_quarter_of_lost_shields_between_fights(self) -> None:
+    def test_fed_recovers_quarter_of_lost_shields_but_not_above_damage_limit(self) -> None:
         fed = {
             "federation_crew_bonus": True,
             "shield": 40,
+            "damage": 50,
         }
         normal = {
             "federation_crew_bonus": False,
             "shield": 40,
+            "damage": 50,
         }
 
         recovered = _fed_recover_shields(fed)
         normal_recovered = _fed_recover_shields(normal)
 
-        self.assertEqual(recovered, 15)
-        self.assertEqual(fed["shield"], 55)
+        self.assertEqual(recovered, 10)
+        self.assertEqual(fed["shield"], 50)
         self.assertEqual(normal_recovered, 0)
         self.assertEqual(normal["shield"], 40)
 
-    def test_planet_multiwave_is_fail_closed(self) -> None:
+    def test_lizard_damage_limit_is_neutralized_against_planet_only(self) -> None:
+        lizard = {
+            "hull_id": 10,
+            "race_id": 2,
+            "lizard_crew_bonus": True,
+        }
+        ship = {"hull_id": 20}
+        planet = {"hull_id": 0}
+
+        ship_payload = _build_payload(left=lizard, right=ship, seed=1)
+        planet_payload = _build_payload(left=lizard, right=planet, seed=1)
+
+        self.assertEqual(ship_payload["left"]["raceid"], 2)
+        self.assertEqual(planet_payload["left"]["raceid"], 0)
+
+    def test_galactic_power_right_side_is_rejected(self) -> None:
+        ship = {"hull_id": 10, "galactic_power": False}
+        gorbie = {"hull_id": 70, "galactic_power": True}
+
+        with self.assertRaises(ReplayUnsupported):
+            _build_payload(left=ship, right=gorbie, seed=1)
+
+    def test_planet_multiwave_accepts_ship_queue_vs_one_fixed_world(self) -> None:
         ship = {"hull_id": 10}
         planet = {"hull_id": 0}
 
         self.assertFalse(_sequence_planet_is_unsupported([ship], [planet]))
-        self.assertTrue(_sequence_planet_is_unsupported([ship, ship], [planet]))
+        self.assertFalse(_sequence_planet_is_unsupported([ship, ship], [planet]))
+        self.assertTrue(_sequence_planet_is_unsupported([planet], [ship]))
         self.assertTrue(_sequence_planet_is_unsupported([ship], [ship, planet]))
 
 
