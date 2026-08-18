@@ -32,6 +32,14 @@ class BattleSimulatorCombatant(BaseModel):
     modifiers. ``*_count`` fields are the effective values for the first
     engagement. Sequence simulation uses physical counts to recompute the
     surviving ship's functional weapons after each fight.
+
+    Advantage flags are explicit on purpose. A race selection identifies the
+    crew, but optional Campaign/Standard advantages must never be inferred from
+    race id alone when the game state does not prove that they are active.
+
+    Planet/starbase state fields are carried only by simulation objects. They
+    allow a surviving defensive world to be rebuilt between successive combat
+    engagements without mutating factual planet/base observations.
     """
 
     source_kind: Literal["known_ship", "known_planet", "vcr", "manual"]
@@ -47,6 +55,8 @@ class BattleSimulatorCombatant(BaseModel):
     physical_launcher_count: int | None = Field(default=None, ge=0, le=10)
     physical_bay_count: int | None = Field(default=None, ge=0, le=30)
     federation_crew_bonus: bool = False
+    lizard_crew_bonus: bool = False
+    galactic_power: bool = False
 
     beam_count: int = Field(ge=0, le=10)
     launcher_count: int = Field(ge=0, le=10)
@@ -64,6 +74,14 @@ class BattleSimulatorCombatant(BaseModel):
     torp_charge_rate: int = Field(default=1, ge=1, le=20)
     torp_miss_rate: int = Field(default=35, ge=0, le=100)
     crew_defense_rate: int = Field(default=0, ge=0, le=100)
+
+    planet_defense: int | None = Field(default=None, ge=0, le=1000)
+    starbase_defense: int | None = Field(default=None, ge=0, le=1000)
+    starbase_fighters: int | None = Field(default=None, ge=0, le=100_000)
+    starbase_beam_tech: int | None = Field(default=None, ge=0, le=10)
+    starbase_damage: int | None = Field(default=None, ge=0, le=9999)
+    starbase_mass_bonus: int | None = Field(default=None, ge=0, le=200)
+
     notes: list[str] = Field(default_factory=list, max_length=32)
 
 
