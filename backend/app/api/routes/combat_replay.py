@@ -10,7 +10,7 @@ from app.schemas.combat_planner import (
     CombatPlannerRepeatRequest,
     CombatPlannerScenarioRequest,
 )
-from app.services.battle_simulator import (
+from app.services.battle_simulator_runtime import (
     run_battle_simulator_odds,
     run_battle_simulator_once,
     run_battle_simulator_sequence_odds,
