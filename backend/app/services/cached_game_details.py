@@ -101,6 +101,9 @@ def get_cached_game_details_payload(
             "statusname": game.status_name,
             "turn": game.current_turn,
             "slots": game.slots,
+            # games/list/loadinfo compact turnstatus is not persisted as a
+            # canonical game fact. Keep the whole rail unknown offline.
+            "turnstatus": None,
             "isprivate": game.is_private,
             "iscustom": game.is_custom,
         }
@@ -124,7 +127,7 @@ def get_cached_game_details_payload(
                 "username": slot.username,
                 "raceid": slot.race_id,
                 "status": slot.status,
-                # Compact games/list marker and consecutive missed-turn streak
+                # Per-player turn progress and consecutive missed-turn streak
                 # are not persisted canonically. Keep both unknown rather than
                 # filling them from historical or inferred data.
                 "turnstatus": None,
