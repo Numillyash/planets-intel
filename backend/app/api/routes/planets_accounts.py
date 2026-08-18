@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import (
     APIRouter,
     Depends,
@@ -22,6 +24,7 @@ from app.schemas.planets_accounts import (
 from app.services.planets_accounts import (
     link_planets_account,
     list_planets_accounts,
+    load_planets_profile_image_url,
     unlink_planets_account,
 )
 
@@ -29,13 +32,18 @@ from app.services.planets_accounts import (
 router = APIRouter()
 
 
-def account_response(
+async def account_response(
     account: PlanetsAccount,
 ) -> PlanetsAccountResponse:
+    profile_image_url = await load_planets_profile_image_url(
+        account.planets_username
+    )
+
     return PlanetsAccountResponse(
         id=account.id,
         planets_username=account.planets_username,
         planets_account_id=account.planets_account_id,
+        profile_image_url=profile_image_url,
         is_active=account.is_active,
         last_verified_at=account.last_verified_at,
         last_error=account.last_error,
@@ -46,7 +54,7 @@ def account_response(
     "/planets/accounts",
     response_model=PlanetsAccountsResponse,
 )
-def get_accounts(
+async def get_accounts(
     user: AppUser = Depends(
         require_user
     ),
@@ -55,11 +63,15 @@ def get_accounts(
         user.id
     )
 
-    return PlanetsAccountsResponse(
-        accounts=[
+    responses = await asyncio.gather(
+        *(
             account_response(account)
             for account in accounts
-        ]
+        )
+    )
+
+    return PlanetsAccountsResponse(
+        accounts=list(responses)
     )
 
 
@@ -92,7 +104,7 @@ async def add_account(
             detail="Planets.nu API is unavailable",
         ) from exc
 
-    return account_response(
+    return await account_response(
         account
     )
 
