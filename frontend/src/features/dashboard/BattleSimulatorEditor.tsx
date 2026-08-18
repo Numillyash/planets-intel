@@ -177,44 +177,16 @@ function ShipEditor({
                     <strong> {c.beam_count}B / {c.launcher_count}T / {c.bay_count} bays</strong>
                 </span>
                 <span>Race <strong>{raceLabel(catalog, c.race_id)}</strong></span>
-                {c.federation_crew_bonus && <span><strong>Fed Crew Bonus</strong></span>}
-                {c.lizard_crew_bonus && <span><strong>Lizard Crew Bonus</strong></span>}
+                {c.federation_crew_bonus && <span><strong>Fed Crew Bonus · required</strong></span>}
+                {c.lizard_crew_bonus && <span><strong>Lizard Crew Bonus · required</strong></span>}
                 {c.galactic_power && <span><strong>Galactic Power · force left</strong></span>}
             </div>
 
-            {(
-                c.race_id === 1
-                || c.race_id === 2
-                || c.race_id === 4
-                || c.race_id === 5
-                || galacticPowerEligible
-            ) && (
+            {(c.race_id === 4 || c.race_id === 5 || galacticPowerEligible) && (
                 <div className="battle-sim-fields battle-sim-fields-3">
-                    {c.race_id === 1 && (
-                        <ModifierToggle
-                            detail="+50 KT combat mass, +3 carrier bays, full weapons despite damage, and shield recovery between sequential fights."
-                            enabled={c.federation_crew_bonus}
-                            label="Federation Crew Bonus"
-                            onChange={(enabled) => normalizedWith(
-                                {},
-                                { federation_crew_bonus: enabled },
-                            )}
-                        />
-                    )}
-                    {c.race_id === 2 && (
-                        <ModifierToggle
-                            detail="Allows the ship to survive to 150% damage against enemy ships. It does not apply against planets."
-                            enabled={c.lizard_crew_bonus}
-                            label="Lizard 150% Crew Bonus"
-                            onChange={(enabled) => normalizedWith(
-                                {},
-                                { lizard_crew_bonus: enabled },
-                            )}
-                        />
-                    )}
                     {c.race_id === 4 && (
                         <ModifierToggle
-                            detail="Optional advantage; not active in Classic settings."
+                            detail="Optional/setting-dependent advantage; disabled in Classic and enabled by default in newer Standard games."
                             enabled={c.beam_charge_rate > 1}
                             label="Fury 2× beam recharge"
                             onChange={(enabled) => onChange({
@@ -228,6 +200,7 @@ function ShipEditor({
                     )}
                     {c.race_id === 5 && (
                         <ModifierToggle
+                            detail="Enabled by default for Privateers, but can be disabled in games where the advantage is not active."
                             enabled={c.beam_kill_rate > 1}
                             label="Privateer 3× beam crew kill"
                             onChange={(enabled) => onChange({
@@ -241,7 +214,7 @@ function ShipEditor({
                     )}
                     {galacticPowerEligible && (
                         <ModifierToggle
-                            detail="When active, an Evil Empire Gorbie must fight from the left side. Disabled by default in Campaign; active in new Standard games."
+                            detail="When active, an Evil Empire Gorbie must fight from the left side."
                             enabled={c.galactic_power}
                             label="Galactic Power · force left"
                             onChange={(enabled) => onChange({
@@ -391,7 +364,13 @@ function PlanetEditor({
             <div className="battle-sim-fields battle-sim-fields-4">
                 <RaceSelect
                     catalog={catalog}
-                    onChange={(raceId) => onChange(rebuildPlanet(value, setup, raceId))}
+                    onChange={(raceId) => onChange(rebuildPlanet(
+                        value,
+                        raceId === 9
+                            ? { ...setup, starbaseMassBonus: 0 }
+                            : setup,
+                        raceId,
+                    ))}
                     raceId={c.race_id}
                 />
                 <NumberInput
@@ -475,14 +454,20 @@ function PlanetEditor({
                         />
                     </div>
                     <div className="battle-sim-fields battle-sim-fields-3">
-                        <ModifierToggle
-                            detail="Shielded starbases in a radiation halo receive +200 KT combat mass; Robots do not receive this bonus."
-                            enabled={setup.starbaseMassBonus === 200}
-                            label="Shielded base +200 KT"
-                            onChange={(enabled) => update({
-                                starbaseMassBonus: enabled ? 200 : 0,
-                            })}
-                        />
+                        {c.race_id === 9 ? (
+                            <div className="battle-sim-warning">
+                                Robots do not receive the shielded-starbase +200 KT radiation-halo combat-mass bonus.
+                            </div>
+                        ) : (
+                            <ModifierToggle
+                                detail="Shielded starbases in a radiation halo receive +200 KT combat mass; Robots do not receive this bonus."
+                                enabled={setup.starbaseMassBonus === 200}
+                                label="Shielded base +200 KT"
+                                onChange={(enabled) => update({
+                                    starbaseMassBonus: enabled ? 200 : 0,
+                                })}
+                            />
+                        )}
                     </div>
                 </>
             )}
@@ -501,7 +486,7 @@ function PlanetEditor({
 
             {setup.planetDefense <= 0 && (
                 <div className="battle-sim-warning">
-                    Planet has no defense posts; the starbase cannot fight by itself.
+                    Planet has no defense posts; the starbase will not fight as a normal defensive combatant.
                 </div>
             )}
         </div>
