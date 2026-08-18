@@ -21,6 +21,12 @@ router = APIRouter(
 )
 
 
+def _optional_nonnegative_int(value: Any) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return None
+    return value
+
+
 def build_game_info(raw: dict[str, Any]) -> GameInfo:
     return GameInfo(
         id=raw["id"],
@@ -89,6 +95,7 @@ def build_player_info(
         race_id=raw["raceid"],
         status=raw["status"],
         turn_status=raw["turnstatus"],
+        turns_missed=_optional_nonnegative_int(raw.get("turnsmissed")),
         planets=raw["planets"],
         ships=raw["ships"],
         starbases=raw["starbases"],
