@@ -134,16 +134,11 @@ export function normalizeShipForRace(
     if (value.setup.kind !== "ship") return value;
     const previousRaceId = value.combatant.race_id;
     const raceChanged = previousRaceId !== raceId;
-    const fed = raceId === 1
-        && (raceChanged ? true : value.combatant.federation_crew_bonus);
-    const lizard = raceId === 2
-        && (raceChanged ? true : value.combatant.lizard_crew_bonus);
+    const fed = raceId === 1;
+    const lizard = raceId === 2;
     const limit = functionalWeaponLimit(value.combatant.damage, fed, lizard);
     const setup = value.setup;
 
-    // Fury 2x beams is optional and explicitly not active in Classic settings,
-    // therefore selecting the race must not silently enable it. Privateer beam
-    // crew-kill is the ordinary racial combat behavior and defaults on.
     const beamChargeRate = raceId === 4
         ? (raceChanged ? 1 : Math.max(1, value.combatant.beam_charge_rate))
         : 1;
@@ -242,7 +237,7 @@ function materializeShip(
         warnings.push("Torpedo stock unknown: 0 is a simulation assumption, not a fact.");
     }
     if (raceId === 4) {
-        warnings.push("Fury 2× beam recharge is not assumed automatically; enable it only when that advantage is active.");
+        warnings.push("Fury 2× beam recharge is explicit: enable it only when that game advantage is active.");
     }
     if (raceId === 8 && isGalacticPowerEligible(catalog, ship.hull_id, raceId)) {
         warnings.push("Galactic Power is explicit simulation state; enable it when the Empire advantage is active.");
@@ -269,8 +264,8 @@ function materializeShip(
             physical_beam_count: physicalBeams,
             physical_launcher_count: physicalLaunchers,
             physical_bay_count: physicalBays,
-            federation_crew_bonus: false,
-            lizard_crew_bonus: false,
+            federation_crew_bonus: raceId === 1,
+            lizard_crew_bonus: raceId === 2,
             galactic_power: false,
             beam_count: physicalBeams,
             launcher_count: physicalLaunchers,
@@ -332,8 +327,8 @@ function materializeManualHull(
             physical_beam_count: physicalBeams,
             physical_launcher_count: physicalLaunchers,
             physical_bay_count: physicalBays,
-            federation_crew_bonus: false,
-            lizard_crew_bonus: false,
+            federation_crew_bonus: raceId === 1,
+            lizard_crew_bonus: raceId === 2,
             galactic_power: false,
             beam_count: physicalBeams,
             launcher_count: physicalLaunchers,
@@ -373,7 +368,7 @@ export function rebuildPlanet(
     const starbaseDamage = setup.starbasePresent
         ? Math.max(0, Math.trunc(setup.starbaseDamage))
         : 0;
-    const starbaseMassBonus = setup.starbasePresent
+    const starbaseMassBonus = setup.starbasePresent && raceId !== 9
         ? Math.max(0, Math.min(200, Math.trunc(setup.starbaseMassBonus)))
         : 0;
     const planetCanFight = planetDefense > 0;
@@ -397,18 +392,19 @@ export function rebuildPlanet(
     const beamChargeRate = raceId === 4
         ? (raceChanged ? 1 : Math.max(1, value.combatant.beam_charge_rate))
         : 1;
+    const normalizedSetup: PlanetSetup = {
+        ...setup,
+        planetDefense,
+        starbaseDefense,
+        starbaseFighters,
+        starbaseDamage,
+        starbaseBeamTech,
+        starbaseMassBonus,
+    };
 
     return {
         ...value,
-        setup: {
-            ...setup,
-            planetDefense,
-            starbaseDefense,
-            starbaseFighters,
-            starbaseBeamTech,
-            starbaseDamage,
-            starbaseMassBonus,
-        },
+        setup: normalizedSetup,
         combatant: {
             ...value.combatant,
             race_id: raceId,
@@ -461,7 +457,8 @@ function materializePlanet(
     if (starbase !== null && baseFacts?.fighters === null) warnings.push("Starbase fighters unknown: 0 is a simulation assumption.");
     if (starbase !== null && baseFacts?.damage === null) warnings.push("Starbase damage unknown: 0% is a simulation assumption.");
 
-    const starbaseMassBonus = starbase === null
+    const raceId = playerRaceId(game, planet.owner_id) ?? starbase?.race_id ?? null;
+    const observedMassBonus = starbase === null
         ? 0
         : factNumber(
             starbase.payload,
@@ -471,6 +468,7 @@ function materializePlanet(
             "combat_mass_bonus",
             "shieldingmassbonus",
         ) ?? 0;
+    const starbaseMassBonus = raceId === 9 ? 0 : observedMassBonus;
     const setup: PlanetSetup = {
         kind: "planet",
         planetDefense: facts.defense ?? 0,
@@ -490,7 +488,7 @@ function materializePlanet(
             name: planet.name ?? `Planet #${planet.planet_id}`,
             object_id: planet.planet_id,
             owner_id: planet.owner_id,
-            race_id: playerRaceId(game, planet.owner_id) ?? starbase?.race_id ?? null,
+            race_id: raceId,
             hull_id: 0,
             has_starbase: starbase !== null,
             physical_beam_count: null,
@@ -524,7 +522,7 @@ function materializePlanet(
             notes: warnings,
         },
     };
-    return rebuildPlanet(initial, setup, initial.combatant.race_id);
+    return rebuildPlanet(initial, setup, raceId);
 }
 
 export function materializeCandidate(
