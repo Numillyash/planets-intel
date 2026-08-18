@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 RightBalanceMode = Literal["auto", "on", "off"]
@@ -33,9 +33,10 @@ class BattleSimulatorCombatant(BaseModel):
     engagement. Sequence simulation uses physical counts to recompute the
     surviving ship's functional weapons after each fight.
 
-    Advantage flags are explicit on purpose. A race selection identifies the
-    crew, but optional Campaign/Standard advantages must never be inferred from
-    race id alone when the game state does not prove that they are active.
+    Required crew bonuses (Federation and Lizard) are normalized from race id
+    at the API boundary. Optional/setting-dependent advantages such as Fury
+    double beams, Privateer triple crew kill and Galactic Power remain explicit
+    simulation controls.
 
     Planet/starbase state fields are carried only by simulation objects. They
     allow a surviving defensive world to be rebuilt between successive combat
@@ -83,6 +84,21 @@ class BattleSimulatorCombatant(BaseModel):
     starbase_mass_bonus: int | None = Field(default=None, ge=0, le=200)
 
     notes: list[str] = Field(default_factory=list, max_length=32)
+
+    @model_validator(mode="after")
+    def normalize_required_race_rules(self) -> "BattleSimulatorCombatant":
+        if self.hull_id > 0:
+            self.federation_crew_bonus = self.race_id == 1
+            self.lizard_crew_bonus = self.race_id == 2
+        else:
+            self.federation_crew_bonus = False
+            self.lizard_crew_bonus = False
+            self.galactic_power = False
+        if self.race_id != 8:
+            self.galactic_power = False
+        if self.race_id == 9:
+            self.starbase_mass_bonus = 0 if self.has_starbase else None
+        return self
 
 
 class BattleSimulatorRunRequest(BaseModel):
