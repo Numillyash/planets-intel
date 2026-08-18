@@ -9,6 +9,7 @@ import {
     readRememberedObserverId,
     rememberObserverId,
 } from "../../lib/observerSelection";
+import { raceName } from "../../lib/races";
 import type {
     AccountGameSummary,
     CurrentUserResponse,
@@ -24,6 +25,8 @@ interface IntelboardGamePickerProps {
 }
 
 const GAME_PICKER_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+
+type PlayerTurnState = "ready" | "viewed" | "unopened" | "inactive" | "computer";
 
 function gamePath(observer: string, gameId: number): string {
     return `/intelboard/${encodeURIComponent(observer)}/${gameId}`;
@@ -53,11 +56,20 @@ function isRunning(game: AccountGameSummary): boolean {
     return game.status_id === 2 || game.status_name.toLowerCase() === "running";
 }
 
+function sortedGames(games: AccountGameSummary[]): AccountGameSummary[] {
+    return [...games].sort((left, right) => {
+        const runningDifference = Number(isRunning(right)) - Number(isRunning(left));
+        if (runningDifference !== 0) return runningDifference;
+        if (right.turn !== left.turn) return right.turn - left.turn;
+        return left.name.localeCompare(right.name);
+    });
+}
+
 function observerPlayer(
     details: GameDetailsResponse | undefined,
-    account: PlanetsAccountResponse | null,
+    account: PlanetsAccountResponse,
 ): PlayerInfo | null {
-    if (details === undefined || account === null) return null;
+    if (details === undefined) return null;
 
     if (account.planets_account_id !== null) {
         const byId = details.players.find(
@@ -72,7 +84,80 @@ function observerPlayer(
     ) ?? null;
 }
 
-function GameCard({
+function playerTurnState(player: PlayerInfo): PlayerTurnState {
+    if (player.race_id >= 100) return "computer";
+    if (player.status !== 1) return "inactive";
+    if (player.turn_ready === true) return "ready";
+    if (player.turn_status !== null && player.turn_status > 0) return "viewed";
+    return "unopened";
+}
+
+function turnStateLabel(state: PlayerTurnState): string {
+    switch (state) {
+        case "ready": return "turn complete";
+        case "viewed": return "viewed / incomplete";
+        case "computer": return "computer player";
+        case "inactive": return "inactive / dead";
+        default: return "not viewed";
+    }
+}
+
+function PlayerTurnRail({
+    details,
+    slots,
+}: {
+    details: GameDetailsResponse | undefined;
+    slots: number;
+}) {
+    const bySlot = new Map<number, PlayerInfo>();
+    for (const player of details?.players ?? []) {
+        if (player.slot_id > 0) bySlot.set(player.slot_id, player);
+    }
+
+    const slotCount = Math.max(
+        slots,
+        ...Array.from(bySlot.keys()),
+        0,
+    );
+    if (slotCount <= 0) return null;
+
+    return (
+        <div
+            aria-label={`Turn status for ${slotCount} player slots`}
+            className={`intelboard-turn-rail${slotCount > 14 ? " is-dense" : ""}`}
+        >
+            {Array.from({ length: slotCount }, (_, index) => {
+                const slot = index + 1;
+                const player = bySlot.get(slot) ?? null;
+                if (player === null) {
+                    return (
+                        <span
+                            className="intelboard-turn-cell is-empty"
+                            key={slot}
+                            title={`Slot ${slot} · open / no player`}
+                        >
+                            {slot}
+                        </span>
+                    );
+                }
+
+                const state = playerTurnState(player);
+                const username = player.username.trim() || "computer";
+                return (
+                    <span
+                        className={`intelboard-turn-cell is-${state}`}
+                        key={slot}
+                        title={`${raceName(player.race_id)} / slot ${slot} / ${username} · ${turnStateLabel(state)}`}
+                    >
+                        {slot}
+                    </span>
+                );
+            })}
+        </div>
+    );
+}
+
+function GameRow({
     game,
     details,
     account,
@@ -83,10 +168,16 @@ function GameCard({
 }) {
     const player = observerPlayer(details, account);
     const running = isRunning(game);
+    const ownState = player === null ? null : playerTurnState(player);
+    const typeLabel = game.is_custom
+        ? "Custom"
+        : game.is_private
+            ? "Private"
+            : "Standard";
 
     return (
         <button
-            className="intelboard-game-card"
+            className="intelboard-game-row"
             onClick={() => {
                 rememberObserverId(account.id);
                 window.location.assign(
@@ -95,10 +186,11 @@ function GameCard({
             }}
             type="button"
         >
-            <div className="intelboard-game-card-heading">
-                <div>
+            <div className="intelboard-game-row-main">
+                <div className="intelboard-game-row-title">
                     <span className="intelboard-game-id">GAME #{game.id}</span>
                     <h2>{game.name}</h2>
+                    <p>{game.short_description || typeLabel}</p>
                 </div>
                 <span
                     className={
@@ -110,62 +202,91 @@ function GameCard({
                 </span>
             </div>
 
-            {game.short_description && (
-                <p className="intelboard-game-description">
-                    {game.short_description}
-                </p>
-            )}
-
-            <div className="intelboard-game-meta">
-                <div>
-                    <span>Turn</span>
-                    <strong>{game.turn}</strong>
-                </div>
-                <div>
-                    <span>Players</span>
-                    <strong>{game.slots}</strong>
-                </div>
-                <div>
-                    <span>Next host</span>
-                    <strong>{game.time_to_host || "—"}</strong>
-                </div>
-                <div>
-                    <span>Type</span>
-                    <strong>
-                        {game.is_custom
-                            ? "Custom"
-                            : game.is_private
-                                ? "Private"
-                                : "Standard"}
-                    </strong>
-                </div>
+            <div className="intelboard-game-row-meta">
+                <span><strong>T{game.turn}</strong> turn</span>
+                <span><strong>{game.slots}</strong> slots</span>
+                <span><strong>{typeLabel}</strong></span>
+                <span className="intelboard-next-host">{game.time_to_host || "Host time unknown"}</span>
             </div>
 
             {player !== null && (
-                <div className="intelboard-player-strip">
-                    <span>
-                        <strong>{player.planets}</strong>
-                        planets
-                    </span>
-                    <span>
-                        <strong>{player.ships}</strong>
-                        ships
-                    </span>
-                    <span>
-                        <strong>{player.starbases}</strong>
-                        bases
-                    </span>
-                    <span className={player.turn_ready ? "is-ready" : ""}>
-                        {player.turn_ready ? "Turn ready" : "Turn open"}
-                    </span>
+                <div className="intelboard-observer-game-summary">
+                    <span><strong>{player.planets ?? "—"}</strong> planets</span>
+                    <span><strong>{player.ships ?? "—"}</strong> ships</span>
+                    <span><strong>{player.starbases ?? "—"}</strong> bases</span>
+                    {ownState !== null && (
+                        <span className={`intelboard-own-turn-state is-${ownState}`}>
+                            <i aria-hidden="true" />
+                            {turnStateLabel(ownState)}
+                        </span>
+                    )}
                 </div>
             )}
 
-            <div className="intelboard-game-open">
-                Open game
-                <span aria-hidden="true">→</span>
-            </div>
+            <PlayerTurnRail details={details} slots={game.slots} />
         </button>
+    );
+}
+
+function accountInitials(username: string): string {
+    const words = username.trim().split(/\s+/).filter(Boolean);
+    if (words.length === 0) return "?";
+    if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+    return `${words[0][0] ?? ""}${words[1][0] ?? ""}`.toUpperCase();
+}
+
+function AccountColumn({
+    account,
+    games,
+    detailsByGameId,
+    error,
+    selected,
+    onSelect,
+}: {
+    account: PlanetsAccountResponse;
+    games: AccountGameSummary[];
+    detailsByGameId: Map<number, GameDetailsResponse>;
+    error: string | null;
+    selected: boolean;
+    onSelect: () => void;
+}) {
+    const orderedGames = useMemo(() => sortedGames(games), [games]);
+
+    return (
+        <section className={`intelboard-account-column${selected ? " is-selected" : ""}`}>
+            <button
+                className="intelboard-account-header"
+                onClick={onSelect}
+                type="button"
+            >
+                <div className="intelboard-account-avatar" aria-hidden="true">
+                    {accountInitials(account.planets_username)}
+                </div>
+                <div>
+                    <span>Planets.nu observer</span>
+                    <h2>{account.planets_username}</h2>
+                    <p>{orderedGames.filter(isRunning).length} running · {orderedGames.length} total games</p>
+                </div>
+                {selected && <strong className="intelboard-account-current">current</strong>}
+            </button>
+
+            {error !== null ? (
+                <div className="intelboard-account-state is-error">{error}</div>
+            ) : orderedGames.length === 0 ? (
+                <div className="intelboard-account-state">No games for this observer.</div>
+            ) : (
+                <div className="intelboard-game-list">
+                    {orderedGames.map((game) => (
+                        <GameRow
+                            account={account}
+                            details={detailsByGameId.get(game.id)}
+                            game={game}
+                            key={game.id}
+                        />
+                    ))}
+                </div>
+            )}
+        </section>
     );
 }
 
@@ -175,9 +296,9 @@ export function IntelboardGamePicker({
 }: IntelboardGamePickerProps) {
     const [accounts, setAccounts] = useState<PlanetsAccountResponse[]>([]);
     const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null);
-    const [games, setGames] = useState<AccountGameSummary[]>([]);
-    const [detailsByGameId, setDetailsByGameId] =
-        useState<Map<number, GameDetailsResponse>>(new Map());
+    const [gamesByAccountId, setGamesByAccountId] = useState<Record<number, AccountGameSummary[]>>({});
+    const [errorsByAccountId, setErrorsByAccountId] = useState<Record<number, string | null>>({});
+    const [detailsByGameId, setDetailsByGameId] = useState<Map<number, GameDetailsResponse>>(new Map());
     const [loadingAccounts, setLoadingAccounts] = useState(true);
     const [loadingGames, setLoadingGames] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -243,75 +364,69 @@ export function IntelboardGamePicker({
 
     useEffect(() => {
         let cancelled = false;
-
-        if (selectedAccountId === null) {
-            setGames([]);
+        if (accounts.length === 0) {
+            setGamesByAccountId({});
             setDetailsByGameId(new Map());
-            return () => {
-                cancelled = true;
-            };
+            return () => { cancelled = true; };
         }
 
-        rememberObserverId(selectedAccountId);
-        const accountId = selectedAccountId;
-
-        async function loadGames(initial: boolean) {
-            if (initial) {
-                setLoadingGames(true);
-                setGames([]);
-                setDetailsByGameId(new Map());
-            }
+        async function loadAllGames(initial: boolean) {
+            if (initial) setLoadingGames(true);
             setError(null);
 
-            try {
-                const response = await getAccountGames(accountId);
-                if (cancelled) return;
-
-                const details = await Promise.allSettled(
-                    response.games.map((game) => getGame(game.id)),
-                );
-                if (cancelled) return;
-
-                const next = new Map<number, GameDetailsResponse>();
-                details.forEach((result, index) => {
-                    if (result.status === "fulfilled") {
-                        next.set(response.games[index].id, result.value);
+            const results = await Promise.all(
+                accounts.map(async (account) => {
+                    try {
+                        const response = await getAccountGames(account.id);
+                        return {
+                            accountId: account.id,
+                            games: response.games,
+                            error: response.upstream_error,
+                        };
+                    } catch (reason) {
+                        return {
+                            accountId: account.id,
+                            games: [] as AccountGameSummary[],
+                            error: reason instanceof Error ? reason.message : "Failed to load games",
+                        };
                     }
-                });
-                setGames(response.games);
-                setDetailsByGameId(next);
-            } catch (reason) {
-                if (!cancelled) {
-                    setError(
-                        reason instanceof Error
-                            ? reason.message
-                            : "Failed to load games",
-                    );
-                }
-            } finally {
-                if (!cancelled && initial) setLoadingGames(false);
+                }),
+            );
+            if (cancelled) return;
+
+            const nextGames: Record<number, AccountGameSummary[]> = {};
+            const nextErrors: Record<number, string | null> = {};
+            const gameIds = new Set<number>();
+            for (const result of results) {
+                nextGames[result.accountId] = result.games;
+                nextErrors[result.accountId] = result.error;
+                for (const game of result.games) gameIds.add(game.id);
             }
+
+            const ids = Array.from(gameIds);
+            const details = await Promise.allSettled(ids.map((gameId) => getGame(gameId)));
+            if (cancelled) return;
+            const nextDetails = new Map<number, GameDetailsResponse>();
+            details.forEach((result, index) => {
+                if (result.status === "fulfilled") nextDetails.set(ids[index], result.value);
+            });
+
+            setGamesByAccountId(nextGames);
+            setErrorsByAccountId(nextErrors);
+            setDetailsByGameId(nextDetails);
+            if (initial) setLoadingGames(false);
         }
 
-        void loadGames(true);
+        void loadAllGames(true);
         const intervalId = window.setInterval(
-            () => void loadGames(false),
+            () => void loadAllGames(false),
             GAME_PICKER_REFRESH_INTERVAL_MS,
         );
         return () => {
             cancelled = true;
             window.clearInterval(intervalId);
         };
-    }, [selectedAccountId]);
-
-    const sortedGames = useMemo(() => {
-        return [...games].sort((left, right) => {
-            const runningDifference = Number(isRunning(right)) - Number(isRunning(left));
-            if (runningDifference !== 0) return runningDifference;
-            if (right.turn !== left.turn) return right.turn - left.turn;
-            return left.name.localeCompare(right.name);
-        });
-    }, [games]);
+    }, [accounts]);
 
     async function handleLogout() {
         setLoggingOut(true);
@@ -328,9 +443,7 @@ export function IntelboardGamePicker({
                 <div>
                     <div className="eyebrow">PLANETS.NU INTEL</div>
                     <h1>Choose a game</h1>
-                    <p>
-                        Open an operational dashboard or return here from the starmap.
-                    </p>
+                    <p>Each linked observer keeps its own operational game list and turn state.</p>
                 </div>
 
                 <div className="intelboard-game-menu-user">
@@ -349,59 +462,26 @@ export function IntelboardGamePicker({
                 </div>
             </header>
 
-            <section className="intelboard-game-menu-toolbar">
-                <label>
-                    <span>Observer</span>
-                    <select
-                        className="secondary-button"
-                        disabled={loadingAccounts || accounts.length === 0}
-                        onChange={(event) => {
-                            const accountId = Number(event.target.value);
-                            rememberObserverId(accountId);
-                            setSelectedAccountId(accountId);
-                        }}
-                        value={selectedAccountId ?? ""}
-                    >
-                        {accounts.map((account) => (
-                            <option key={account.id} value={account.id}>
-                                {account.planets_username}
-                            </option>
-                        ))}
-                    </select>
-                </label>
-
-                {selectedAccount !== null && (
-                    <div className="intelboard-observer-summary">
-                        <span>Planets.nu observer</span>
-                        <strong>{selectedAccount.planets_username}</strong>
-                    </div>
-                )}
-            </section>
-
             {loadingAccounts || loadingGames ? (
-                <div className="intelboard-game-menu-state">
-                    Loading games…
-                </div>
+                <div className="intelboard-game-menu-state">Loading observers and games…</div>
             ) : error !== null ? (
-                <div className="intelboard-game-menu-state is-error">
-                    {error}
-                </div>
+                <div className="intelboard-game-menu-state is-error">{error}</div>
             ) : accounts.length === 0 ? (
-                <div className="intelboard-game-menu-state">
-                    No active Planets.nu observers are linked.
-                </div>
-            ) : sortedGames.length === 0 ? (
-                <div className="intelboard-game-menu-state">
-                    No games are available for this observer.
-                </div>
+                <div className="intelboard-game-menu-state">No active Planets.nu observers are linked.</div>
             ) : (
-                <section className="intelboard-game-grid">
-                    {sortedGames.map((game) => (
-                        <GameCard
-                            account={selectedAccount!}
-                            details={detailsByGameId.get(game.id)}
-                            game={game}
-                            key={game.id}
+                <section className="intelboard-account-grid">
+                    {accounts.map((account) => (
+                        <AccountColumn
+                            account={account}
+                            detailsByGameId={detailsByGameId}
+                            error={errorsByAccountId[account.id] ?? null}
+                            games={gamesByAccountId[account.id] ?? []}
+                            key={account.id}
+                            onSelect={() => {
+                                rememberObserverId(account.id);
+                                setSelectedAccountId(account.id);
+                            }}
+                            selected={account.id === selectedAccountId}
                         />
                     ))}
                 </section>
