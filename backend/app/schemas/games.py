@@ -68,6 +68,7 @@ class PlayerInfo(BaseModel):
 
     status: int
     turn_status: int | None
+    turns_missed: int | None = None
 
     planets: int | None
     ships: int | None
