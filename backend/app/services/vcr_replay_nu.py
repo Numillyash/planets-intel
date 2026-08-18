@@ -6,6 +6,7 @@ This adapter owns Planets.nu's actual RST field names and semantics.
 
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any, Mapping, Sequence
 
 from app.services.vcr_replay import (
@@ -76,6 +77,34 @@ def normalize_nu_torpedoes(
     return result
 
 
+def _without_lizard_planet_damage_bonus(
+    payload: Mapping[str, Any],
+) -> Mapping[str, Any]:
+    """Neutralize only the Lizard 150% survival rule for ship-vs-planet.
+
+    Planets.nu still reports the attacking ship's factual race id in the VCR,
+    but the Lizard Crew Bonus explicitly does not allow survival past 100%
+    damage against a planet. The classic core currently derives its damage
+    limit from ``raceid``; supplying a replay-only neutral race here preserves
+    every other factual combat field while selecting the correct limit.
+    """
+
+    raw_left = payload.get("left")
+    raw_right = payload.get("right")
+    if not isinstance(raw_left, Mapping) or not isinstance(raw_right, Mapping):
+        return payload
+    if _integer(raw_right, "hullid") is None or int(raw_right.get("hullid", 1)) > 0:
+        return payload
+    if _integer(raw_left, "raceid") != 2:
+        return payload
+
+    adjusted = deepcopy(dict(payload))
+    adjusted_left = adjusted.get("left")
+    if isinstance(adjusted_left, dict):
+        adjusted_left["raceid"] = 0
+    return adjusted
+
+
 def replay_nuhost_from_nu_catalog(
     payload: Mapping[str, Any],
     *,
@@ -92,7 +121,7 @@ def replay_nuhost_from_nu_catalog(
         )
 
     return replay_nuhost_classic(
-        payload,
+        _without_lizard_planet_damage_bonus(payload),
         beams=normalize_nu_beams(beams),
         torpedoes=normalize_nu_torpedoes(torpedoes),
         combat_rng=combat_rng,
