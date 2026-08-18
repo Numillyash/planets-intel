@@ -95,6 +95,7 @@
     display: grid;
     width: 62px;
     height: 62px;
+    overflow: hidden;
     place-items: center;
     border: 1px solid #4d789f;
     border-radius: 11px;
@@ -106,6 +107,21 @@
     font-weight: 900;
     letter-spacing: 0.08em;
     box-shadow: inset 0 0 18px rgba(83, 186, 229, 0.12);
+}
+
+.intelboard-account-avatar img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.intelboard-account-avatar > span {
+    color: #d9efff;
+    font-size: 1.05rem;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    text-transform: none;
 }
 
 .intelboard-account-header h2 {
