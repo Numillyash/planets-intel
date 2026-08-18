@@ -30,14 +30,21 @@ from app.services.planets_accounts import (
 
 
 router = APIRouter()
+PROFILE_IMAGE_LOOKUP_TIMEOUT_SECONDS = 2.5
 
 
 async def account_response(
     account: PlanetsAccount,
 ) -> PlanetsAccountResponse:
-    profile_image_url = await load_planets_profile_image_url(
-        account.planets_username
-    )
+    try:
+        profile_image_url = await asyncio.wait_for(
+            load_planets_profile_image_url(account.planets_username),
+            timeout=PROFILE_IMAGE_LOOKUP_TIMEOUT_SECONDS,
+        )
+    except TimeoutError:
+        # Profile artwork is optional presentation metadata. A slow Planets.nu
+        # profile endpoint must never block the operational game chooser.
+        profile_image_url = None
 
     return PlanetsAccountResponse(
         id=account.id,
