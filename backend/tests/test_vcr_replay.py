@@ -158,6 +158,65 @@ def vcr3():
     }
 
 
+def fighter_attack_vcr():
+    """Synthetic trace fixture where fighters can reach an unarmed ship."""
+
+    return {
+        "id": 99,
+        "turn": 1,
+        "seed": 1,
+        "battletype": 1,
+        "leftownerid": 1,
+        "rightownerid": 2,
+        "left": {
+            "objectid": 1,
+            "name": "TRACE CARRIER",
+            "beamcount": 0,
+            "launchercount": 0,
+            "baycount": 10,
+            "hullid": 1,
+            "beamid": 0,
+            "torpedoid": 0,
+            "shield": 100,
+            "damage": 0,
+            "crew": 100,
+            "mass": 100,
+            "raceid": 3,
+            "beamkillbonus": 1,
+            "beamchargerate": 1,
+            "torpchargerate": 1,
+            "torpmisspercent": 35,
+            "crewdefensepercent": 0,
+            "torpedos": 0,
+            "fighters": 5,
+            "hasstarbase": False,
+        },
+        "right": {
+            "objectid": 2,
+            "name": "TRACE TARGET",
+            "beamcount": 0,
+            "launchercount": 0,
+            "baycount": 0,
+            "hullid": 2,
+            "beamid": 0,
+            "torpedoid": 0,
+            "shield": 100,
+            "damage": 0,
+            "crew": 100,
+            "mass": 100,
+            "raceid": 3,
+            "beamkillbonus": 1,
+            "beamchargerate": 1,
+            "torpchargerate": 1,
+            "torpmisspercent": 35,
+            "crewdefensepercent": 0,
+            "torpedos": 0,
+            "fighters": 0,
+            "hasstarbase": False,
+        },
+    }
+
+
 class NuHostClassicReplayTests(unittest.TestCase):
     def test_nu_torpedo_catalog_mapping(self):
         mapped = normalize_nu_torpedoes(TORPEDOES)
@@ -235,13 +294,27 @@ class NuHostClassicReplayTests(unittest.TestCase):
             torpedoes=TORPEDOES,
             settings=CLASSIC_SETTINGS,
         )
-        effect_kinds = {
+        vcr3_effect_kinds = {
             effect["kind"]
             for frame in vcr3_trace["frames"]
             for effect in frame.get("effects", [])
         }
-        self.assertIn("fighter_launch", effect_kinds)
-        self.assertIn("fighter_attack", effect_kinds)
+        self.assertIn("fighter_launch", vcr3_effect_kinds)
+        self.assertIn("beam_fighter", vcr3_effect_kinds)
+
+        fighter_trace = replay_nuhost_trace(
+            fighter_attack_vcr(),
+            beams=BEAMS,
+            torpedoes=TORPEDOES,
+            settings=CLASSIC_SETTINGS,
+        )
+        fighter_effect_kinds = {
+            effect["kind"]
+            for frame in fighter_trace["frames"]
+            for effect in frame.get("effects", [])
+        }
+        self.assertIn("fighter_launch", fighter_effect_kinds)
+        self.assertIn("fighter_attack", fighter_effect_kinds)
 
     def test_extended_combat_rng_is_rejected(self):
         with self.assertRaises(ReplayUnsupported):
