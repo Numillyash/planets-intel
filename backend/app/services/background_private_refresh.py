@@ -5,7 +5,7 @@ import logging
 from contextlib import suppress
 from typing import Any
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, or_, select
 
 from app.db.session import SessionLocal
 from app.models.game import Game
@@ -27,6 +27,31 @@ LOGGER = logging.getLogger("uvicorn.error")
 BACKGROUND_REFRESH_INTERVAL_SECONDS = 5 * 60
 BACKGROUND_REFRESH_STARTUP_DELAY_SECONDS = 15
 MAX_CONCURRENT_GAME_REFRESHES = 2
+
+
+def _membership_join_condition():
+    """Return the conservative linked-account -> canonical-slot identity match.
+
+    A linked account can temporarily have no verified external Planets account
+    id. Comparing that NULL directly with ``GamePlayerSlot.account_id`` would
+    compile to ``IS NULL`` and could accidentally match unrelated anonymous or
+    sentinel-shaped slots in many games. Only a positive verified account id is
+    allowed into the id branch; canonical username remains the explicit
+    fallback used for dead/sentinel identity cases.
+    """
+
+    return or_(
+        and_(
+            PlanetsAccount.planets_account_id.is_not(None),
+            PlanetsAccount.planets_account_id > 0,
+            GamePlayerSlot.account_id == PlanetsAccount.planets_account_id,
+        ),
+        and_(
+            func.length(func.trim(PlanetsAccount.planets_username)) > 0,
+            func.lower(GamePlayerSlot.username)
+            == func.lower(PlanetsAccount.planets_username),
+        ),
+    )
 
 
 def running_private_refresh_targets() -> list[tuple[int, int]]:
@@ -55,11 +80,7 @@ def running_private_refresh_targets() -> list[tuple[int, int]]:
             )
             .join(
                 GamePlayerSlot,
-                or_(
-                    GamePlayerSlot.account_id == PlanetsAccount.planets_account_id,
-                    func.lower(GamePlayerSlot.username)
-                    == func.lower(PlanetsAccount.planets_username),
-                ),
+                _membership_join_condition(),
             )
             .join(Game, Game.id == GamePlayerSlot.game_id)
             .where(
