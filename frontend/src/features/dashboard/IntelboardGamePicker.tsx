@@ -84,12 +84,36 @@ function observerPlayer(
     ) ?? null;
 }
 
-function playerTurnState(player: PlayerInfo): PlayerTurnState {
+function fallbackPlayerTurnState(player: PlayerInfo): PlayerTurnState {
     if (player.race_id >= 100) return "computer";
     if (player.status !== 1) return "inactive";
     if (player.turn_ready === true) return "ready";
     if (player.turn_status !== null && player.turn_status > 0) return "viewed";
     return "unopened";
+}
+
+function officialTurnMarkerState(marker: string | undefined): PlayerTurnState | null {
+    if (marker === undefined || marker === "") return null;
+    const normalized = marker.toLowerCase();
+    if (marker === "_") return "unopened";
+    if (normalized === "o") return "viewed";
+    if (normalized === "x") return "inactive";
+    if (normalized === "c") return "computer";
+
+    // Planets.nu games/list encodes a completed turn with a race marker.
+    // Treat every remaining non-whitespace marker as DONE instead of trying to
+    // reinterpret the race encoding locally (important for races 10+).
+    return marker.trim() === "" ? null : "ready";
+}
+
+function gameTurnState(
+    turnStatus: string | null,
+    slot: number,
+    player: PlayerInfo | null,
+): PlayerTurnState {
+    const official = officialTurnMarkerState(turnStatus?.[slot - 1]);
+    if (official !== null) return official;
+    return player === null ? "unopened" : fallbackPlayerTurnState(player);
 }
 
 function turnStateLabel(state: PlayerTurnState): string {
@@ -105,9 +129,11 @@ function turnStateLabel(state: PlayerTurnState): string {
 function PlayerTurnRail({
     details,
     slots,
+    turnStatus,
 }: {
     details: GameDetailsResponse | undefined;
     slots: number;
+    turnStatus: string | null;
 }) {
     const bySlot = new Map<number, PlayerInfo>();
     for (const player of details?.players ?? []) {
@@ -116,6 +142,7 @@ function PlayerTurnRail({
 
     const slotCount = Math.max(
         slots,
+        turnStatus?.length ?? 0,
         ...Array.from(bySlot.keys()),
         0,
     );
@@ -129,19 +156,20 @@ function PlayerTurnRail({
             {Array.from({ length: slotCount }, (_, index) => {
                 const slot = index + 1;
                 const player = bySlot.get(slot) ?? null;
+                const state = gameTurnState(turnStatus, slot, player);
+
                 if (player === null) {
                     return (
                         <span
-                            className="intelboard-turn-cell is-empty"
+                            className={`intelboard-turn-cell is-${state}`}
                             key={slot}
-                            title={`Slot ${slot} · open / no player`}
+                            title={`Slot ${slot} · no public player record · ${turnStateLabel(state)}`}
                         >
                             {slot}
                         </span>
                     );
                 }
 
-                const state = playerTurnState(player);
                 const username = player.username.trim() || "computer";
                 return (
                     <span
@@ -168,7 +196,9 @@ function GameRow({
 }) {
     const player = observerPlayer(details, account);
     const running = isRunning(game);
-    const ownState = player === null ? null : playerTurnState(player);
+    const ownState = player === null
+        ? null
+        : gameTurnState(game.turn_status, player.slot_id, player);
     const typeLabel = game.is_custom
         ? "Custom"
         : game.is_private
@@ -223,7 +253,11 @@ function GameRow({
                 </div>
             )}
 
-            <PlayerTurnRail details={details} slots={game.slots} />
+            <PlayerTurnRail
+                details={details}
+                slots={game.slots}
+                turnStatus={game.turn_status}
+            />
         </button>
     );
 }
