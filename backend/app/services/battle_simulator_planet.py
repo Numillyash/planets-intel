@@ -13,8 +13,6 @@ def _round_sqrt_ratio(numerator: int, denominator: int = 1) -> int:
 
     if numerator <= 0 or denominator <= 0:
         return 0
-    # Find k such that k is the nearest integer to sqrt(n/d). Comparing
-    # 4*n with d*(2*k+1)^2 avoids floating point boundary errors.
     floor_value = isqrt(numerator // denominator)
     while (floor_value + 1) * (floor_value + 1) * denominator <= numerator:
         floor_value += 1
@@ -28,7 +26,6 @@ def planet_fighter_count(defense: int) -> int:
     """ROUND(SQRT(MAX(0, DP - .75))) without floating point."""
 
     dp = max(0, int(defense))
-    # sqrt(dp - 3/4) = sqrt((4*dp - 3)/4)
     return _round_sqrt_ratio(max(0, 4 * dp - 3), 4)
 
 
@@ -57,8 +54,6 @@ def planet_native_beam_tech(defense: int) -> int:
 
 
 def _damage_defense_posts(defense: int, battle_damage: int) -> int:
-    """Remove TRUNC(defense * damage / 100), matching Host planet DP rules."""
-
     value = max(0, int(defense))
     damage = max(0, min(100, int(battle_damage)))
     return max(0, value - (value * damage) // 100)
@@ -86,7 +81,14 @@ def rebuild_planet_combatant(
     base_fighters = max(0, int(result.get("starbase_fighters") or 0)) if has_base else 0
     base_tech = max(0, min(10, int(result.get("starbase_beam_tech") or 0))) if has_base else 0
     base_damage = max(0, int(result.get("starbase_damage") or 0)) if has_base else 0
-    base_mass_bonus = max(0, min(200, int(result.get("starbase_mass_bonus") or 0))) if has_base else 0
+    race_id = result.get("race_id")
+    requested_mass_bonus = (
+        max(0, min(200, int(result.get("starbase_mass_bonus") or 0)))
+        if has_base
+        else 0
+    )
+    # Robots do not receive the shielded-starbase radiation-halo mass bonus.
+    base_mass_bonus = 0 if race_id == 9 else requested_mass_bonus
 
     can_fight = planet_defense > 0
     planet_fighters = planet_fighter_count(planet_defense) if can_fight else 0
