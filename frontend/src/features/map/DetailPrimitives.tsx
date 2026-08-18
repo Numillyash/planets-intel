@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { raceName } from "../../lib/races";
 import type { PlayerInfo } from "../../types/api";
 import { formatInteger, formatPercent, type MineralFacts } from "./observationView";
 
@@ -15,8 +16,8 @@ export function playerName(
     );
 
     return player
-        ? `${player.username} (slot ${ownerId})`
-        : `Slot ${ownerId}`;
+        ? `${raceName(player.race_id)} / slot ${ownerId} / ${player.username}`
+        : `Unknown race / slot ${ownerId}`;
 }
 
 
