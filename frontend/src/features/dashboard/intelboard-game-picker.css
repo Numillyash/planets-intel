@@ -372,6 +372,28 @@
     color: #526171;
 }
 
+/* Fill color remains the factual current-turn state. The outer outline is a
+   second signal: Planets.nu's consecutive missed-turn streak. */
+.intelboard-turn-cell.is-missed-watch {
+    outline: 2px solid #d8bd4e;
+    outline-offset: 1px;
+}
+
+.intelboard-turn-cell.is-missed-warning {
+    outline: 2px solid #e8832f;
+    outline-offset: 1px;
+}
+
+.intelboard-turn-cell.is-missed-critical,
+.intelboard-turn-cell.is-missed-critical-risk {
+    outline: 2px solid #e24a4a;
+    outline-offset: 1px;
+}
+
+.intelboard-turn-cell.is-missed-critical-risk {
+    filter: drop-shadow(0 0 3px rgba(226, 74, 74, 0.42));
+}
+
 .intelboard-account-state {
     margin: 12px;
     padding: 18px;
