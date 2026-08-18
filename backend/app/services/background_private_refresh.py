@@ -29,6 +29,12 @@ def running_private_refresh_targets() -> list[tuple[int, int]]:
     sentinel-shaped player records. ``refresh_accessible_private_intel`` then
     refreshes every observer that user is allowed to combine for that game.
 
+    Planets.nu games can remain cached locally as ``Joining`` after the host has
+    already started producing turns. Include both ``Joining`` and ``Running``
+    here: the first public sync for such a target refreshes the canonical game
+    status before private loadturn collection. Explicitly finished games remain
+    excluded from the periodic collector.
+
     This intentionally does not depend on any browser session or currently
     selected observer/game.
     """
@@ -53,6 +59,7 @@ def running_private_refresh_targets() -> list[tuple[int, int]]:
                 or_(
                     Game.status_id == 2,
                     Game.status_name.ilike("running"),
+                    Game.status_name.ilike("joining"),
                 ),
             )
         ).all()
@@ -117,7 +124,7 @@ async def refresh_all_running_private_intel_once() -> dict[str, Any]:
 
 
 async def background_private_refresh_loop() -> None:
-    """Refresh all running games forever, independently of the frontend."""
+    """Refresh all active games forever, independently of the frontend."""
 
     await asyncio.sleep(BACKGROUND_REFRESH_STARTUP_DELAY_SECONDS)
     while True:
