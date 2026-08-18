@@ -1,7 +1,6 @@
 import unittest
 
 from app.services.battle_simulator_planet import (
-    _damage_tech,
     apply_planet_carryover,
     planet_bay_count,
     planet_beam_count,
@@ -9,6 +8,7 @@ from app.services.battle_simulator_planet import (
     planet_sequence_shape_supported,
     rebuild_planet_combatant,
 )
+from app.services.vcr_replay import ReplayUnsupported
 
 
 class BattleSimulatorPlanetTests(unittest.TestCase):
@@ -41,22 +41,21 @@ class BattleSimulatorPlanetTests(unittest.TestCase):
         self.assertEqual(rebuilt["beam_count"], 10)
         self.assertEqual(rebuilt["beam_id"], 10)
 
-    def test_planet_damage_and_fighter_losses_carry_to_next_wave(self) -> None:
+    def test_planet_only_damage_and_fighter_losses_carry_exactly(self) -> None:
         start = rebuild_planet_combatant(
             {
                 "hull_id": 0,
-                "has_starbase": True,
+                "has_starbase": False,
                 "planet_defense": 65,
-                "starbase_defense": 100,
-                "starbase_fighters": 5,
-                "starbase_beam_tech": 10,
-                "starbase_damage": 0,
-                "starbase_mass_bonus": 0,
+                "starbase_defense": None,
+                "starbase_fighters": None,
+                "starbase_beam_tech": None,
+                "starbase_damage": None,
+                "starbase_mass_bonus": None,
                 "beam_charge_rate": 1,
             }
         )
-        # DP65 generates 8 planetary fighters; plus five base fighters = 13.
-        self.assertEqual(start["fighters"], 13)
+        self.assertEqual(start["fighters"], 8)
 
         carried = apply_planet_carryover(
             start,
@@ -68,50 +67,93 @@ class BattleSimulatorPlanetTests(unittest.TestCase):
             },
         )
 
-        # 7 fighters lost: 5 base fighters first, then 2 planetary fighters.
-        # Host planet DP damage loss = TRUNC(65*43/100)=27, so 65-27-2=36.
+        # TRUNC(65*43/100)=27 damage DP plus two destroyed planetary fighters.
         self.assertEqual(carried["planet_defense"], 36)
-        self.assertEqual(carried["starbase_fighters"], 0)
-        self.assertEqual(carried["starbase_damage"], 43)
-        self.assertEqual(carried["starbase_defense"], 57)
-        self.assertEqual(carried["starbase_beam_tech"], 5)
         self.assertEqual(carried["damage"], 0)
         self.assertEqual(carried["shield"], 0)
+        self.assertEqual(carried["fighters"], 6)
 
-    def test_base_is_removed_at_one_hundred_accumulated_damage(self) -> None:
+    def test_starbase_fighters_carry_when_no_hull_damage_occurred(self) -> None:
         start = rebuild_planet_combatant(
             {
                 "hull_id": 0,
                 "has_starbase": True,
-                "planet_defense": 50,
+                "planet_defense": 65,
                 "starbase_defense": 100,
-                "starbase_fighters": 20,
+                "starbase_fighters": 5,
                 "starbase_beam_tech": 10,
-                "starbase_damage": 90,
-                "starbase_mass_bonus": 200,
+                "starbase_damage": 12,
+                "starbase_mass_bonus": 0,
                 "beam_charge_rate": 1,
             }
         )
+        self.assertEqual(start["fighters"], 13)
+
         carried = apply_planet_carryover(
             start,
             start,
             {
-                "shield": 20,
-                "damage": 10,
-                "fighters": start["fighters"],
+                "shield": 35,
+                "damage": 0,
+                "fighters": 6,
             },
         )
 
-        self.assertFalse(carried["has_starbase"])
-        self.assertIsNone(carried["starbase_defense"])
-        self.assertIsNone(carried["starbase_damage"])
-        self.assertIsNone(carried["starbase_mass_bonus"])
-        self.assertEqual(carried["mass"], 145)
+        # Seven losses consume all five base fighters before two planetary
+        # fighters. Those two generated-fighter losses remove two planet DP.
+        self.assertEqual(carried["starbase_fighters"], 0)
+        self.assertEqual(carried["planet_defense"], 63)
+        self.assertEqual(carried["starbase_defense"], 100)
+        self.assertEqual(carried["starbase_beam_tech"], 10)
+        self.assertEqual(carried["starbase_damage"], 12)
+        self.assertEqual(carried["shield"], 35)
 
-    def test_base_tech_reduction_uses_new_battle_damage(self) -> None:
-        self.assertEqual(_damage_tech(10, 70), 3)
-        self.assertEqual(_damage_tech(7, 70), 2)
-        self.assertEqual(_damage_tech(1, 99), 1)
+    def test_starbase_hull_damage_fails_closed_without_host_formula(self) -> None:
+        start = rebuild_planet_combatant(
+            {
+                "hull_id": 0,
+                "has_starbase": True,
+                "planet_defense": 65,
+                "starbase_defense": 100,
+                "starbase_fighters": 5,
+                "starbase_beam_tech": 10,
+                "starbase_damage": 12,
+                "starbase_mass_bonus": 0,
+                "beam_charge_rate": 1,
+            }
+        )
+
+        with self.assertRaisesRegex(
+            ReplayUnsupported,
+            "exact multi-wave starbase carry-over stops",
+        ):
+            apply_planet_carryover(
+                start,
+                start,
+                {
+                    "shield": 0,
+                    "damage": 1,
+                    "fighters": start["fighters"],
+                },
+            )
+
+    def test_robot_starbase_never_gets_shielded_mass_bonus(self) -> None:
+        rebuilt = rebuild_planet_combatant(
+            {
+                "hull_id": 0,
+                "race_id": 9,
+                "has_starbase": True,
+                "planet_defense": 25,
+                "starbase_defense": 50,
+                "starbase_fighters": 20,
+                "starbase_beam_tech": 10,
+                "starbase_damage": 0,
+                "starbase_mass_bonus": 200,
+            }
+        )
+
+        self.assertEqual(rebuilt["starbase_mass_bonus"], 0)
+        self.assertEqual(rebuilt["mass"], 175)
 
     def test_only_ship_queue_vs_one_fixed_planet_shape_is_supported(self) -> None:
         ship = {"hull_id": 10}
