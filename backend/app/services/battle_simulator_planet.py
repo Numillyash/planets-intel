@@ -4,8 +4,10 @@ from copy import deepcopy
 from math import isqrt
 from typing import Any, Mapping
 
+from app.services.vcr_replay import ReplayUnsupported
 
-PLANET_CARRYOVER_BASIS = "nuhost_planet_starbase_carryover_v1"
+
+PLANET_CARRYOVER_BASIS = "nuhost_fixed_defense_exact_v2"
 
 
 def _round_sqrt_ratio(numerator: int, denominator: int = 1) -> int:
@@ -54,17 +56,11 @@ def planet_native_beam_tech(defense: int) -> int:
 
 
 def _damage_defense_posts(defense: int, battle_damage: int) -> int:
+    """Apply the documented planet DP proportional-damage rule."""
+
     value = max(0, int(defense))
     damage = max(0, min(100, int(battle_damage)))
     return max(0, value - (value * damage) // 100)
-
-
-def _damage_tech(tech: int, battle_damage: int) -> int:
-    value = max(0, min(10, int(tech)))
-    if value <= 0:
-        return 0
-    damage = max(0, min(100, int(battle_damage)))
-    return max(1, (value * (100 - damage)) // 100)
 
 
 def rebuild_planet_combatant(
@@ -150,26 +146,37 @@ def apply_planet_carryover(
 ) -> dict[str, Any]:
     """Build the defending world for the next ship-vs-planet engagement.
 
-    Exact Nu/Host-documented pieces:
+    The exact path carries only mechanics documented precisely enough to
+    reproduce without inventing Host state:
     - planet damage resets to zero for the next engagement;
     - planet DP lose TRUNC(DP * battle_damage / 100);
-    - starbase fighters are lost before generated planetary fighters;
+    - starbase fighters are consumed before generated planetary fighters;
     - every lost planetary fighter removes one additional planet DP;
-    - starbase damage accumulates and a base at >=100 damage is removed;
-    - starbase beam tech is reduced by newly inflicted damage;
-    - defense/bay/fighter/beam/mass values are then re-derived from the
-      surviving fixed-defense state.
+    - surviving shields remain drained for the next engagement;
+    - beams, bays, fighters and mass are re-derived from the resulting state.
 
-    Planets.nu documentation states that starbase damage removes base defense
-    points but does not publish the numeric loss formula. Version 1 uses the
-    classic Host proportional-defense loss rule for that one transition and
-    exposes ``PLANET_CARRYOVER_BASIS`` so results remain explicitly derived.
+    Planets.nu documents that hull damage can also damage a surviving starbase,
+    permanently reducing starbase Defense and Tech while accumulating separate
+    base damage. It does not publish the numeric split/formula required to
+    derive those three post-combat values from the VCR planet damage alone.
+    Therefore a surviving starbase that sees non-zero planet damage is an
+    explicit fail-closed boundary instead of an estimated carry-over.
     """
 
     result = deepcopy(dict(state))
     battle_damage = max(0, min(100, int(terminal.get("damage", 0))))
     old_dp = max(0, int(engagement_start.get("planet_defense") or 0))
     had_base = bool(engagement_start.get("has_starbase"))
+
+    if had_base and battle_damage > 0:
+        raise ReplayUnsupported(
+            "exact multi-wave starbase carry-over stops after this engagement: "
+            "the planet took hull damage while a starbase survived, and "
+            "Planets.nu does not expose enough data to derive the resulting "
+            "starbase defense, tech and accumulated base damage without an "
+            "unsupported Host assumption"
+        )
+
     old_base_fighters = (
         max(0, int(engagement_start.get("starbase_fighters") or 0))
         if had_base
@@ -179,34 +186,35 @@ def apply_planet_carryover(
     terminal_fighters = max(0, int(terminal.get("fighters", 0)))
     fighter_losses = max(0, old_total_fighters - terminal_fighters)
 
+    # Documentation explicitly states starbase fighters are lost before
+    # generated planetary fighters.
     base_fighter_losses = min(old_base_fighters, fighter_losses)
     planetary_fighter_losses = max(0, fighter_losses - base_fighter_losses)
     next_base_fighters = max(0, old_base_fighters - base_fighter_losses)
 
     next_dp = _damage_defense_posts(old_dp, battle_damage)
     next_dp = max(0, next_dp - planetary_fighter_losses)
+    result["planet_defense"] = next_dp
 
     if had_base:
-        old_base_damage = max(0, int(engagement_start.get("starbase_damage") or 0))
-        next_base_damage = old_base_damage + battle_damage
-        base_survives = next_base_damage < 100
-    else:
-        next_base_damage = 0
-        base_survives = False
-
-    if base_survives:
-        old_base_defense = max(0, int(engagement_start.get("starbase_defense") or 0))
-        old_base_tech = max(0, int(engagement_start.get("starbase_beam_tech") or 0))
+        # With zero hull damage the undocumented base-damage branch is not
+        # entered. Fighter losses and drained shields can still carry exactly.
         result.update(
             {
                 "has_starbase": True,
-                "starbase_defense": _damage_defense_posts(
-                    old_base_defense,
-                    battle_damage,
+                "starbase_defense": max(
+                    0,
+                    int(engagement_start.get("starbase_defense") or 0),
                 ),
                 "starbase_fighters": next_base_fighters,
-                "starbase_beam_tech": _damage_tech(old_base_tech, battle_damage),
-                "starbase_damage": next_base_damage,
+                "starbase_beam_tech": max(
+                    0,
+                    min(10, int(engagement_start.get("starbase_beam_tech") or 0)),
+                ),
+                "starbase_damage": max(
+                    0,
+                    int(engagement_start.get("starbase_damage") or 0),
+                ),
                 "starbase_mass_bonus": max(
                     0,
                     min(200, int(engagement_start.get("starbase_mass_bonus") or 0)),
@@ -225,12 +233,10 @@ def apply_planet_carryover(
             }
         )
 
-    result["planet_defense"] = next_dp
     result = rebuild_planet_combatant(
         result,
         shield=max(0, min(100, int(terminal.get("shield", 0)))),
     )
-    result.setdefault("notes", [])
     notes = list(result.get("notes") or [])
     carry_note = f"planet/base carry-over: {PLANET_CARRYOVER_BASIS}"
     if carry_note not in notes:
