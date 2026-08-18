@@ -130,6 +130,16 @@ export interface BattleSimulatorSequenceTerminalCombatant extends BattleSimulato
     status: "unfought" | "fighting" | "survived" | "destroyed" | "captured";
 }
 
+export interface BattleSimulatorPlanetCarryover {
+    basis: string;
+    planet_defense: number | null;
+    starbase_present: boolean;
+    starbase_defense: number | null;
+    starbase_fighters: number | null;
+    starbase_beam_tech: number | null;
+    starbase_damage: number | null;
+}
+
 export interface BattleSimulatorSequenceEngagement {
     number: number;
     left_index: number;
@@ -141,6 +151,7 @@ export interface BattleSimulatorSequenceEngagement {
     cycles: number;
     left: BattleSimulatorTerminalSide;
     right: BattleSimulatorTerminalSide;
+    planet_carryover?: BattleSimulatorPlanetCarryover;
 }
 
 export interface BattleSimulatorSequenceRunResponse {
