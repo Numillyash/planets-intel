@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 
 from app.db.session import SessionLocal
 from app.models.game import Game
@@ -73,6 +73,12 @@ def _accessible_accounts(user_id: int) -> list[dict[str, Any]]:
         ]
 
 
+def accessible_refresh_account_ids(user_id: int) -> tuple[int, ...]:
+    """Return the linked observer ids a local user may refresh/share."""
+
+    return tuple(int(account["id"]) for account in _accessible_accounts(user_id))
+
+
 def _latest_batch(
     *,
     linked_account_id: int,
@@ -140,16 +146,32 @@ async def _resolve_refresh_turn(game_id: int) -> tuple[int, dict[str, Any]]:
 def _is_account_in_game(
     *,
     planets_account_id: int | None,
+    planets_username: str,
     game_id: int,
 ) -> bool | None:
-    if planets_account_id is None:
+    """Match a linked observer to the canonical roster conservatively.
+
+    Planets.nu may replace account ids with sentinel/zero values after a player
+    dies. The canonical slot username is therefore an allowed fallback, matching
+    the identity policy already used by the game picker/background target scan.
+    If neither identity field is usable, return ``None`` so the caller does not
+    turn unknown membership into a false negative.
+    """
+
+    normalized_username = planets_username.strip().casefold()
+    predicates = []
+    if planets_account_id is not None and planets_account_id > 0:
+        predicates.append(GamePlayerSlot.account_id == planets_account_id)
+    if normalized_username:
+        predicates.append(func.lower(GamePlayerSlot.username) == normalized_username)
+    if not predicates:
         return None
 
     with SessionLocal() as session:
         slot = session.execute(
             select(GamePlayerSlot.slot_id).where(
                 GamePlayerSlot.game_id == game_id,
-                GamePlayerSlot.account_id == planets_account_id,
+                or_(*predicates),
             )
         ).scalar_one_or_none()
 
@@ -200,6 +222,7 @@ async def refresh_accessible_private_intel(
     for account in accounts:
         membership = _is_account_in_game(
             planets_account_id=account["planets_account_id"],
+            planets_username=account["planets_username"],
             game_id=game_id,
         )
 
