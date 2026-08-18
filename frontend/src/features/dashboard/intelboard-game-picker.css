@@ -147,6 +147,15 @@
     text-transform: uppercase;
 }
 
+.intelboard-account-warning {
+    padding: 9px 16px;
+    border-bottom: 1px solid #4f442a;
+    background: #211c11;
+    color: #d5bd7a;
+    font-size: 0.68rem;
+    line-height: 1.35;
+}
+
 .intelboard-game-list {
     display: flex;
     flex-direction: column;
@@ -273,6 +282,12 @@
 .intelboard-own-turn-state.is-unopened i { background: #c7d2df; }
 .intelboard-own-turn-state.is-inactive i { background: #56606d; }
 .intelboard-own-turn-state.is-computer i { background: #6d7bc2; }
+.intelboard-own-turn-state.is-unknown i {
+    box-sizing: border-box;
+    border: 1px dashed #748394;
+    background: transparent;
+    box-shadow: none;
+}
 
 .intelboard-turn-rail {
     display: flex;
@@ -303,6 +318,16 @@
     font-size: 0.55rem;
 }
 
+.intelboard-turn-rail.is-very-dense {
+    gap: 3px;
+}
+
+.intelboard-turn-rail.is-very-dense .intelboard-turn-cell {
+    width: 18px;
+    height: 18px;
+    font-size: 0.49rem;
+}
+
 .intelboard-turn-cell.is-ready {
     border-color: #38d47c;
     background: #178347;
@@ -319,6 +344,13 @@
     border-color: #8c9bab;
     background: #344251;
     color: #eef3f7;
+}
+
+.intelboard-turn-cell.is-unknown {
+    border-style: dotted;
+    border-color: #617184;
+    background: #18222d;
+    color: #8090a2;
 }
 
 .intelboard-turn-cell.is-inactive {
