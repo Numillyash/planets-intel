@@ -10,6 +10,7 @@ class GameInfo(BaseModel):
     status_name: str
     turn: int
     slots: int
+    turn_status: str | None = None
     next_host: str
     turns_per_week: int | None
     is_private: bool
