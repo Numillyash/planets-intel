@@ -173,6 +173,52 @@ function turnStateLabel(state: PlayerTurnState): string {
     }
 }
 
+function missedTurnClass(
+    player: PlayerInfo,
+    state: PlayerTurnState,
+    loadInfoMatchesTurn: boolean,
+): string {
+    if (
+        !loadInfoMatchesTurn
+        || player.status !== 1
+        || player.race_id >= 100
+        || player.turns_missed === null
+        || player.turns_missed <= 0
+    ) {
+        return "";
+    }
+
+    if (player.turns_missed >= 3) return " is-missed-critical";
+    if (player.turns_missed === 2 && state !== "ready") {
+        return " is-missed-critical-risk";
+    }
+    if (player.turns_missed === 2) return " is-missed-warning";
+    return " is-missed-watch";
+}
+
+function missedTurnLabel(
+    player: PlayerInfo,
+    state: PlayerTurnState,
+    loadInfoMatchesTurn: boolean,
+): string {
+    if (
+        !loadInfoMatchesTurn
+        || player.status !== 1
+        || player.race_id >= 100
+        || player.turns_missed === null
+        || player.turns_missed <= 0
+    ) {
+        return "";
+    }
+
+    const turns = player.turns_missed;
+    const base = `${turns} consecutive missed turn${turns === 1 ? "" : "s"} reported by Planets.nu`;
+    if (turns === 2 && state !== "ready") {
+        return `${base} · current turn incomplete · critical drop risk if another turn is missed`;
+    }
+    return base;
+}
+
 function PlayerTurnRail({
     details,
     gameTurn,
@@ -232,11 +278,24 @@ function PlayerTurnRail({
                 }
 
                 const username = player.username.trim() || "computer";
+                const missedClass = missedTurnClass(
+                    player,
+                    state,
+                    loadInfoMatchesTurn,
+                );
+                const missedLabel = missedTurnLabel(
+                    player,
+                    state,
+                    loadInfoMatchesTurn,
+                );
                 return (
                     <span
-                        className={`intelboard-turn-cell is-${state}`}
+                        className={`intelboard-turn-cell is-${state}${missedClass}`}
                         key={slot}
-                        title={`${raceName(player.race_id)} / slot ${slot} / ${username} · ${turnStateLabel(state)}`}
+                        title={
+                            `${raceName(player.race_id)} / slot ${slot} / ${username} · ${turnStateLabel(state)}`
+                            + (missedLabel ? ` · ${missedLabel}` : "")
+                        }
                     >
                         {slot}
                     </span>
