@@ -64,6 +64,7 @@ function QueueColumn({
                                     {item.setup.kind === "planet"
                                         ? `planet${item.setup.starbasePresent ? " + starbase" : ""}`
                                         : `${item.combatant.beam_count}B · ${item.combatant.launcher_count}T · ${item.combatant.bay_count} bays`}
+                                    {item.combatant.galactic_power ? " · Galactic Power" : ""}
                                 </small>
                             </span>
                         </button>
@@ -213,6 +214,40 @@ function AddCombatantRow({
     );
 }
 
+function queueValidation(
+    leftQueue: MaterializedCombatant[],
+    rightQueue: MaterializedCombatant[],
+): { invalid: boolean; message: string | null; fixedPlanet: boolean } {
+    const leftPlanets = leftQueue.filter((item) => item.setup.kind === "planet");
+    const rightPlanets = rightQueue.filter((item) => item.setup.kind === "planet");
+    if (leftPlanets.length > 0) {
+        return {
+            invalid: true,
+            message: "A planet/starbase is a fixed defender and cannot occupy the left queue.",
+            fixedPlanet: false,
+        };
+    }
+    if (rightPlanets.length > 0 && (rightQueue.length !== 1 || rightPlanets.length !== 1)) {
+        return {
+            invalid: true,
+            message: "For planetary combat, keep exactly one fixed planet/starbase on RIGHT and queue all attacking ships on LEFT.",
+            fixedPlanet: false,
+        };
+    }
+    if (rightQueue.some((item) => item.combatant.galactic_power)) {
+        return {
+            invalid: true,
+            message: "Galactic Power forces that Evil Empire Gorbie to LEFT. Swap sides or disable Galactic Power for this scenario.",
+            fixedPlanet: false,
+        };
+    }
+    return {
+        invalid: false,
+        message: null,
+        fixedPlanet: rightPlanets.length === 1,
+    };
+}
+
 export function BattleSimulatorWorkbench({
     game,
     intel,
@@ -306,9 +341,7 @@ export function BattleSimulatorWorkbench({
         ? leftQueue[selectedLeft] ?? null
         : rightQueue[selectedRight] ?? null;
     const multi = leftQueue.length > 1 || rightQueue.length > 1;
-    const multiHasPlanet = multi && [...leftQueue, ...rightQueue].some(
-        (item) => item.setup.kind === "planet",
-    );
+    const validation = queueValidation(leftQueue, rightQueue);
 
     function updateSelected(next: MaterializedCombatant) {
         if (selectedSide === "left") {
@@ -370,6 +403,7 @@ export function BattleSimulatorWorkbench({
 
     function swapSides() {
         if (rightQueue.some((item) => item.setup.kind === "planet")) return;
+        if (leftQueue.some((item) => item.combatant.galactic_power)) return;
         const previousLeft = leftQueue;
         setLeftQueue(rightQueue);
         setRightQueue(previousLeft);
@@ -380,7 +414,11 @@ export function BattleSimulatorWorkbench({
     }
 
     async function runOne() {
-        if (leftQueue.length === 0 || rightQueue.length === 0 || multiHasPlanet) return;
+        if (
+            leftQueue.length === 0
+            || rightQueue.length === 0
+            || validation.invalid
+        ) return;
         setRunning(true);
         setError(null);
         setRunResult(null);
@@ -409,7 +447,11 @@ export function BattleSimulatorWorkbench({
     }
 
     async function runOdds() {
-        if (leftQueue.length === 0 || rightQueue.length === 0 || multiHasPlanet) return;
+        if (
+            leftQueue.length === 0
+            || rightQueue.length === 0
+            || validation.invalid
+        ) return;
         setRunning(true);
         setError(null);
         setOdds(null);
@@ -437,6 +479,13 @@ export function BattleSimulatorWorkbench({
         }
     }
 
+    const runDisabled = (
+        running
+        || leftQueue.length === 0
+        || rightQueue.length === 0
+        || validation.invalid
+    );
+
     return (
         <div className="battle-sim-shell">
             <section className="battle-sim-builder">
@@ -445,14 +494,17 @@ export function BattleSimulatorWorkbench({
                         <span className="eyebrow">BATTLE ORDER · T{turn}</span>
                         <h3>Combat queues</h3>
                         <p>
-                            Add known ships, known planets/starbases or manual hulls.
-                            Left/right are explicit combat positions; identical hulls can fight on opposite sides.
-                            Queue order controls which ship enters the next engagement.
+                            Add known ships, VCR-observed ships or manual hulls of any race.
+                            For planetary waves, keep one fixed planet/starbase on RIGHT and
+                            queue the attacking ships on LEFT.
                         </p>
                     </div>
                     <button
                         className="secondary-button"
-                        disabled={rightQueue.some((item) => item.setup.kind === "planet")}
+                        disabled={
+                            rightQueue.some((item) => item.setup.kind === "planet")
+                            || leftQueue.some((item) => item.combatant.galactic_power)
+                        }
                         onClick={swapSides}
                         type="button"
                     >
@@ -510,11 +562,15 @@ export function BattleSimulatorWorkbench({
                     />
                 </div>
 
-                {multiHasPlanet && (
+                {validation.message !== null && (
+                    <div className="battle-sim-warning">{validation.message}</div>
+                )}
+                {!validation.invalid && validation.fixedPlanet && multi && (
                     <div className="battle-sim-warning">
-                        Planet/starbase multi-wave carry-over is still fail-closed:
-                        the simulator will not invent post-battle planet/base defense state.
-                        Ship-only queues and single ship-vs-planet simulation remain available.
+                        Fixed-defense carry-over active: planet defense, generated fighters,
+                        starbase fighters, accumulated base damage, base defense/beam tech,
+                        shields and derived combat mass are recomputed between waves. The
+                        result is derived simulation, not a factual future state.
                     </div>
                 )}
             </section>
@@ -557,7 +613,7 @@ export function BattleSimulatorWorkbench({
                     />
                     <button
                         className="secondary-button"
-                        disabled={running || leftQueue.length === 0 || rightQueue.length === 0 || multiHasPlanet}
+                        disabled={runDisabled}
                         onClick={() => void runOne()}
                         type="button"
                     >
@@ -576,7 +632,7 @@ export function BattleSimulatorWorkbench({
                     />
                     <button
                         className="primary-button"
-                        disabled={running || leftQueue.length === 0 || rightQueue.length === 0 || multiHasPlanet}
+                        disabled={runDisabled}
                         onClick={() => void runOdds()}
                         type="button"
                     >
@@ -634,6 +690,15 @@ export function BattleSimulatorWorkbench({
                                             {` · seed ${engagement.start_seed} · ${engagement.cycles} cycles`}
                                             {engagement.right_balance_applied ? " · +360 KT right" : ""}
                                         </span>
+                                        {engagement.planet_carryover !== undefined && (
+                                            <small>
+                                                next wave · planet DP {engagement.planet_carryover.planet_defense ?? "—"}
+                                                {` · base ${engagement.planet_carryover.starbase_present ? "alive" : "gone"}`}
+                                                {engagement.planet_carryover.starbase_present
+                                                    ? ` · base DP ${engagement.planet_carryover.starbase_defense ?? "—"} · fighters ${engagement.planet_carryover.starbase_fighters ?? "—"} · damage ${engagement.planet_carryover.starbase_damage ?? "—"}%`
+                                                    : ""}
+                                            </small>
+                                        )}
                                     </div>
                                 ))}
                             </div>
@@ -693,6 +758,12 @@ export function BattleSimulatorWorkbench({
                                 <p className="battle-sim-result-note">
                                     Right carrier balance: {sequenceOdds.sampling.right_balance_mode}
                                     {` · ${(sequenceOdds.sampling.right_balance_probability_when_eligible * 100).toFixed(0)}% when an engagement is eligible`}
+                                    {` · mean ${sequenceOdds.sampling.mean_engagements} engagements`}
+                                </p>
+                            )}
+                            {validation.fixedPlanet && (
+                                <p className="battle-sim-result-note">
+                                    Planet/starbase state is carried between attacker waves using the derived fixed-defense model.
                                 </p>
                             )}
                             <div className="battle-sim-sequence-stats">
