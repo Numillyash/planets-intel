@@ -1,10 +1,9 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
-import { CombatEventPanel as VcrPanel } from "./CombatEventPanelLegacy";
+import { VcrDashboardPanel } from "../dashboard/VcrDashboardPanel";
 import { CommunicationsPanel } from "./CommunicationsPanel";
 import { HostEventPanel } from "./HostEventPanel";
-import { MapEventBridge } from "./MapEventBridge";
 import "./operational-shell-v2.css";
 import "./operational-dashboard-bridge.css";
 
@@ -22,6 +21,9 @@ interface CombatEventPanelProps {
     onFocus(event: FocusTarget): void;
 }
 
+interface CombatSelectionDetail {
+    vcrId?: number;
+}
 
 function dashboardTabFromLocation(): DashboardTab | null {
     const value = new URLSearchParams(window.location.search).get("intel");
@@ -31,11 +33,9 @@ function dashboardTabFromLocation(): DashboardTab | null {
     return null;
 }
 
-
 function dashboardTabQueryValue(tab: DashboardTab): string {
     return tab === "host" ? "reports" : tab;
 }
-
 
 function replaceIntelTabInLocation(tab: DashboardTab | null): void {
     const url = new URL(window.location.href);
@@ -51,7 +51,6 @@ function replaceIntelTabInLocation(tab: DashboardTab | null): void {
     );
 }
 
-
 export function CombatEventPanel(props: CombatEventPanelProps) {
     const [initialIntelTab] = useState<DashboardTab | null>(
         () => dashboardTabFromLocation(),
@@ -63,8 +62,10 @@ export function CombatEventPanel(props: CombatEventPanelProps) {
     const [activeTab, setActiveTab] = useState<DashboardTab>(
         () => initialIntelTab ?? "combat",
     );
+    const [requestedVcrId, setRequestedVcrId] = useState<number | null>(null);
 
     function openIntelTab(tab: DashboardTab) {
+        if (tab === "combat") setRequestedVcrId(null);
         setActiveTab(tab);
         setIntelOverlayOpen(true);
         setPageDashboardOpen(false);
@@ -78,14 +79,25 @@ export function CombatEventPanel(props: CombatEventPanelProps) {
     }
 
     useEffect(() => {
-        const openCombatEvidence = () => {
+        const openCombatEvidence = (rawEvent: Event) => {
+            const detail = (rawEvent as CustomEvent<CombatSelectionDetail>).detail;
+            const vcrId = typeof detail?.vcrId === "number"
+                && Number.isSafeInteger(detail.vcrId)
+                && detail.vcrId > 0
+                ? detail.vcrId
+                : null;
+            setRequestedVcrId(vcrId);
             setActiveTab("combat");
             setIntelOverlayOpen(true);
+            setPageDashboardOpen(false);
+            document.body.classList.remove("operational-page-dashboard-open");
             replaceIntelTabInLocation("combat");
         };
         const openHostEvidence = () => {
             setActiveTab("host");
             setIntelOverlayOpen(true);
+            setPageDashboardOpen(false);
+            document.body.classList.remove("operational-page-dashboard-open");
             replaceIntelTabInLocation("host");
         };
 
@@ -98,12 +110,17 @@ export function CombatEventPanel(props: CombatEventPanelProps) {
     }, []);
 
     useEffect(() => {
+        setRequestedVcrId(null);
+    }, [props.gameId, props.turn]);
+
+    useEffect(() => {
         const handlePopState = () => {
             const tab = dashboardTabFromLocation();
             if (tab === null) {
                 setIntelOverlayOpen(false);
                 return;
             }
+            if (tab === "combat") setRequestedVcrId(null);
             setActiveTab(tab);
             setIntelOverlayOpen(true);
         };
@@ -134,8 +151,6 @@ export function CombatEventPanel(props: CombatEventPanelProps) {
 
     return (
         <>
-            <MapEventBridge />
-
             <div className="operational-map-hud">
                 <button
                     aria-label="Return to game menu"
@@ -248,7 +263,12 @@ export function CombatEventPanel(props: CombatEventPanelProps) {
                             `operational-dashboard-pane${activeTab === "combat" ? " is-active" : ""}`
                         }
                     >
-                        <VcrPanel {...props} />
+                        <VcrDashboardPanel
+                            gameId={props.gameId}
+                            initialVcrId={requestedVcrId}
+                            linkedAccountId={props.linkedAccountId}
+                            turn={props.turn}
+                        />
                     </section>
                     <section
                         className={
