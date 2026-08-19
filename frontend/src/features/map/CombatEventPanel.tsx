@@ -1,6 +1,12 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
+import {
+    readGameSurfaceRoute,
+    subscribeGameSurfaceRoute,
+    writeGameSurfaceRoute,
+    type GameSurfaceView,
+} from "../../lib/uiRouteState";
 import { VcrDashboardPanel } from "../dashboard/VcrDashboardPanel";
 import { CommunicationsPanel } from "./CommunicationsPanel";
 import { HostEventPanel } from "./HostEventPanel";
@@ -25,60 +31,127 @@ interface CombatSelectionDetail {
     vcrId?: number;
 }
 
-function dashboardTabFromLocation(): DashboardTab | null {
-    const value = new URLSearchParams(window.location.search).get("intel");
-    if (value === "combat") return "combat";
+function intelTabFromRoute(value: string | null): DashboardTab {
     if (value === "reports" || value === "host") return "host";
     if (value === "communications") return "communications";
-    return null;
+    return "combat";
 }
 
-function dashboardTabQueryValue(tab: DashboardTab): string {
+function intelTabRouteValue(tab: DashboardTab): string {
     return tab === "host" ? "reports" : tab;
 }
 
-function replaceIntelTabInLocation(tab: DashboardTab | null): void {
-    const url = new URL(window.location.href);
-    if (tab === null) {
-        url.searchParams.delete("intel");
-    } else {
-        url.searchParams.set("intel", dashboardTabQueryValue(tab));
-    }
-    window.history.replaceState(
-        null,
-        "",
-        `${url.pathname}${url.search}${url.hash}`,
+function GameSurfaceNav({
+    view,
+    turn,
+    onGames,
+    onDashboard,
+    onIntel,
+    onStarmap,
+    className = "",
+}: {
+    view: GameSurfaceView;
+    turn: number;
+    onGames(): void;
+    onDashboard(): void;
+    onIntel(): void;
+    onStarmap(): void;
+    className?: string;
+}) {
+    return (
+        <div className={`operational-surface-nav ${className}`.trim()}>
+            <button className="operational-dashboard-map-button" onClick={onGames} type="button">
+                Games
+            </button>
+            <button
+                className="operational-dashboard-map-button"
+                disabled={view === "dashboard"}
+                onClick={onDashboard}
+                type="button"
+            >
+                Dashboard
+            </button>
+            <button
+                className="operational-dashboard-map-button"
+                disabled={view === "intel"}
+                onClick={onIntel}
+                type="button"
+            >
+                Intel
+            </button>
+            <button
+                className="operational-dashboard-map-button"
+                disabled={view === "starmap"}
+                onClick={onStarmap}
+                type="button"
+            >
+                Starmap
+            </button>
+            <div className="operational-map-turn">
+                <span>TURN</span>
+                <strong>{turn}</strong>
+            </div>
+        </div>
     );
 }
 
 export function CombatEventPanel(props: CombatEventPanelProps) {
-    const [initialIntelTab] = useState<DashboardTab | null>(
-        () => dashboardTabFromLocation(),
-    );
+    const [initialRoute] = useState(() => readGameSurfaceRoute());
     const [intelOverlayOpen, setIntelOverlayOpen] = useState(
-        () => initialIntelTab !== null,
+        () => initialRoute.view === "intel",
     );
-    const [pageDashboardOpen, setPageDashboardOpen] = useState(false);
+    const [pageDashboardOpen, setPageDashboardOpen] = useState(
+        () => initialRoute.view === "dashboard",
+    );
     const [activeTab, setActiveTab] = useState<DashboardTab>(
-        () => initialIntelTab ?? "combat",
+        () => intelTabFromRoute(initialRoute.view === "intel" ? initialRoute.tab : null),
     );
     const [requestedVcrId, setRequestedVcrId] = useState<number | null>(null);
     const [vcrPopupOpen, setVcrPopupOpen] = useState(false);
+
+    function applyRouteState() {
+        const route = readGameSurfaceRoute();
+        if (route.view === "dashboard") {
+            setIntelOverlayOpen(false);
+            setPageDashboardOpen(true);
+            document.body.classList.add("operational-page-dashboard-open");
+            return;
+        }
+        document.body.classList.remove("operational-page-dashboard-open");
+        setPageDashboardOpen(false);
+        if (route.view === "intel") {
+            setActiveTab(intelTabFromRoute(route.tab));
+            setIntelOverlayOpen(true);
+            return;
+        }
+        setIntelOverlayOpen(false);
+    }
 
     function openIntelTab(tab: DashboardTab) {
         setVcrPopupOpen(false);
         if (tab === "combat") setRequestedVcrId(null);
         setActiveTab(tab);
-        setIntelOverlayOpen(true);
-        setPageDashboardOpen(false);
-        document.body.classList.remove("operational-page-dashboard-open");
-        replaceIntelTabInLocation(tab);
+        writeGameSurfaceRoute("intel", intelTabRouteValue(tab));
     }
 
-    function closeIntelOverlay() {
-        setIntelOverlayOpen(false);
-        replaceIntelTabInLocation(null);
+    function showStarmap() {
+        setVcrPopupOpen(false);
+        writeGameSurfaceRoute("starmap");
     }
+
+    function openPageDashboard() {
+        setVcrPopupOpen(false);
+        writeGameSurfaceRoute("dashboard", "dashboard");
+    }
+
+    function returnToGameMenu() {
+        window.location.assign("/intelboard");
+    }
+
+    useEffect(() => {
+        applyRouteState();
+        return subscribeGameSurfaceRoute(applyRouteState);
+    }, []);
 
     useEffect(() => {
         const openCombatEvidence = (rawEvent: Event) => {
@@ -93,15 +166,10 @@ export function CombatEventPanel(props: CombatEventPanelProps) {
             setIntelOverlayOpen(false);
             setPageDashboardOpen(false);
             document.body.classList.remove("operational-page-dashboard-open");
-            replaceIntelTabInLocation(null);
         };
         const openHostEvidence = () => {
             setVcrPopupOpen(false);
-            setActiveTab("host");
-            setIntelOverlayOpen(true);
-            setPageDashboardOpen(false);
-            document.body.classList.remove("operational-page-dashboard-open");
-            replaceIntelTabInLocation("host");
+            openIntelTab("host");
         };
 
         window.addEventListener("dashboard-event-select", openCombatEvidence);
@@ -126,85 +194,29 @@ export function CombatEventPanel(props: CombatEventPanelProps) {
     }, []);
 
     useEffect(() => {
-        const handlePopState = () => {
-            setVcrPopupOpen(false);
-            const tab = dashboardTabFromLocation();
-            if (tab === null) {
-                setIntelOverlayOpen(false);
-                return;
-            }
-            if (tab === "combat") setRequestedVcrId(null);
-            setActiveTab(tab);
-            setIntelOverlayOpen(true);
-        };
-        window.addEventListener("popstate", handlePopState);
-        return () => window.removeEventListener("popstate", handlePopState);
-    }, []);
-
-    useEffect(() => {
         return () => {
             document.body.classList.remove("operational-page-dashboard-open");
         };
     }, []);
 
-    function openPageDashboard() {
-        setVcrPopupOpen(false);
-        closeIntelOverlay();
-        setPageDashboardOpen(true);
-        document.body.classList.add("operational-page-dashboard-open");
-    }
-
-    function showStarmap() {
-        document.body.classList.remove("operational-page-dashboard-open");
-        setPageDashboardOpen(false);
-    }
-
-    function returnToGameMenu() {
-        window.location.assign("/intelboard");
-    }
+    const navProps = {
+        turn: props.turn,
+        onGames: returnToGameMenu,
+        onDashboard: openPageDashboard,
+        onIntel: () => openIntelTab(activeTab),
+        onStarmap: showStarmap,
+    };
 
     return (
         <>
-            <div className="operational-map-hud">
-                <button
-                    aria-label="Return to game menu"
-                    className="operational-map-menu-button"
-                    onClick={returnToGameMenu}
-                    title="Game menu"
-                    type="button"
-                >
-                    <span aria-hidden="true">⌂</span>
-                </button>
-                <button
-                    aria-label="Open dashboard"
-                    className="operational-map-menu-button"
-                    onClick={openPageDashboard}
-                    title="Open full game dashboard"
-                    type="button"
-                >
-                    <span aria-hidden="true">☰</span>
-                </button>
-                <div className="operational-map-turn">
-                    <span>TURN</span>
-                    <strong>{props.turn}</strong>
-                </div>
-                <button
-                    className="operational-map-intel-button"
-                    onClick={() => openIntelTab(activeTab)}
-                    type="button"
-                >
-                    Intel
-                </button>
-            </div>
+            <GameSurfaceNav {...navProps} className="operational-map-hud" view="starmap" />
 
             {pageDashboardOpen && createPortal(
-                <button
-                    className="operational-starmap-return"
-                    onClick={showStarmap}
-                    type="button"
-                >
-                    Starmap
-                </button>,
+                <GameSurfaceNav
+                    {...navProps}
+                    className="operational-page-surface-nav"
+                    view="dashboard"
+                />,
                 document.body,
             )}
 
@@ -212,9 +224,7 @@ export function CombatEventPanel(props: CombatEventPanelProps) {
                 <div
                     className="operational-vcr-popup-backdrop"
                     onMouseDown={(event) => {
-                        if (event.target === event.currentTarget) {
-                            setVcrPopupOpen(false);
-                        }
+                        if (event.target === event.currentTarget) setVcrPopupOpen(false);
                     }}
                 >
                     <section
@@ -251,44 +261,17 @@ export function CombatEventPanel(props: CombatEventPanelProps) {
 
             <div
                 aria-hidden={!intelOverlayOpen}
-                className={
-                    `operational-dashboard-overlay${intelOverlayOpen ? " is-open" : ""}`
-                }
+                className={`operational-dashboard-overlay${intelOverlayOpen ? " is-open" : ""}`}
             >
                 <header className="operational-dashboard-header">
                     <div>
                         <span>PLANETS INTEL</span>
                         <strong>Intelligence</strong>
                     </div>
-                    <div style={{ display: "flex", gap: 8 }}>
-                        <button
-                            className="operational-dashboard-map-button"
-                            onClick={returnToGameMenu}
-                            type="button"
-                        >
-                            Games
-                        </button>
-                        <button
-                            className="operational-dashboard-map-button"
-                            onClick={openPageDashboard}
-                            type="button"
-                        >
-                            Dashboard
-                        </button>
-                        <button
-                            className="operational-dashboard-map-button"
-                            onClick={closeIntelOverlay}
-                            type="button"
-                        >
-                            Starmap
-                        </button>
-                    </div>
+                    <GameSurfaceNav {...navProps} view="intel" />
                 </header>
 
-                <nav
-                    aria-label="Intelligence sections"
-                    className="operational-dashboard-tabs"
-                >
+                <nav aria-label="Intelligence sections" className="operational-dashboard-tabs">
                     <button
                         className={activeTab === "combat" ? "is-active" : ""}
                         onClick={() => openIntelTab("combat")}
@@ -313,38 +296,26 @@ export function CombatEventPanel(props: CombatEventPanelProps) {
                 </nav>
 
                 <div className="operational-dashboard-content">
-                    <section
-                        className={
-                            `operational-dashboard-pane${activeTab === "combat" ? " is-active" : ""}`
-                        }
-                    >
+                    <section className={`operational-dashboard-pane${activeTab === "combat" ? " is-active" : ""}`}>
                         <VcrDashboardPanel
                             gameId={props.gameId}
                             linkedAccountId={props.linkedAccountId}
                             turn={props.turn}
                         />
                     </section>
-                    <section
-                        className={
-                            `operational-dashboard-pane${activeTab === "host" ? " is-active" : ""}`
-                        }
-                    >
+                    <section className={`operational-dashboard-pane${activeTab === "host" ? " is-active" : ""}`}>
                         <HostEventPanel
                             embedded
                             gameId={props.gameId}
                             linkedAccountId={props.linkedAccountId}
                             onFocus={(event) => {
                                 props.onFocus(event);
-                                closeIntelOverlay();
+                                showStarmap();
                             }}
                             turn={props.turn}
                         />
                     </section>
-                    <section
-                        className={
-                            `operational-dashboard-pane${activeTab === "communications" ? " is-active" : ""}`
-                        }
-                    >
+                    <section className={`operational-dashboard-pane${activeTab === "communications" ? " is-active" : ""}`}>
                         <CommunicationsPanel
                             gameId={props.gameId}
                             linkedAccountId={props.linkedAccountId}
