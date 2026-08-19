@@ -98,33 +98,87 @@ function CombatObjectArtwork({
     );
 }
 
-function SideStatus({ label, side }: { label: string; side: VcrReplaySideFrame }) {
+function hullIntegrity(side: VcrReplaySideFrame): number {
+    const limit = Math.max(1, side.damage_limit);
+    return Math.max(0, Math.min(100, ((limit - side.damage) * 100) / limit));
+}
+
+function WeaponChargeRow({
+    label,
+    slots,
+}: {
+    label: string;
+    slots: number[] | undefined;
+}) {
+    if (!slots || slots.length === 0) return null;
     return (
-        <article className="vcr-status-card">
+        <div className="vcr-weapon-charge-row">
+            <span>{label}</span>
+            <div className="vcr-weapon-charge-slots">
+                {slots.map((charge, index) => (
+                    <progress
+                        key={`${label}-${index}`}
+                        max={100}
+                        title={`${label} ${index + 1}: ${Math.min(100, Math.max(0, charge))}%`}
+                        value={Math.min(100, Math.max(0, charge))}
+                    />
+                ))}
+            </div>
+        </div>
+    );
+}
+
+function SideStatus({
+    label,
+    side,
+    launching,
+}: {
+    label: string;
+    side: VcrReplaySideFrame;
+    launching: boolean;
+}) {
+    const integrity = hullIntegrity(side);
+    return (
+        <article className={`vcr-status-card${side.destroyed ? " is-destroyed" : ""}`}>
             <div>
                 <span>{label}</span>
                 <strong>{side.name ?? `Object #${side.object_id ?? "?"}`}</strong>
             </div>
+
+            <div className="vcr-vital-bars">
+                <label className="is-shield">
+                    <span>Shield <strong>{side.shield}%</strong></span>
+                    <progress max={100} value={Math.max(0, Math.min(100, side.shield))} />
+                </label>
+                <label className="is-hull">
+                    <span>
+                        Hull <strong>{integrity.toFixed(0)}%</strong>
+                        <small>damage {side.damage}/{side.damage_limit}</small>
+                    </span>
+                    <progress max={100} value={integrity} />
+                </label>
+            </div>
+
             <dl>
-                <div><dt>Shield</dt><dd>{side.shield}%</dd></div>
-                <div><dt>Damage</dt><dd>{side.damage}%</dd></div>
                 <div><dt>Crew</dt><dd>{side.crew}</dd></div>
                 <div><dt>Torps</dt><dd>{side.torpedoes}</dd></div>
                 <div><dt>Fighters</dt><dd>{side.fighters}</dd></div>
                 <div><dt>Out</dt><dd>{side.fighters_out}</dd></div>
             </dl>
+
             <div className="vcr-charge-bars">
-                {side.beam_charge !== null && (
-                    <label>
-                        <span>Beams</span>
-                        <progress max={100} value={Math.min(100, side.beam_charge)} />
-                    </label>
-                )}
-                {side.launcher_charge !== null && (
-                    <label>
-                        <span>Launchers</span>
-                        <progress max={100} value={Math.min(100, side.launcher_charge)} />
-                    </label>
+                <WeaponChargeRow label="Beams" slots={side.beam_slots} />
+                <WeaponChargeRow label="Launchers" slots={side.launcher_slots} />
+                {side.bay_count > 0 && (
+                    <div className={`vcr-fighter-bays${launching ? " is-launching" : ""}`}>
+                        <span>Fighter bays</span>
+                        <div className="vcr-fighter-bay-pips" title="Classic combat uses a per-cycle launch roll; there is no continuous fighter-bay charge counter.">
+                            {Array.from({ length: Math.min(30, side.bay_count) }, (_, index) => (
+                                <i key={index} />
+                            ))}
+                        </div>
+                        <small>{side.bay_count} bays · launch roll</small>
+                    </div>
                 )}
             </div>
         </article>
@@ -133,33 +187,27 @@ function SideStatus({ label, side }: { label: string; side: VcrReplaySideFrame }
 
 const TORPEDO_PRESENTATION_FRAMES = 12;
 const MIN_SHIP_VISUAL_GAP_PERCENT = 28;
-const SHIP_EDGE_MARGIN_PERCENT = 12;
+const COMBAT_RAW_LEFT = 30;
+const COMBAT_RAW_RIGHT = 610;
+const STAGE_LEFT = 10;
+const STAGE_RIGHT = 90;
 const FIGHTER_LANE_COUNT = 19;
-const FIGHTER_TOP_MIN = 10;
-const FIGHTER_TOP_MAX = 90;
-
-function rawCombatPercent(x: number): number {
-    return (x / 640) * 100;
-}
+const FIGHTER_TOP_MIN = 8;
+const FIGHTER_TOP_MAX = 92;
 
 function clamp(value: number, minimum: number, maximum: number): number {
     return Math.max(minimum, Math.min(maximum, value));
 }
 
+function stagePercent(x: number): number {
+    const progress = (x - COMBAT_RAW_LEFT) / (COMBAT_RAW_RIGHT - COMBAT_RAW_LEFT);
+    return STAGE_LEFT + progress * (STAGE_RIGHT - STAGE_LEFT);
+}
+
 function presentationGeometry(frame: VcrReplayFrame): PresentationGeometry {
-    const rawLeftPercent = rawCombatPercent(frame.left.x);
-    const rawRightPercent = rawCombatPercent(frame.right.x);
-    const rawGap = Math.max(0.01, rawRightPercent - rawLeftPercent);
-    let left = clamp(
-        rawLeftPercent,
-        SHIP_EDGE_MARGIN_PERCENT,
-        100 - SHIP_EDGE_MARGIN_PERCENT,
-    );
-    let right = clamp(
-        rawRightPercent,
-        SHIP_EDGE_MARGIN_PERCENT,
-        100 - SHIP_EDGE_MARGIN_PERCENT,
-    );
+    const rawGap = Math.max(0.01, frame.right.x - frame.left.x);
+    let left = stagePercent(frame.left.x);
+    let right = stagePercent(frame.right.x);
 
     if (right - left < MIN_SHIP_VISUAL_GAP_PERCENT) {
         const midpoint = clamp((left + right) / 2, 20, 80);
@@ -172,8 +220,8 @@ function presentationGeometry(frame: VcrReplayFrame): PresentationGeometry {
         left,
         right,
         mapX: (x: number) => {
-            const relative = (rawCombatPercent(x) - rawLeftPercent) / rawGap;
-            return clamp(left + relative * visualGap, 4, 96);
+            const relative = (x - frame.left.x) / rawGap;
+            return clamp(left + relative * visualGap, 2, 98);
         },
     };
 }
@@ -228,7 +276,7 @@ function shotLabel(effect: VcrReplayEffect): string | null {
         return `dogfight · ${effect.lost_side ?? "unknown"} fighter lost`;
     }
     if (effect.kind === "torpedo_launch") {
-        return `${effect.source ?? "ship"} torpedo launch`;
+        return `${effect.source ?? "ship"} torpedo ${effect.hit === false ? "miss" : "launch"}`;
     }
     return null;
 }
@@ -368,7 +416,8 @@ function Battlefield({
         key: string;
         side: SideName;
         x: number;
-        lane: number;
+        y: number;
+        hit: boolean;
     }> = [];
 
     for (
@@ -389,11 +438,18 @@ function Battlefield({
             const count = Math.max(1, effect.count ?? 1);
             for (let projectile = 0; projectile < Math.min(4, count); projectile += 1) {
                 const rawX = sourceRaw + (targetRaw - sourceRaw) * progress;
+                const laneSeed = (launchIndex * 11 + effectIndex * 7 + projectile * 3) % 7;
+                const launchY = 38 + laneSeed * 4;
+                const missUp = (launchIndex + effectIndex + projectile) % 2 === 0;
+                const hit = effect.hit !== false;
+                const targetY = hit ? 50 : (missUp ? 10 : 90);
+                const bend = Math.sin(progress * Math.PI) * (missUp ? -4 : 4);
                 torpedoes.push({
                     key: `${launchIndex}-${effectIndex}-${projectile}`,
                     side: effect.source,
                     x: geometry.mapX(rawX),
-                    lane: projectile,
+                    y: launchY + (targetY - launchY) * progress + bend,
+                    hit,
                 });
             }
         }
@@ -407,6 +463,9 @@ function Battlefield({
         ...(frame.right.fighter_tracks ?? []).map((track) => ({ side: "right" as const, track })),
     ];
 
+    const leftLaunching = effects.some((effect) => effect.kind === "fighter_launch" && effect.source === "left");
+    const rightLaunching = effects.some((effect) => effect.kind === "fighter_launch" && effect.source === "right");
+
     return (
         <div className="vcr-battlefield">
             <div className="vcr-range-line" />
@@ -416,11 +475,11 @@ function Battlefield({
             {torpedoes.map((torpedo) => (
                 <span
                     aria-hidden="true"
-                    className={`vcr-torpedo-projectile is-${torpedo.side}`}
+                    className={`vcr-torpedo-projectile is-${torpedo.side}${torpedo.hit ? " is-hit-course" : " is-miss-course"}`}
                     key={torpedo.key}
                     style={{
                         left: `${torpedo.x}%`,
-                        top: `${48 + (torpedo.lane - 1.5) * 2}%`,
+                        top: `${torpedo.y}%`,
                     }}
                 >
                     <span />
@@ -456,20 +515,32 @@ function Battlefield({
             })}
 
             <div
-                className={`vcr-combat-object ${sideMarkerClass(frame.left)}${hitLeft ? " is-hit" : ""}`}
+                className={`vcr-combat-object ${sideMarkerClass(frame.left)}${hitLeft ? " is-hit" : ""}${frame.left.destroyed ? " is-destroyed" : ""}`}
                 style={{ left: `${geometry.left}%` }}
             >
-                <CombatObjectArtwork facing="right" side={frame.left} />
-                <strong>{frame.left.name ?? `#${frame.left.object_id ?? "?"}`}</strong>
-                {frame.left.fighters_out > 0 && <small>{frame.left.fighters_out} fighters out</small>}
+                <div className="vcr-combat-visual">
+                    <CombatObjectArtwork facing="right" side={frame.left} />
+                    {frame.left.destroyed && <span aria-hidden="true" className="vcr-destruction-burst" />}
+                </div>
+                <div className="vcr-combat-label">
+                    <strong>{frame.left.name ?? `#${frame.left.object_id ?? "?"}`}</strong>
+                    {frame.left.fighters_out > 0 && <small>{frame.left.fighters_out} fighters out</small>}
+                    {frame.left.destroyed && <small className="is-destroyed-label">destroyed</small>}
+                </div>
             </div>
             <div
-                className={`vcr-combat-object ${sideMarkerClass(frame.right)}${hitRight ? " is-hit" : ""}`}
+                className={`vcr-combat-object ${sideMarkerClass(frame.right)}${hitRight ? " is-hit" : ""}${frame.right.destroyed ? " is-destroyed" : ""}`}
                 style={{ left: `${geometry.right}%` }}
             >
-                <CombatObjectArtwork facing="left" side={frame.right} />
-                <strong>{frame.right.name ?? `#${frame.right.object_id ?? "?"}`}</strong>
-                {frame.right.fighters_out > 0 && <small>{frame.right.fighters_out} fighters out</small>}
+                <div className="vcr-combat-visual">
+                    <CombatObjectArtwork facing="left" side={frame.right} />
+                    {frame.right.destroyed && <span aria-hidden="true" className="vcr-destruction-burst" />}
+                </div>
+                <div className="vcr-combat-label">
+                    <strong>{frame.right.name ?? `#${frame.right.object_id ?? "?"}`}</strong>
+                    {frame.right.fighters_out > 0 && <small>{frame.right.fighters_out} fighters out</small>}
+                    {frame.right.destroyed && <small className="is-destroyed-label">destroyed</small>}
+                </div>
             </div>
         </div>
     );
@@ -525,6 +596,13 @@ export function CombatReplayPlayer({
 
     if (frame === null) return <div className="error-card">Replay contains no frames.</div>;
 
+    const leftLaunching = (frame.effects ?? []).some(
+        (effect) => effect.kind === "fighter_launch" && effect.source === "left",
+    );
+    const rightLaunching = (frame.effects ?? []).some(
+        (effect) => effect.kind === "fighter_launch" && effect.source === "right",
+    );
+
     return (
         <div className="vcr-player battle-sim-replay-player">
             {title && (
@@ -534,8 +612,8 @@ export function CombatReplayPlayer({
             )}
             <Battlefield frame={frame} frameIndex={frameIndex} frames={frames} />
             <div className="vcr-status-grid">
-                <SideStatus label="LEFT" side={frame.left} />
-                <SideStatus label="RIGHT" side={frame.right} />
+                <SideStatus label="LEFT" launching={leftLaunching} side={frame.left} />
+                <SideStatus label="RIGHT" launching={rightLaunching} side={frame.right} />
             </div>
             <div className="vcr-controls">
                 <button
