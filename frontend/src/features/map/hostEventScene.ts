@@ -1,11 +1,23 @@
 import { Container, Graphics, Text } from "pixi.js";
 
+import {
+    isHostEventReviewedForCurrentRoute,
+    markHostEventReviewedForCurrentRoute,
+} from "../../lib/hostEventReviewState";
 import type { HostEventItem } from "../../types/activity";
 import { hasCurrentCombatPosition } from "./currentCombatMapRegistry";
 import { renderY, type MapBounds } from "./mapModel";
 
 
 const EXPLOSION_EVENT_TYPE = "ship_explosion_detected";
+
+
+function normalizedEventLabel(value: string | null): string {
+    return (value ?? "")
+        .trim()
+        .replace(/\s+/g, " ")
+        .toLocaleLowerCase();
+}
 
 
 export function hostEventKey(event: HostEventItem): string {
@@ -16,6 +28,26 @@ export function hostEventKey(event: HostEventItem): string {
         event.y ?? "?",
         event.ship_name ?? "?",
         event.summary,
+    ].join(":");
+}
+
+
+/**
+ * Presentation identity for a map notification.
+ *
+ * Host-event provenance may legitimately contain several observations of the
+ * same incident. The map must not render those observer copies on top of each
+ * other, so the visual key intentionally ignores source/batch metadata and the
+ * generated summary text while retaining the factual incident coordinates and
+ * ship name.
+ */
+export function hostEventVisualKey(event: HostEventItem): string {
+    return [
+        event.event_type,
+        event.turn,
+        event.x ?? "?",
+        event.y ?? "?",
+        normalizedEventLabel(event.ship_name),
     ].join(":");
 }
 
@@ -33,12 +65,24 @@ export function drawHostEvents({
     selectedKey: string | null;
     onSelect: (event: HostEventItem) => void;
 }): void {
+    const renderedVisualKeys = new Set<string>();
+
     for (const event of events) {
         if (
             event.event_type !== EXPLOSION_EVENT_TYPE
             || event.x === null
             || event.y === null
         ) {
+            continue;
+        }
+
+        const visualKey = hostEventVisualKey(event);
+        if (renderedVisualKeys.has(visualKey)) {
+            continue;
+        }
+        renderedVisualKeys.add(visualKey);
+
+        if (isHostEventReviewedForCurrentRoute(event.turn, visualKey)) {
             continue;
         }
 
@@ -80,11 +124,6 @@ export function drawHostEvents({
         marker.position.set(event.x, markerY);
         marker.eventMode = "static";
         marker.cursor = "pointer";
-        marker.on("pointertap", (pointerEvent) => {
-            pointerEvent.stopPropagation();
-            onSelect(event);
-        });
-        world.addChild(marker);
 
         const label = new Text({
             text: event.ship_name
@@ -104,6 +143,20 @@ export function drawHostEvents({
         });
         label.position.set(event.x + 16, markerY - 7);
         label.eventMode = "none";
+
+        marker.on("pointertap", (pointerEvent) => {
+            pointerEvent.stopPropagation();
+
+            // Map review state is presentation-only. Keep the factual report
+            // in history/Reports, but remove its notification immediately and
+            // remember that choice across a reload for this game + turn.
+            markHostEventReviewedForCurrentRoute(event.turn, visualKey);
+            marker.visible = false;
+            label.visible = false;
+            onSelect(event);
+        });
+
+        world.addChild(marker);
         world.addChild(label);
     }
 }
