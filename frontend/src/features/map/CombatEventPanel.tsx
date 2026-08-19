@@ -63,8 +63,10 @@ export function CombatEventPanel(props: CombatEventPanelProps) {
         () => initialIntelTab ?? "combat",
     );
     const [requestedVcrId, setRequestedVcrId] = useState<number | null>(null);
+    const [vcrPopupOpen, setVcrPopupOpen] = useState(false);
 
     function openIntelTab(tab: DashboardTab) {
+        setVcrPopupOpen(false);
         if (tab === "combat") setRequestedVcrId(null);
         setActiveTab(tab);
         setIntelOverlayOpen(true);
@@ -87,13 +89,14 @@ export function CombatEventPanel(props: CombatEventPanelProps) {
                 ? detail.vcrId
                 : null;
             setRequestedVcrId(vcrId);
-            setActiveTab("combat");
-            setIntelOverlayOpen(true);
+            setVcrPopupOpen(true);
+            setIntelOverlayOpen(false);
             setPageDashboardOpen(false);
             document.body.classList.remove("operational-page-dashboard-open");
-            replaceIntelTabInLocation("combat");
+            replaceIntelTabInLocation(null);
         };
         const openHostEvidence = () => {
+            setVcrPopupOpen(false);
             setActiveTab("host");
             setIntelOverlayOpen(true);
             setPageDashboardOpen(false);
@@ -111,10 +114,20 @@ export function CombatEventPanel(props: CombatEventPanelProps) {
 
     useEffect(() => {
         setRequestedVcrId(null);
+        setVcrPopupOpen(false);
     }, [props.gameId, props.turn]);
 
     useEffect(() => {
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === "Escape") setVcrPopupOpen(false);
+        };
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, []);
+
+    useEffect(() => {
         const handlePopState = () => {
+            setVcrPopupOpen(false);
             const tab = dashboardTabFromLocation();
             if (tab === null) {
                 setIntelOverlayOpen(false);
@@ -135,6 +148,7 @@ export function CombatEventPanel(props: CombatEventPanelProps) {
     }, []);
 
     function openPageDashboard() {
+        setVcrPopupOpen(false);
         closeIntelOverlay();
         setPageDashboardOpen(true);
         document.body.classList.add("operational-page-dashboard-open");
@@ -191,6 +205,47 @@ export function CombatEventPanel(props: CombatEventPanelProps) {
                 >
                     Starmap
                 </button>,
+                document.body,
+            )}
+
+            {vcrPopupOpen && createPortal(
+                <div
+                    className="operational-vcr-popup-backdrop"
+                    onMouseDown={(event) => {
+                        if (event.target === event.currentTarget) {
+                            setVcrPopupOpen(false);
+                        }
+                    }}
+                >
+                    <section
+                        aria-label={`VCR review for turn ${props.turn}`}
+                        aria-modal="true"
+                        className="operational-vcr-popup"
+                        role="dialog"
+                    >
+                        <header className="operational-vcr-popup-header">
+                            <div>
+                                <span>COMBAT REVIEW</span>
+                                <strong>Turn {props.turn} VCRs</strong>
+                            </div>
+                            <button
+                                className="operational-dashboard-map-button"
+                                onClick={() => setVcrPopupOpen(false)}
+                                type="button"
+                            >
+                                Close
+                            </button>
+                        </header>
+                        <div className="operational-vcr-popup-content">
+                            <VcrDashboardPanel
+                                gameId={props.gameId}
+                                initialVcrId={requestedVcrId}
+                                linkedAccountId={props.linkedAccountId}
+                                turn={props.turn}
+                            />
+                        </div>
+                    </section>
+                </div>,
                 document.body,
             )}
 
@@ -265,7 +320,6 @@ export function CombatEventPanel(props: CombatEventPanelProps) {
                     >
                         <VcrDashboardPanel
                             gameId={props.gameId}
-                            initialVcrId={requestedVcrId}
                             linkedAccountId={props.linkedAccountId}
                             turn={props.turn}
                         />
