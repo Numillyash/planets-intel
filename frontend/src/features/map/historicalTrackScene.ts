@@ -1,4 +1,9 @@
 import { Container, Graphics, Text } from "pixi.js";
+import { raceVisual } from "../../lib/races";
+import {
+    isVcrReviewedForCurrentRoute,
+    VCR_REVIEWED_EVENT,
+} from "../../lib/vcrReviewState";
 import type {
     HistoricalCombatEvent,
     HistoricalCombatEventSide,
@@ -6,7 +11,10 @@ import type {
     HistoricalShipTrack,
     HistoricalShipTrackPoint,
 } from "../../types/history";
-import { raceVisual } from "../../lib/races";
+import {
+    registerCurrentCombatPosition,
+    resetCurrentCombatPositions,
+} from "./currentCombatMapRegistry";
 import {
     PLANET_ORBIT_RADIUS,
     renderY,
@@ -18,6 +26,44 @@ export type ShipTrackMode = "off" | "selected" | "all";
 
 const UNKNOWN_TRACK_COLOR = 0x70829a;
 const EVENT_SELECT = "dashboard-event-select";
+
+const activeVcrGraphics = new Map<string, Graphics[]>();
+let reviewListenerInstalled = false;
+
+function reviewedEventKey(turn: number, vcrId: number): string {
+    return `${turn}:${vcrId}`;
+}
+
+function registerActiveVcrGraphic(
+    event: HistoricalCombatEvent,
+    graphic: Graphics,
+): void {
+    const key = reviewedEventKey(event.turn, event.vcr_id);
+    const registered = activeVcrGraphics.get(key) ?? [];
+    registered.push(graphic);
+    activeVcrGraphics.set(key, registered);
+}
+
+function ensureReviewListener(): void {
+    if (reviewListenerInstalled || typeof window === "undefined") return;
+    reviewListenerInstalled = true;
+    window.addEventListener(VCR_REVIEWED_EVENT, (rawEvent) => {
+        const detail = (
+            rawEvent as CustomEvent<{ turn?: number; vcrId?: number }>
+        ).detail;
+        if (
+            typeof detail?.turn !== "number"
+            || typeof detail?.vcrId !== "number"
+        ) {
+            return;
+        }
+        for (const graphic of activeVcrGraphics.get(
+            reviewedEventKey(detail.turn, detail.vcrId),
+        ) ?? []) {
+            if (!graphic.destroyed) graphic.visible = false;
+        }
+    });
+}
 
 function trackColor(ownerId: number | null): number {
     return raceVisual(ownerId)?.color ?? UNKNOWN_TRACK_COLOR;
@@ -532,6 +578,7 @@ function drawVcrOnlyShipContacts({
                     });
                 orbitRing.position.set(centerX, centerY);
                 world.addChild(orbitRing);
+                registerActiveVcrGraphic(contact.event, orbitRing);
             }
 
             const connector = new Graphics()
@@ -543,6 +590,7 @@ function drawVcrOnlyShipContacts({
                     alpha: isSelected ? 0.72 : 0.42,
                 });
             world.addChild(connector);
+            registerActiveVcrGraphic(contact.event, connector);
 
             // VCR-only contacts are ships, not combat-event markers. Render a
             // ship-like triangle and keep the outer ring as provenance. Do not
@@ -569,6 +617,7 @@ function drawVcrOnlyShipContacts({
                 requestEventSelection(contact.event);
             });
             world.addChild(marker);
+            registerActiveVcrGraphic(contact.event, marker);
         });
     }
 }
@@ -591,6 +640,9 @@ export function drawCurrentCombatContacts({
     onSelectEvent: (event: HistoricalCombatEvent) => void;
 }) {
     void onSelectEvent;
+    ensureReviewListener();
+    activeVcrGraphics.clear();
+    resetCurrentCombatPositions(throughTurn);
 
     const events = new Map<string, HistoricalCombatEvent>();
     const vcrOnlyContacts = new Map<string, VcrOnlyContact>();
@@ -603,6 +655,11 @@ export function drawCurrentCombatContacts({
                 point.evidence !== "combat" ||
                 event === null
             ) {
+                continue;
+            }
+
+            registerCurrentCombatPosition(event.turn, event.x, event.y);
+            if (isVcrReviewedForCurrentRoute(event.turn, event.vcr_id)) {
                 continue;
             }
 
@@ -667,6 +724,7 @@ export function drawCurrentCombatContacts({
                     alpha: isSelected ? 0.82 : 0.58,
                 });
             world.addChild(connector);
+            registerActiveVcrGraphic(event, connector);
 
             const marker = new Graphics()
                 .circle(0, 0, isSelected ? 6.2 : 5.3)
@@ -689,6 +747,7 @@ export function drawCurrentCombatContacts({
                 requestEventSelection(event);
             });
             world.addChild(marker);
+            registerActiveVcrGraphic(event, marker);
         });
     }
 }
