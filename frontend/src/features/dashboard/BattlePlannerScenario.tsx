@@ -11,7 +11,6 @@ import {
     type VcrReplayTraceResponse,
 } from "../../api/vcrReplay";
 
-
 function parseAmmo(value: string): number | null {
     const normalized = value.trim();
     if (!/^\d+$/.test(normalized)) return null;
@@ -20,7 +19,6 @@ function parseAmmo(value: string): number | null {
         ? parsed
         : null;
 }
-
 
 function parseBattles(value: string): number | null {
     const normalized = value.trim();
@@ -31,23 +29,19 @@ function parseBattles(value: string): number | null {
         : null;
 }
 
-
 function resultLabel(result: string[] | undefined): string {
     if (!result || result.length === 0) return "No terminal result";
     return result.map((item) => item.split("_").join(" ")).join(", ");
 }
 
-
 function outcomeLabel(outcome: string): string {
     return outcome.split("+").map((item) => item.split("_").join(" ")).join(" + ");
 }
-
 
 function terminalLabel(side: VcrReplaySideFrame): string {
     if (side.damage >= 100 || side.crew <= 0) return "destroyed";
     return "survived";
 }
-
 
 function TerminalState({
     title,
@@ -57,18 +51,79 @@ function TerminalState({
     side: VcrReplaySideFrame;
 }) {
     return (
-        <div className="summary-card">
-            <span>{title} · {side.name ?? `Object #${side.object_id ?? "?"}`}</span>
-            <strong>
-                {terminalLabel(side)} · {side.damage}% damage · {side.shield}% shield
-            </strong>
-            <small>
-                Crew {side.crew} · Fighters {side.fighters} · Torps {side.torpedoes}
-            </small>
-        </div>
+        <article className="battle-sim-stat-card">
+            <span>{title} · TERMINAL STATE</span>
+            <h4>{side.name ?? `Object #${side.object_id ?? "?"}`}</h4>
+            <div className="battle-sim-stat-grid">
+                <div><small>Result</small><strong>{terminalLabel(side)}</strong></div>
+                <div><small>Shield</small><strong>{side.shield}%</strong></div>
+                <div><small>Damage</small><strong>{side.damage}%</strong></div>
+                <div><small>Crew</small><strong>{side.crew}</strong></div>
+                <div><small>Torps left</small><strong>{side.torpedoes}</strong></div>
+                <div><small>Fighters left</small><strong>{side.fighters}</strong></div>
+            </div>
+        </article>
     );
 }
 
+function effectiveStartAmmo(
+    result: CombatPlannerOddsResponse,
+    sideName: "left" | "right",
+    key: "fighters" | "torpedoes",
+): number | null {
+    const assumed = result.assumptions[sideName]?.[key];
+    if (typeof assumed === "number" && Number.isFinite(assumed)) return assumed;
+    const baseline = result.baseline[sideName]?.[key];
+    return typeof baseline === "number" && Number.isFinite(baseline)
+        ? baseline
+        : null;
+}
+
+function meanSpent(start: number | null, finalValue: number): string {
+    if (start === null) return "—";
+    return Math.max(0, start - finalValue).toFixed(2).replace(/\.00$/, "");
+}
+
+function PlannerMeanSideCard({
+    label,
+    source,
+    side,
+    result,
+    sideName,
+}: {
+    label: string;
+    source: VcrReplaySideFrame;
+    side: NonNullable<CombatPlannerOddsResponse["sides"]["left"]>;
+    result: CombatPlannerOddsResponse;
+    sideName: "left" | "right";
+}) {
+    const startTorps = effectiveStartAmmo(result, sideName, "torpedoes");
+    const startFighters = effectiveStartAmmo(result, sideName, "fighters");
+
+    return (
+        <article className="battle-sim-stat-card">
+            <span>{label}</span>
+            <h4>{source.name ?? `#${source.object_id ?? "?"}`}</h4>
+            <div className="battle-sim-stat-grid">
+                <div>
+                    <small>Survival</small>
+                    <strong>{side.survival_seed_frequency_percent}%</strong>
+                </div>
+                <div><small>Avg shield</small><strong>{side.mean_final_shield}%</strong></div>
+                <div><small>Avg damage</small><strong>{side.mean_final_damage}%</strong></div>
+                <div><small>Avg crew</small><strong>{side.mean_final_crew}</strong></div>
+                <div><small>Avg torps left</small><strong>{side.mean_final_torpedoes}</strong></div>
+                <div><small>Avg torps fired</small><strong>{meanSpent(startTorps, side.mean_final_torpedoes)}</strong></div>
+                <div><small>Avg fighters left</small><strong>{side.mean_final_fighters}</strong></div>
+                <div><small>Avg fighters lost</small><strong>{meanSpent(startFighters, side.mean_final_fighters)}</strong></div>
+            </div>
+            <small>
+                survived {side.survived_count} · destroyed {side.destroyed_count}
+                {side.captured_count > 0 ? ` · captured ${side.captured_count}` : ""}
+            </small>
+        </article>
+    );
+}
 
 function OddsResultPanel({
     result,
@@ -81,10 +136,7 @@ function OddsResultPanel({
 }) {
     const repeat = mode === "repeat";
     return (
-        <section
-            className="panel"
-            style={{ borderColor: "rgba(117, 177, 227, 0.55)" }}
-        >
+        <section className="battle-sim-result-panel">
             {!result.supported ? (
                 <div className="error-card">
                     Simulation unavailable: {result.reason ?? "unsupported combat mode"}
@@ -96,48 +148,30 @@ function OddsResultPanel({
                             ? "REPEATED BATTLE SAMPLE · DERIVED SIMULATION"
                             : "FULL CLASSIC SEED SERIES · DERIVED SIMULATION"}
                     </div>
-                    <h3 style={{ margin: "4px 0 10px" }}>
-                        {result.sample_count} {repeat ? "battles simulated" : "start seeds evaluated"}
+                    <h3>
+                        {result.sample_count.toLocaleString()} {repeat ? "battles simulated" : "start seeds evaluated"}
                     </h3>
 
-                    <div
-                        style={{
-                            display: "grid",
-                            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                            gap: 14,
-                            marginBottom: 14,
-                        }}
-                    >
-                        {(["left", "right"] as const).map((sideName) => {
-                            const side = result.sides[sideName];
-                            if (side === undefined) return null;
-                            const source = sideName === "left"
-                                ? factualStart.left
-                                : factualStart.right;
-                            return (
-                                <div className="summary-card" key={sideName}>
-                                    <span>
-                                        {sideName.toUpperCase()} · {source.name ?? `#${source.object_id ?? "?"}`}
-                                    </span>
-                                    <strong>
-                                        Survival frequency {side.survival_seed_frequency_percent}%
-                                    </strong>
-                                    <small>
-                                        survived {side.survived_count} · destroyed {side.destroyed_count}
-                                        {side.captured_count > 0 ? ` · captured ${side.captured_count}` : ""}
-                                    </small>
-                                    <small>
-                                        mean final: {side.mean_final_damage}% damage · {side.mean_final_shield}% shield
-                                        {" · "}crew {side.mean_final_crew}
-                                        {" · "}torps {side.mean_final_torpedoes}
-                                        {" · "}fighters {side.mean_final_fighters}
-                                    </small>
-                                </div>
-                            );
-                        })}
-                    </div>
+                    {result.sides.left !== undefined && result.sides.right !== undefined && (
+                        <div className="battle-sim-mean-grid">
+                            <PlannerMeanSideCard
+                                label="LEFT · MEAN TERMINAL STATE"
+                                result={result}
+                                side={result.sides.left}
+                                sideName="left"
+                                source={factualStart.left}
+                            />
+                            <PlannerMeanSideCard
+                                label="RIGHT · MEAN TERMINAL STATE"
+                                result={result}
+                                side={result.sides.right}
+                                sideName="right"
+                                source={factualStart.right}
+                            />
+                        </div>
+                    )}
 
-                    <div className="table-wrapper">
+                    <div className="table-wrapper" style={{ marginTop: 14 }}>
                         <table className="players-table game-object-table">
                             <thead>
                                 <tr>
@@ -150,9 +184,7 @@ function OddsResultPanel({
                             <tbody>
                                 {result.outcomes.map((outcome) => (
                                     <tr key={outcome.outcome}>
-                                        <td className="player-name">
-                                            {outcomeLabel(outcome.outcome)}
-                                        </td>
+                                        <td className="player-name">{outcomeLabel(outcome.outcome)}</td>
                                         <td>{outcome.count}</td>
                                         <td>{outcome.seed_frequency_percent}%</td>
                                         <td>{outcome.representative_seed ?? "—"}</td>
@@ -162,9 +194,9 @@ function OddsResultPanel({
                         </table>
                     </div>
 
-                    <p style={{ marginTop: 10, color: "#91a9c8" }}>
+                    <p className="battle-sim-result-note">
                         {repeat
-                            ? "Repeated mode samples Classic combat start seeds with replacement and reports empirical battle frequencies, matching the long-running simulator workflow. Results are simulation only and are never persisted as factual intel."
+                            ? "Repeated mode samples Classic combat start seeds with replacement. Torps fired are start minus terminal torpedoes. Fighters lost are start minus terminal fighters after surviving launched fighters have been returned by the deterministic engine. Results are simulation only and are never persisted as factual intel."
                             : "Series mode evaluates every documented Classic start seed exactly once. It is useful for deterministic engine validation and has no sampling noise."}
                     </p>
                 </>
@@ -172,7 +204,6 @@ function OddsResultPanel({
         </section>
     );
 }
-
 
 export function BattlePlannerScenario({
     gameId,
@@ -196,8 +227,7 @@ export function BattlePlannerScenario({
     const [rightFighters, setRightFighters] = useState("");
     const [rightTorps, setRightTorps] = useState("");
     const [battleCount, setBattleCount] = useState("10000");
-    const [scenario, setScenario] =
-        useState<CombatPlannerScenarioResponse | null>(null);
+    const [scenario, setScenario] = useState<CombatPlannerScenarioResponse | null>(null);
     const [odds, setOdds] = useState<CombatPlannerOddsResponse | null>(null);
     const [series, setSeries] = useState<CombatPlannerOddsResponse | null>(null);
     const [running, setRunning] = useState(false);
@@ -285,21 +315,16 @@ export function BattlePlannerScenario({
         setRunning(true);
         setError(null);
         try {
-            const response = await runCombatPlannerScenario(
+            setScenario(await runCombatPlannerScenario(
                 gameId,
                 linkedAccountId,
                 turn,
                 vcrId,
                 request,
-            );
-            setScenario(response);
+            ));
         } catch (reason) {
             setScenario(null);
-            setError(
-                reason instanceof Error
-                    ? reason.message
-                    : "Battle planner scenario failed",
-            );
+            setError(reason instanceof Error ? reason.message : "Battle planner scenario failed");
         } finally {
             setRunning(false);
         }
@@ -311,7 +336,7 @@ export function BattlePlannerScenario({
         setAnalyzing(true);
         setError(null);
         try {
-            const response = await runCombatPlannerRepeatOdds(
+            setOdds(await runCombatPlannerRepeatOdds(
                 gameId,
                 linkedAccountId,
                 turn,
@@ -321,15 +346,10 @@ export function BattlePlannerScenario({
                     battles: parsed.battles,
                     sampling_seed: null,
                 },
-            );
-            setOdds(response);
+            ));
         } catch (reason) {
             setOdds(null);
-            setError(
-                reason instanceof Error
-                    ? reason.message
-                    : "Repeated battle simulation failed",
-            );
+            setError(reason instanceof Error ? reason.message : "Repeated battle simulation failed");
         } finally {
             setAnalyzing(false);
         }
@@ -341,21 +361,16 @@ export function BattlePlannerScenario({
         setSeriesRunning(true);
         setError(null);
         try {
-            const response = await runCombatPlannerOdds(
+            setSeries(await runCombatPlannerOdds(
                 gameId,
                 linkedAccountId,
                 turn,
                 vcrId,
                 request,
-            );
-            setSeries(response);
+            ));
         } catch (reason) {
             setSeries(null);
-            setError(
-                reason instanceof Error
-                    ? reason.message
-                    : "Full Classic seed series failed",
-            );
+            setError(reason instanceof Error ? reason.message : "Full Classic seed series failed");
         } finally {
             setSeriesRunning(false);
         }
@@ -366,16 +381,13 @@ export function BattlePlannerScenario({
         setLeftTorps(String(factualStart.left.torpedoes));
         setRightFighters(String(factualStart.right.fighters));
         setRightTorps(String(factualStart.right.torpedoes));
-        setScenario(null);
-        setOdds(null);
-        setSeries(null);
-        setError(null);
+        invalidateResults();
     }
 
     const busy = running || analyzing || seriesRunning;
 
     return (
-        <div style={{ display: "grid", gap: 14 }}>
+        <div className="game-dashboard-stack">
             <section
                 className="panel"
                 style={{
@@ -393,17 +405,17 @@ export function BattlePlannerScenario({
                             hull, weapons, race and combat rules stay factual.
                         </p>
                     </div>
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "end" }}>
-                        <label style={{ width: 120 }}>
-                            <small>Battles</small>
+                    <div className="battle-sim-control-row">
+                        <label className="battle-sim-field" style={{ width: 120 }}>
+                            <span>Battles</span>
                             <input
+                                className="battle-sim-input"
                                 max={100000}
                                 min={1}
                                 onChange={(event) => {
                                     setBattleCount(event.target.value);
                                     invalidateResults();
                                 }}
-                                style={{ width: "100%" }}
                                 type="number"
                                 value={battleCount}
                             />
@@ -444,18 +456,12 @@ export function BattlePlannerScenario({
                         >
                             {analyzing
                                 ? "Running battles…"
-                                : `Run ${parsed.battles ?? "?"} battles`}
+                                : `Run ${(parsed.battles ?? 0).toLocaleString()} battles`}
                         </button>
                     </div>
                 </div>
 
-                <div
-                    style={{
-                        display: "grid",
-                        gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                        gap: 14,
-                    }}
-                >
+                <div className="battle-sim-mean-grid">
                     {([
                         [
                             "LEFT",
@@ -481,97 +487,75 @@ export function BattlePlannerScenario({
                         torps,
                         setTorps,
                     ]) => (
-                        <div className="summary-card" key={label}>
-                            <span>{label} · {side.name ?? `#${side.object_id ?? "?"}`}</span>
-                            <div
-                                style={{
-                                    display: "grid",
-                                    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                                    gap: 10,
-                                    marginTop: 9,
-                                }}
-                            >
-                                <label>
-                                    <small>Fighters · factual {side.fighters}</small>
+                        <article className="battle-sim-stat-card" key={label}>
+                            <span>{label}</span>
+                            <h4>{side.name ?? `#${side.object_id ?? "?"}`}</h4>
+                            <div className="battle-sim-fields battle-sim-fields-3">
+                                <label className="battle-sim-field">
+                                    <span>Fighters · factual {side.fighters}</span>
                                     <input
+                                        className="battle-sim-input"
                                         max={100000}
                                         min={0}
                                         onChange={(event) => {
                                             setFighters(event.target.value);
                                             invalidateResults();
                                         }}
-                                        style={{ width: "100%" }}
                                         type="number"
                                         value={fighters}
                                     />
                                 </label>
-                                <label>
-                                    <small>Torpedoes · factual {side.torpedoes}</small>
+                                <label className="battle-sim-field">
+                                    <span>Torpedoes · factual {side.torpedoes}</span>
                                     <input
+                                        className="battle-sim-input"
                                         max={100000}
                                         min={0}
                                         onChange={(event) => {
                                             setTorps(event.target.value);
                                             invalidateResults();
                                         }}
-                                        style={{ width: "100%" }}
                                         type="number"
                                         value={torps}
                                     />
                                 </label>
                             </div>
-                        </div>
+                        </article>
                     ))}
                 </div>
 
                 {!validAmmo && (
-                    <p style={{ color: "#e0a7a7", marginTop: 12 }}>
+                    <p className="battle-sim-warning">
                         Scenario ammo values must be integers from 0 to 100000.
                     </p>
                 )}
                 {parsed.battles === null && (
-                    <p style={{ color: "#e0a7a7", marginTop: 12 }}>
+                    <p className="battle-sim-warning">
                         Battle count must be an integer from 1 to 100000.
                     </p>
                 )}
-                {error !== null && (
-                    <div className="error-card" style={{ marginTop: 12 }}>{error}</div>
-                )}
+                {error !== null && <div className="error-card">{error}</div>}
             </section>
 
             {odds !== null && (
-                <OddsResultPanel
-                    factualStart={factualStart}
-                    mode="repeat"
-                    result={odds}
-                />
+                <OddsResultPanel factualStart={factualStart} mode="repeat" result={odds} />
             )}
 
             {series !== null && (
-                <OddsResultPanel
-                    factualStart={factualStart}
-                    mode="series"
-                    result={series}
-                />
+                <OddsResultPanel factualStart={factualStart} mode="series" result={series} />
             )}
 
             {factualEnd !== null && (
-                <section className="panel">
+                <section className="battle-sim-result-panel">
                     <div className="eyebrow">FACTUAL VCR SEED · DETERMINISTIC BASELINE</div>
-                    <h3 style={{ margin: "4px 0 10px" }}>
+                    <h3>
                         {resultLabel(factualTrace.result)} · {factualTrace.cycles ?? 0} cycles
                     </h3>
-                    <div
-                        style={{
-                            display: "grid",
-                            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                            gap: 14,
-                        }}
-                    >
+                    <div className="battle-sim-mean-grid">
                         <TerminalState title="LEFT" side={factualEnd.left} />
                         <TerminalState title="RIGHT" side={factualEnd.right} />
                     </div>
-                    <p style={{ marginTop: 10, color: "#91a9c8" }}>
+                    <p className="battle-sim-result-note">
                         This terminal state is derived by deterministic replay from the
                         factual VCR seed. It is not written back as a current ship fact.
                     </p>
@@ -579,10 +563,7 @@ export function BattlePlannerScenario({
             )}
 
             {scenario !== null && (
-                <section
-                    className="panel"
-                    style={{ borderColor: "rgba(219, 166, 77, 0.55)" }}
-                >
+                <section className="battle-sim-result-panel">
                     {!scenario.supported || scenarioFinal === null ? (
                         <div className="error-card">
                             Scenario unavailable: {scenario.reason ?? "no replay frames"}
@@ -590,20 +571,14 @@ export function BattlePlannerScenario({
                     ) : (
                         <>
                             <div className="eyebrow">SOURCE-SEED RESULT · DERIVED SIMULATION</div>
-                            <h3 style={{ margin: "4px 0 10px" }}>
+                            <h3>
                                 {resultLabel(scenario.result)} · {scenario.cycles ?? 0} cycles
                             </h3>
-                            <div
-                                style={{
-                                    display: "grid",
-                                    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                                    gap: 14,
-                                }}
-                            >
+                            <div className="battle-sim-mean-grid">
                                 <TerminalState title="LEFT" side={scenarioFinal.left} />
                                 <TerminalState title="RIGHT" side={scenarioFinal.right} />
                             </div>
-                            <p style={{ marginTop: 10, color: "#cbb98f" }}>
+                            <p className="battle-sim-result-note">
                                 Simulation only · persisted=false · source basis=factual VCR.
                                 No observation, analyst review or current ship state changed.
                             </p>
