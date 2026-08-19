@@ -37,6 +37,7 @@ def _side_snapshot(side: SideStatus) -> dict[str, Any]:
         for index in range(len(side.fighter_status))
         if side.fighter_status[index] != 0
     ]
+    destroyed = obj.damage >= side.damage_limit or obj.crew <= 0
     return {
         "object_id": obj.object_id,
         "owner_id": obj.owner_id,
@@ -46,10 +47,13 @@ def _side_snapshot(side: SideStatus) -> dict[str, Any]:
         "x": side.object_x,
         "shield": obj.shield,
         "damage": obj.damage,
+        "damage_limit": side.damage_limit,
+        "destroyed": destroyed,
         "crew": obj.crew,
         "torpedoes": obj.torpedoes,
         "fighters": obj.fighters,
         "fighters_out": side.num_fighters_out,
+        "bay_count": obj.bay_count,
         "fighter_tracks": fighter_tracks,
         "beam_slots": [int(value) for value in side.beam_status[:beam_count]],
         "launcher_slots": [
@@ -272,6 +276,10 @@ def _frame(
             or right["crew"] < old_right["crew"]
         ):
             events.append("right_hit")
+        if left["destroyed"] and not bool(old_left.get("destroyed")):
+            events.append("left_destroyed")
+        if right["destroyed"] and not bool(old_right.get("destroyed")):
+            events.append("right_destroyed")
 
     return current
 
