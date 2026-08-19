@@ -47,48 +47,35 @@ body.operational-page-dashboard-open .intel-map-panel {
         opacity 140ms ease;
 }
 
-.operational-starmap-return {
+.operational-surface-nav {
+    display: flex;
+    align-items: stretch;
+    justify-content: flex-end;
+    gap: 7px;
+    min-width: 0;
+}
+
+.operational-surface-nav .operational-dashboard-map-button {
+    min-height: 38px;
+}
+
+.operational-surface-nav .operational-dashboard-map-button:disabled {
+    border-color: #35516c;
+    background: #132537;
+    color: #7ba8cf;
+    cursor: default;
+    opacity: 1;
+}
+
+.operational-map-hud.operational-surface-nav {
+    flex-wrap: nowrap;
+}
+
+.operational-page-surface-nav {
     position: fixed;
     z-index: 5000;
     top: 12px;
     right: 14px;
-    min-height: 38px;
-    padding: 0 14px;
-    border: 1px solid #4b7094;
-    border-radius: 8px;
-    background: rgba(12, 28, 43, 0.96);
-    color: #e2edf8;
-    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.34);
-    font: inherit;
-    font-size: 0.78rem;
-    font-weight: 750;
-    cursor: pointer;
-}
-
-.operational-starmap-return:hover {
-    border-color: #77a4cf;
-    background: rgba(21, 45, 67, 0.98);
-}
-
-.operational-map-intel-button {
-    min-height: 38px;
-    padding: 0 11px;
-    border: 1px solid rgba(111, 145, 179, 0.78);
-    border-radius: 8px;
-    background: rgba(8, 14, 23, 0.92);
-    color: #bcd0e4;
-    box-shadow: 0 5px 18px rgba(0, 0, 0, 0.28);
-    font: inherit;
-    font-size: 0.72rem;
-    font-weight: 750;
-    cursor: pointer;
-    backdrop-filter: blur(8px);
-}
-
-.operational-map-intel-button:hover {
-    border-color: #78a3cb;
-    background: rgba(18, 31, 47, 0.96);
-    color: #edf5fc;
 }
 
 .operational-vcr-popup-backdrop {
@@ -154,6 +141,17 @@ body.operational-page-dashboard-open .intel-map-panel {
 .operational-vcr-popup-content > .vcr-dashboard-panel {
     min-width: 0;
     margin: 0;
+}
+
+@media (max-width: 900px) {
+    .operational-surface-nav {
+        flex-wrap: wrap;
+    }
+
+    .operational-page-surface-nav {
+        left: 12px;
+        justify-content: flex-end;
+    }
 }
 
 @media (max-width: 760px) {
