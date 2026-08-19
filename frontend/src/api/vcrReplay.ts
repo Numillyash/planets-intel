@@ -18,6 +18,7 @@ export interface VcrReplayEffect {
     lost_side?: "left" | "right";
     count?: number;
     fighter_id?: number;
+    hit?: boolean;
     x?: number;
     source_x?: number;
     target_x?: number;
@@ -33,10 +34,13 @@ export interface VcrReplaySideFrame {
     x: number;
     shield: number;
     damage: number;
+    damage_limit: number;
+    destroyed: boolean;
     crew: number;
     torpedoes: number;
     fighters: number;
     fighters_out: number;
+    bay_count: number;
     fighter_tracks?: VcrFighterTrack[];
     beam_slots?: number[];
     launcher_slots?: number[];
