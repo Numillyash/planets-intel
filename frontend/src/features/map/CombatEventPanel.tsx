@@ -330,6 +330,7 @@ export function CombatEventPanel(props: CombatEventPanelProps) {
                         }
                     >
                         <HostEventPanel
+                            embedded
                             gameId={props.gameId}
                             linkedAccountId={props.linkedAccountId}
                             onFocus={(event) => {
