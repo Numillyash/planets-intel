@@ -226,6 +226,12 @@ def _minute_of_day(value: datetime) -> float:
     return utc.hour * 60 + utc.minute + utc.second / 60
 
 
+def _minute_samples(values: list[datetime]) -> list[int]:
+    """Return per-turn UTC minute-of-day samples without collapsing modes."""
+
+    return [int(_minute_of_day(value)) % 1440 for value in values]
+
+
 def _circular_center_minutes(values: list[datetime]) -> int | None:
     if not values:
         return None
@@ -337,6 +343,12 @@ def get_player_activity_analysis(
                 "ready_at": current_ready_at.isoformat() if current_ready_at is not None else None,
                 "open_samples": len(open_times),
                 "ready_samples": len(ready_times),
+                "open_utc_minutes": _minute_samples(open_times),
+                "ready_utc_minutes": _minute_samples(ready_times),
+                # Keep the old circular centers for API compatibility and compact
+                # consumers. The UI must not present them as a complete model of
+                # bimodal/multimodal player behavior; raw per-turn samples above
+                # preserve those modes for distribution plots.
                 "typical_open_utc_minute": typical_open,
                 "typical_ready_utc_minute": typical_ready,
                 "median_open_after_host_minutes": round(median(open_delays), 1) if open_delays else None,
@@ -350,7 +362,8 @@ def get_player_activity_analysis(
         "through_turn": through_turn,
         "polling_note": (
             "Open time is the first observed public 'open' state and is bounded by the polling interval; "
-            "Ready time uses Planets.nu turnreadydate when available."
+            "Ready time uses Planets.nu turnreadydate when available. Time-of-day samples are returned "
+            "per turn so multimodal activity patterns are not collapsed into one average."
         ),
         "players": result,
     }
