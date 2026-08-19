@@ -10,6 +10,7 @@ import {
     login,
     logout,
 } from "./api/client";
+import { DualClock } from "./components/DualClock";
 import { DashboardApp } from "./features/dashboard/DashboardApp";
 import { IntelboardGamePicker } from "./features/dashboard/IntelboardGamePicker";
 import type { CurrentUserResponse } from "./types/api";
@@ -95,6 +96,17 @@ function LoginScreen({ onLogin }: LoginScreenProps) {
     );
 }
 
+function AuthenticatedSurface({ children }: { children: React.ReactNode }) {
+    return (
+        <>
+            <div className="global-time-strip">
+                <DualClock />
+            </div>
+            {children}
+        </>
+    );
+}
+
 function App() {
     const [user, setUser] = useState<CurrentUserResponse | null>(null);
     const [checkingSession, setCheckingSession] = useState(true);
@@ -173,10 +185,18 @@ function App() {
         window.location.pathname,
     );
     if (gamePickerRoute) {
-        return <IntelboardGamePicker onLogout={handleLogout} user={user} />;
+        return (
+            <AuthenticatedSurface>
+                <IntelboardGamePicker onLogout={handleLogout} user={user} />
+            </AuthenticatedSurface>
+        );
     }
 
-    return <DashboardApp onLogout={handleLogout} user={user} />;
+    return (
+        <AuthenticatedSurface>
+            <DashboardApp onLogout={handleLogout} user={user} />
+        </AuthenticatedSurface>
+    );
 }
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
