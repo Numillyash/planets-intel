@@ -1,0 +1,65 @@
+.dual-clock {
+    display: flex;
+    align-items: stretch;
+    gap: 6px;
+    min-width: 0;
+}
+
+.dual-clock > span {
+    display: grid;
+    min-width: 118px;
+    gap: 1px;
+    padding: 6px 9px;
+    border: 1px solid #25394f;
+    border-radius: 7px;
+    background: rgba(8, 18, 29, 0.86);
+    text-align: right;
+}
+
+.dual-clock small {
+    overflow: hidden;
+    color: #7088a3;
+    font-size: 0.54rem;
+    letter-spacing: 0.07em;
+    text-overflow: ellipsis;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.dual-clock strong {
+    color: #dceaf7;
+    font-variant-numeric: tabular-nums;
+    font-size: 0.82rem;
+    letter-spacing: 0.03em;
+}
+
+.dual-clock em {
+    color: #66819d;
+    font-size: 0.52rem;
+    font-style: normal;
+    font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 900px) {
+    .dual-clock {
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+
+    .dual-clock > span {
+        min-width: 105px;
+    }
+}
+
+@media (max-width: 620px) {
+    .dual-clock {
+        width: 100%;
+        justify-content: stretch;
+    }
+
+    .dual-clock > span {
+        min-width: 0;
+        flex: 1 1 0;
+        text-align: left;
+    }
+}
