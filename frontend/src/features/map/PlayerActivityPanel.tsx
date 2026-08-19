@@ -3,16 +3,26 @@ import { getPlayerActivity } from "../../api/activity";
 import type { PlayerActivityItem } from "../../types/activity";
 import "./player-activity.css";
 
+function localMinute(utcMinute: number): number {
+    const offsetMinutes = -new Date().getTimezoneOffset();
+    return ((Math.trunc(utcMinute) + offsetMinutes) % 1440 + 1440) % 1440;
+}
+
 function localHourCounts(utcMinutes: number[]): number[] {
     const counts = Array.from({ length: 24 }, () => 0);
-    const offsetMinutes = -new Date().getTimezoneOffset();
     for (const raw of utcMinutes) {
         if (!Number.isFinite(raw)) continue;
-        const utc = Math.trunc(raw);
-        const localMinute = ((utc + offsetMinutes) % 1440 + 1440) % 1440;
-        counts[Math.floor(localMinute / 60)] += 1;
+        counts[Math.floor(localMinute(raw) / 60)] += 1;
     }
     return counts;
+}
+
+function formatLocalMinute(utcMinute: number | null): string {
+    if (utcMinute === null || !Number.isFinite(utcMinute)) return "—";
+    const minute = localMinute(utcMinute);
+    const hour = Math.floor(minute / 60);
+    const rest = minute % 60;
+    return `${String(hour).padStart(2, "0")}:${String(rest).padStart(2, "0")}`;
 }
 
 function formatDelay(minutes: number | null): string {
@@ -96,6 +106,17 @@ function ActivityCard({ item }: { item: PlayerActivityItem }) {
                     label="Turn ready"
                     values={item.ready_utc_minutes ?? []}
                 />
+            </div>
+
+            <div className="turn-timing-summary-row">
+                <span title="Secondary circular-center summary. Use the histogram above for bimodal or multimodal habits.">
+                    Typical open
+                    <strong>{formatLocalMinute(item.typical_open_utc_minute)}</strong>
+                </span>
+                <span title="Secondary circular-center summary. Use the histogram above for bimodal or multimodal habits.">
+                    Typical ready
+                    <strong>{formatLocalMinute(item.typical_ready_utc_minute)}</strong>
+                </span>
             </div>
 
             <div className="turn-timing-latency-row">
@@ -189,7 +210,9 @@ export function PlayerActivityPanel(props: {
                 <p className="turn-timing-note">
                     Times are shown in this browser&apos;s local timezone. First-open time is
                     bounded by the polling interval; Ready uses Planets.nu turnreadydate when available.
-                    These observations describe game-turn activity, not continuous online presence.
+                    Typical times are secondary circular-center summaries; the histograms are the source
+                    for multimodal habits. These observations describe game-turn activity, not continuous
+                    online presence.
                 </p>
             </div>
         </section>
