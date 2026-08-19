@@ -44,6 +44,8 @@ type GameDashboardTab =
     | "starships"
     | "starbases"
     | "scoreboard"
+    | "military-intel"
+    | "turn-timing"
     | "diplomacy"
     | "time-machine"
     | "advantages"
@@ -58,6 +60,8 @@ const TABS: Array<{ id: GameDashboardTab; label: string }> = [
     { id: "starships", label: "Starships" },
     { id: "starbases", label: "Starbases" },
     { id: "scoreboard", label: "Scoreboard" },
+    { id: "military-intel", label: "Military intel" },
+    { id: "turn-timing", label: "Turn timing" },
     { id: "diplomacy", label: "Diplomacy" },
     { id: "time-machine", label: "Time machine" },
     { id: "advantages", label: "Advantages" },
@@ -511,6 +515,17 @@ export function GameDashboard({
                             snapshotTurn={historicalMode ? dashboardTurn : null}
                         />
                         {history !== null && (
+                            <MilitaryScoreChart
+                                history={history.items}
+                                players={game.players}
+                            />
+                        )}
+                    </div>
+                )}
+
+                {activeTab === "military-intel" && (
+                    <div className="game-dashboard-stack">
+                        {history !== null && (
                             <MilitaryAttributionPanel
                                 game={game}
                                 history={history}
@@ -522,18 +537,15 @@ export function GameDashboard({
                             linkedAccountId={selectedAccount.id}
                             turn={dashboardTurn}
                         />
-                        <PlayerActivityPanel
-                            embedded
-                            gameId={game.game.id}
-                            throughTurn={dashboardTurn}
-                        />
-                        {history !== null && (
-                            <MilitaryScoreChart
-                                history={history.items}
-                                players={game.players}
-                            />
-                        )}
                     </div>
+                )}
+
+                {activeTab === "turn-timing" && (
+                    <PlayerActivityPanel
+                        embedded
+                        gameId={game.game.id}
+                        throughTurn={dashboardTurn}
+                    />
                 )}
 
                 {activeTab === "diplomacy" && (
