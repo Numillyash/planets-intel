@@ -126,6 +126,33 @@ class VcrTraceFighterSafetyTests(unittest.TestCase):
         self.assertIn("fighter_launch", kinds)
         self.assertIn("fighter_attack", kinds)
 
+    def test_trace_exposes_exact_presentation_metadata(self) -> None:
+        traced = replay_nuhost_trace(
+            _fighter_payload(),
+            beams=[],
+            torpedoes=[],
+            settings=SETTINGS,
+        )
+        first = traced["frames"][0]
+        left = first["left"]
+        right = first["right"]
+
+        self.assertEqual(left["bay_count"], 10)
+        self.assertEqual(right["bay_count"], 0)
+        self.assertEqual(left["damage_limit"], 100)
+        self.assertEqual(right["damage_limit"], 100)
+        self.assertFalse(left["destroyed"])
+        self.assertFalse(right["destroyed"])
+        self.assertEqual(left["beam_slots"], [])
+        self.assertEqual(left["launcher_slots"], [])
+
+        for frame in traced["frames"]:
+            for side_name in ("left", "right"):
+                side = frame[side_name]
+                self.assertIn("damage_limit", side)
+                self.assertIn("destroyed", side)
+                self.assertIn("bay_count", side)
+
     def test_dogfight_kill_hook_emits_presentation_event_without_rng(self) -> None:
         engine = TracingNuHostClassicReplay(
             seed=17,
