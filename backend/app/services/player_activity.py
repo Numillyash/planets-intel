@@ -1,19 +1,35 @@
+from __future__ import annotations
+
 import math
+from collections import defaultdict
 from datetime import datetime, timezone
 from statistics import median
-from typing import Any
+from typing import Any, Iterable
 
-from sqlalchemy import select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
+from app.models.game import Game
 from app.models.game_player_slot import GamePlayerSlot
+from app.models.planets_account import PlanetsAccount
 from app.models.player_turn_activity_observation import PlayerTurnActivityObservation
 
 
 PUBLIC_ACTIVITY_SOURCE = "planets.nu/loadinfo"
 PRIVATE_ACTIVITY_SOURCE = "planets.nu/loadturn"
 PLANETS_DATE_FORMAT = "%m/%d/%Y %I:%M:%S %p"
+RESERVED_ACTIVITY_IDENTITIES = {
+    "dead",
+    "open",
+    "ready",
+    "ready marker",
+    "ready_marker",
+    "unopened",
+    "computer",
+    "unknown",
+    "empty",
+}
 
 
 def _parse_planets_date(value: Any) -> datetime | None:
@@ -256,10 +272,107 @@ def _confidence(samples: int) -> str:
     return "none"
 
 
+def _canonical_activity_username(value: str) -> str:
+    return " ".join(value.casefold().split())
+
+
+def _usable_activity_username(value: str) -> bool:
+    normalized = _canonical_activity_username(value)
+    return bool(normalized) and normalized not in RESERVED_ACTIVITY_IDENTITIES
+
+
+def _group_unambiguous_human_slot_keys(
+    rows: Iterable[tuple[int, int, str, int]],
+) -> dict[str, list[tuple[int, int]]]:
+    """Group canonical usernames across games, excluding ambiguous identities.
+
+    A canonical username is accepted from a game only when it maps to exactly
+    one human slot in that game. This prevents corrupted/state-placeholder rows
+    from turning into cross-game identity evidence.
+    """
+
+    by_game_user: dict[tuple[int, str], list[tuple[int, int]]] = defaultdict(list)
+    for game_id, slot_id, username, race_id in rows:
+        if race_id >= 100 or not _usable_activity_username(username):
+            continue
+        key = _canonical_activity_username(username)
+        by_game_user[(game_id, key)].append((game_id, slot_id))
+
+    grouped: dict[str, list[tuple[int, int]]] = defaultdict(list)
+    for (_game_id, username), slot_keys in by_game_user.items():
+        if len(slot_keys) == 1:
+            grouped[username].append(slot_keys[0])
+    return dict(grouped)
+
+
+def _current_accessible_game_ids(session: Session, user_id: int) -> set[int]:
+    membership = or_(
+        and_(
+            PlanetsAccount.planets_account_id.is_not(None),
+            PlanetsAccount.planets_account_id > 0,
+            GamePlayerSlot.account_id == PlanetsAccount.planets_account_id,
+        ),
+        and_(
+            func.length(func.trim(PlanetsAccount.planets_username)) > 0,
+            func.lower(func.trim(GamePlayerSlot.username))
+            == func.lower(func.trim(PlanetsAccount.planets_username)),
+        ),
+    )
+    rows = session.execute(
+        select(GamePlayerSlot.game_id)
+        .select_from(PlanetsAccount)
+        .join(GamePlayerSlot, membership)
+        .join(Game, Game.id == GamePlayerSlot.game_id)
+        .where(
+            PlanetsAccount.user_id == user_id,
+            PlanetsAccount.is_active.is_(True),
+            or_(
+                Game.status_id == 2,
+                Game.status_name.ilike("running"),
+                Game.status_name.ilike("joining"),
+            ),
+        )
+    ).all()
+    return {int(game_id) for (game_id,) in rows}
+
+
+def _activity_times(
+    rows: list[PlayerTurnActivityObservation],
+) -> tuple[list[datetime], list[datetime], list[float], list[float]]:
+    by_turn: dict[int, list[PlayerTurnActivityObservation]] = defaultdict(list)
+    for row in rows:
+        by_turn[row.turn].append(row)
+
+    open_times: list[datetime] = []
+    ready_times: list[datetime] = []
+    open_delays: list[float] = []
+    ready_delays: list[float] = []
+
+    for turn_rows in by_turn.values():
+        open_rows = [row for row in turn_rows if row.state == "open"]
+        opened = min(open_rows, key=lambda row: (row.observed_at, row.id)) if open_rows else None
+        ready_dates = [row.turn_ready_at for row in turn_rows if row.turn_ready_at is not None]
+        ready_at = min(ready_dates) if ready_dates else None
+        host_dates = [row.host_completed_at for row in turn_rows if row.host_completed_at is not None]
+        host_at = min(host_dates) if host_dates else None
+
+        if opened is not None:
+            open_times.append(opened.observed_at)
+            if host_at is not None:
+                open_delays.append((opened.observed_at - host_at).total_seconds() / 60)
+        if ready_at is not None:
+            ready_times.append(ready_at)
+            if host_at is not None:
+                ready_delays.append((ready_at - host_at).total_seconds() / 60)
+
+    return open_times, ready_times, open_delays, ready_delays
+
+
 def get_player_activity_analysis(
     *,
     game_id: int,
     through_turn: int | None = None,
+    user_id: int | None = None,
 ) -> dict[str, object]:
     with SessionLocal() as session:
         slots = list(
@@ -285,42 +398,62 @@ def get_player_activity_analysis(
             ).scalars().all()
         )
 
-    by_slot: dict[int, list[PlayerTurnActivityObservation]] = {}
+        current_game_ids = (
+            _current_accessible_game_ids(session, user_id)
+            if user_id is not None
+            else {game_id}
+        )
+        global_slots = list(
+            session.execute(
+                select(GamePlayerSlot)
+                .where(GamePlayerSlot.game_id.in_(current_game_ids))
+                .order_by(GamePlayerSlot.game_id, GamePlayerSlot.slot_id)
+            ).scalars().all()
+        ) if current_game_ids else []
+        global_rows = list(
+            session.execute(
+                select(PlayerTurnActivityObservation)
+                .where(PlayerTurnActivityObservation.game_id.in_(current_game_ids))
+                .order_by(
+                    PlayerTurnActivityObservation.game_id,
+                    PlayerTurnActivityObservation.slot_id,
+                    PlayerTurnActivityObservation.turn,
+                    PlayerTurnActivityObservation.observed_at,
+                    PlayerTurnActivityObservation.id,
+                )
+            ).scalars().all()
+        ) if current_game_ids else []
+
+    by_slot: dict[int, list[PlayerTurnActivityObservation]] = defaultdict(list)
     for row in rows:
-        by_slot.setdefault(row.slot_id, []).append(row)
+        by_slot[row.slot_id].append(row)
+
+    global_by_slot: dict[tuple[int, int], list[PlayerTurnActivityObservation]] = defaultdict(list)
+    for row in global_rows:
+        global_by_slot[(row.game_id, row.slot_id)].append(row)
+
+    grouped_global_slots = _group_unambiguous_human_slot_keys(
+        (slot.game_id, slot.slot_id, slot.username, slot.race_id)
+        for slot in global_slots
+    )
 
     result: list[dict[str, object]] = []
     for slot in slots:
         observations = by_slot.get(slot.slot_id, [])
-        by_turn: dict[int, list[PlayerTurnActivityObservation]] = {}
+        by_turn: dict[int, list[PlayerTurnActivityObservation]] = defaultdict(list)
         for row in observations:
-            by_turn.setdefault(row.turn, []).append(row)
+            by_turn[row.turn].append(row)
 
-        open_times: list[datetime] = []
-        ready_times: list[datetime] = []
-        open_delays: list[float] = []
-        ready_delays: list[float] = []
-
-        for turn_rows in by_turn.values():
-            opened = next((row for row in turn_rows if row.state == "open"), None)
-            ready_dates = [row.turn_ready_at for row in turn_rows if row.turn_ready_at is not None]
-            ready_at = min(ready_dates) if ready_dates else None
-            host_dates = [row.host_completed_at for row in turn_rows if row.host_completed_at is not None]
-            host_at = min(host_dates) if host_dates else None
-
-            if opened is not None:
-                open_times.append(opened.observed_at)
-                if host_at is not None:
-                    open_delays.append((opened.observed_at - host_at).total_seconds() / 60)
-            if ready_at is not None:
-                ready_times.append(ready_at)
-                if host_at is not None:
-                    ready_delays.append((ready_at - host_at).total_seconds() / 60)
+        open_times, ready_times, open_delays, ready_delays = _activity_times(observations)
 
         latest = observations[-1] if observations else None
         current_turn = latest.turn if latest is not None else None
         current_turn_rows = by_turn.get(current_turn, []) if current_turn is not None else []
-        first_open = next((row for row in current_turn_rows if row.state == "open"), None)
+        current_open_rows = [row for row in current_turn_rows if row.state == "open"]
+        first_open = min(
+            current_open_rows,
+            key=lambda row: (row.observed_at, row.id),
+        ) if current_open_rows else None
         current_ready_dates = [
             row.turn_ready_at
             for row in current_turn_rows
@@ -330,6 +463,24 @@ def get_player_activity_analysis(
         typical_open = _circular_center_minutes(open_times)
         typical_ready = _circular_center_minutes(ready_times)
         basis_samples = max(len(open_times), len(ready_times))
+
+        username_key = _canonical_activity_username(slot.username)
+        aggregate_slot_keys = (
+            grouped_global_slots.get(username_key, [])
+            if _usable_activity_username(slot.username) and slot.race_id < 100
+            else []
+        )
+        aggregate_open_times: list[datetime] = []
+        aggregate_ready_times: list[datetime] = []
+        aggregate_game_ids: set[int] = set()
+        for aggregate_key in aggregate_slot_keys:
+            aggregate_game_ids.add(aggregate_key[0])
+            aggregate_open, aggregate_ready, _open_delay, _ready_delay = _activity_times(
+                global_by_slot.get(aggregate_key, [])
+            )
+            aggregate_open_times.extend(aggregate_open)
+            aggregate_ready_times.extend(aggregate_ready)
+        aggregate_basis = max(len(aggregate_open_times), len(aggregate_ready_times))
 
         result.append(
             {
@@ -345,25 +496,30 @@ def get_player_activity_analysis(
                 "ready_samples": len(ready_times),
                 "open_utc_minutes": _minute_samples(open_times),
                 "ready_utc_minutes": _minute_samples(ready_times),
-                # Keep the old circular centers for API compatibility and compact
-                # consumers. The UI must not present them as a complete model of
-                # bimodal/multimodal player behavior; raw per-turn samples above
-                # preserve those modes for distribution plots.
                 "typical_open_utc_minute": typical_open,
                 "typical_ready_utc_minute": typical_ready,
                 "median_open_after_host_minutes": round(median(open_delays), 1) if open_delays else None,
                 "median_ready_after_host_minutes": round(median(ready_delays), 1) if ready_delays else None,
                 "prediction_confidence": _confidence(basis_samples),
+                "all_current_games_count": len(aggregate_game_ids),
+                "all_current_games_open_samples": len(aggregate_open_times),
+                "all_current_games_ready_samples": len(aggregate_ready_times),
+                "all_current_games_open_utc_minutes": _minute_samples(aggregate_open_times),
+                "all_current_games_ready_utc_minutes": _minute_samples(aggregate_ready_times),
+                "all_current_games_prediction_confidence": _confidence(aggregate_basis),
             }
         )
 
     return {
         "game_id": game_id,
         "through_turn": through_turn,
+        "current_games_considered": len(current_game_ids),
         "polling_note": (
             "Open time is the first observed public 'open' state and is bounded by the polling interval; "
             "Ready time uses Planets.nu turnreadydate when available. Time-of-day samples are returned "
-            "per turn so multimodal activity patterns are not collapsed into one average."
+            "per turn so multimodal activity patterns are not collapsed into one average. Cross-game "
+            "samples are combined only from Running/Joining games accessible to the authenticated user's "
+            "active linked observers, and ambiguous same-game username identities are excluded."
         ),
         "players": result,
     }
