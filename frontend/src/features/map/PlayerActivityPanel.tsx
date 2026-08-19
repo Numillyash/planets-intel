@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getPlayerActivity } from "../../api/activity";
 import type { PlayerActivityItem } from "../../types/activity";
+import "./player-activity.css";
 
 function localHourCounts(utcMinutes: number[]): number[] {
     const counts = Array.from({ length: 24 }, () => 0);
