@@ -1,28 +1,49 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { getPlayerActivity } from "../../api/activity";
 import type { PlayerActivityItem } from "../../types/activity";
 import "./player-activity.css";
 
+const DAY_MINUTES = 24 * 60;
+const DENSITY_POINTS = 97;
+const DENSITY_SIGMA_MINUTES = 70;
+const CHART_WIDTH = 300;
+const CHART_HEIGHT = 86;
+const CHART_BASELINE = 70;
+const CHART_AMPLITUDE = 54;
+
+type TimingScope = "all-current" | "this-game";
+
+function localOffsetMinutes(): number {
+    return -new Date().getTimezoneOffset();
+}
+
+function browserTimezoneName(): string {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "browser local";
+}
+
 function localMinute(utcMinute: number): number {
-    const offsetMinutes = -new Date().getTimezoneOffset();
-    return ((Math.trunc(utcMinute) + offsetMinutes) % 1440 + 1440) % 1440;
+    const offsetMinutes = localOffsetMinutes();
+    return ((Math.trunc(utcMinute) + offsetMinutes) % DAY_MINUTES + DAY_MINUTES) % DAY_MINUTES;
 }
 
-function localHourCounts(utcMinutes: number[]): number[] {
-    const counts = Array.from({ length: 24 }, () => 0);
-    for (const raw of utcMinutes) {
-        if (!Number.isFinite(raw)) continue;
-        counts[Math.floor(localMinute(raw) / 60)] += 1;
-    }
-    return counts;
+function formatUtcOffset(): string {
+    const total = localOffsetMinutes();
+    const sign = total >= 0 ? "+" : "-";
+    const absolute = Math.abs(total);
+    return `UTC${sign}${String(Math.floor(absolute / 60)).padStart(2, "0")}:${String(absolute % 60).padStart(2, "0")}`;
 }
 
-function formatLocalMinute(utcMinute: number | null): string {
-    if (utcMinute === null || !Number.isFinite(utcMinute)) return "—";
-    const minute = localMinute(utcMinute);
-    const hour = Math.floor(minute / 60);
-    const rest = minute % 60;
-    return `${String(hour).padStart(2, "0")}:${String(rest).padStart(2, "0")}`;
+function formatAxisMinute(minute: number): string {
+    const wrapped = ((Math.round(minute) % DAY_MINUTES) + DAY_MINUTES) % DAY_MINUTES;
+    const hour = Math.floor(wrapped / 60);
+    const rest = wrapped % 60;
+    return rest === 0
+        ? String(hour).padStart(2, "0")
+        : `${String(hour).padStart(2, "0")}:${String(rest).padStart(2, "0")}`;
+}
+
+function utcLabelForLocalMinute(local: number): string {
+    return formatAxisMinute(local - localOffsetMinutes());
 }
 
 function formatDelay(minutes: number | null): string {
@@ -35,60 +56,167 @@ function formatDelay(minutes: number | null): string {
     return `${hours}h ${rest}m`;
 }
 
-function TimingHistogram({
+function circularDistance(left: number, right: number): number {
+    const direct = Math.abs(left - right);
+    return Math.min(direct, DAY_MINUTES - direct);
+}
+
+function smoothedDensity(values: number[]): number[] {
+    const localSamples = values
+        .filter(Number.isFinite)
+        .map(localMinute);
+    if (localSamples.length === 0) {
+        return Array.from({ length: DENSITY_POINTS }, () => 0);
+    }
+
+    const density = Array.from({ length: DENSITY_POINTS }, (_, index) => {
+        const minute = index === DENSITY_POINTS - 1
+            ? 0
+            : index * DAY_MINUTES / (DENSITY_POINTS - 1);
+        return localSamples.reduce((sum, sample) => {
+            const distance = circularDistance(minute, sample);
+            const z = distance / DENSITY_SIGMA_MINUTES;
+            return sum + Math.exp(-0.5 * z * z);
+        }, 0);
+    });
+    const maximum = Math.max(...density, 1e-9);
+    return density.map((value) => value / maximum);
+}
+
+function densityLinePath(density: number[]): string {
+    return density.map((value, index) => {
+        const x = index * CHART_WIDTH / Math.max(1, density.length - 1);
+        const y = CHART_BASELINE - value * CHART_AMPLITUDE;
+        return `${index === 0 ? "M" : "L"}${x.toFixed(2)},${y.toFixed(2)}`;
+    }).join(" ");
+}
+
+function densityAreaPath(density: number[]): string {
+    const line = densityLinePath(density);
+    return `${line} L${CHART_WIDTH},${CHART_BASELINE} L0,${CHART_BASELINE} Z`;
+}
+
+function currentLocalMinute(): number {
+    const now = new Date();
+    return now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
+}
+
+function SmoothTimingChart({
     label,
     values,
     kind,
+    gameCount,
 }: {
     label: string;
     values: number[];
     kind: "open" | "ready";
+    gameCount: number;
 }) {
-    const counts = localHourCounts(values);
-    const maximum = Math.max(1, ...counts);
+    const density = useMemo(() => smoothedDensity(values), [values]);
+    const linePath = useMemo(() => densityLinePath(density), [density]);
+    const areaPath = useMemo(() => densityAreaPath(density), [density]);
+    const [nowMinute, setNowMinute] = useState(currentLocalMinute);
+
+    useEffect(() => {
+        const timer = window.setInterval(() => setNowMinute(currentLocalMinute()), 60 * 1000);
+        return () => window.clearInterval(timer);
+    }, []);
+
+    const nowX = nowMinute * CHART_WIDTH / DAY_MINUTES;
+    const localTicks = [0, 360, 720, 1080, 1440];
 
     return (
-        <div className={`turn-timing-histogram is-${kind}`}>
-            <div className="turn-timing-histogram-heading">
+        <div className={`turn-timing-density is-${kind}`}>
+            <div className="turn-timing-density-heading">
                 <strong>{label}</strong>
-                <span>{values.length} turn{values.length === 1 ? "" : "s"}</span>
+                <span>
+                    {values.length} turn{values.length === 1 ? "" : "s"}
+                    {gameCount > 1 ? ` · ${gameCount} games` : ""}
+                </span>
             </div>
-            <div
-                aria-label={`${label} local-time distribution`}
-                className="turn-timing-bars"
-                role="img"
-            >
-                {counts.map((count, hour) => (
-                    <span
-                        className="turn-timing-bar-cell"
-                        key={hour}
-                        title={`${String(hour).padStart(2, "0")}:00–${String(hour).padStart(2, "0")}:59 · ${count}`}
-                    >
-                        <span
-                            className="turn-timing-bar"
-                            style={{
-                                height: count === 0
-                                    ? 0
-                                    : `${Math.max(12, count * 100 / maximum)}%`,
-                            }}
-                        />
-                    </span>
+
+            <div className="turn-timing-dual-axis is-utc" aria-hidden="true">
+                <b>UTC</b>
+                {localTicks.map((minute, index) => (
+                    <span key={`utc-${minute}-${index}`}>{utcLabelForLocalMinute(minute)}</span>
                 ))}
             </div>
-            <div className="turn-timing-axis" aria-hidden="true">
-                <span>00</span><span>06</span><span>12</span><span>18</span><span>24</span>
+
+            <svg
+                aria-label={`${label} smoothed local-time distribution from ${values.length} factual turn observations`}
+                className="turn-timing-density-svg"
+                preserveAspectRatio="none"
+                role="img"
+                viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
+            >
+                <line className="turn-timing-grid-line" x1="0" x2={CHART_WIDTH} y1="43" y2="43" />
+                <line className="turn-timing-grid-line" x1="0" x2={CHART_WIDTH} y1={CHART_BASELINE} y2={CHART_BASELINE} />
+                {values.length > 0 && (
+                    <>
+                        <path className="turn-timing-density-area" d={areaPath} />
+                        <path className="turn-timing-density-line" d={linePath} />
+                    </>
+                )}
+                {values.filter(Number.isFinite).map((raw, index) => {
+                    const x = localMinute(raw) * CHART_WIDTH / DAY_MINUTES;
+                    return (
+                        <line
+                            className="turn-timing-sample-tick"
+                            key={`${raw}-${index}`}
+                            x1={x}
+                            x2={x}
+                            y1={CHART_BASELINE + 2}
+                            y2={CHART_BASELINE + 8}
+                        />
+                    );
+                })}
+                <line
+                    className="turn-timing-now-line"
+                    x1={nowX}
+                    x2={nowX}
+                    y1="5"
+                    y2={CHART_BASELINE + 8}
+                />
+            </svg>
+
+            <div className="turn-timing-dual-axis is-local" aria-hidden="true">
+                <b>LOCAL</b>
+                {localTicks.map((minute, index) => (
+                    <span key={`local-${minute}-${index}`}>{minute === 1440 ? "24" : formatAxisMinute(minute)}</span>
+                ))}
             </div>
         </div>
     );
 }
 
-function ActivityCard({ item }: { item: PlayerActivityItem }) {
+function ActivityCard({
+    item,
+    scope,
+}: {
+    item: PlayerActivityItem;
+    scope: TimingScope;
+}) {
+    const aggregate = scope === "all-current";
+    const openValues = aggregate
+        ? item.all_current_games_open_utc_minutes ?? []
+        : item.open_utc_minutes ?? [];
+    const readyValues = aggregate
+        ? item.all_current_games_ready_utc_minutes ?? []
+        : item.ready_utc_minutes ?? [];
+    const gameCount = aggregate ? item.all_current_games_count : 1;
+    const confidence = aggregate
+        ? item.all_current_games_prediction_confidence
+        : item.prediction_confidence;
+
     return (
         <article className="turn-timing-player-card">
             <header>
                 <div>
                     <strong>{item.username}</strong>
-                    <small>slot {item.slot_id} · {item.prediction_confidence} confidence</small>
+                    <small>
+                        slot {item.slot_id} · {confidence} sample confidence
+                        {aggregate ? ` · combined from ${gameCount} current game${gameCount === 1 ? "" : "s"}` : " · selected game only"}
+                    </small>
                 </div>
                 <span className={`turn-timing-state is-${item.current_state}`}>
                     {item.current_state.split("_").join(" ")}
@@ -96,36 +224,27 @@ function ActivityCard({ item }: { item: PlayerActivityItem }) {
             </header>
 
             <div className="turn-timing-chart-grid">
-                <TimingHistogram
-                    kind="open"
-                    label="First observed open"
-                    values={item.open_utc_minutes ?? []}
-                />
-                <TimingHistogram
+                <SmoothTimingChart
+                    gameCount={gameCount}
                     kind="ready"
                     label="Turn ready"
-                    values={item.ready_utc_minutes ?? []}
+                    values={readyValues}
                 />
-            </div>
-
-            <div className="turn-timing-summary-row">
-                <span title="Secondary circular-center summary. Use the histogram above for bimodal or multimodal habits.">
-                    Typical open
-                    <strong>{formatLocalMinute(item.typical_open_utc_minute)}</strong>
-                </span>
-                <span title="Secondary circular-center summary. Use the histogram above for bimodal or multimodal habits.">
-                    Typical ready
-                    <strong>{formatLocalMinute(item.typical_ready_utc_minute)}</strong>
-                </span>
+                <SmoothTimingChart
+                    gameCount={gameCount}
+                    kind="open"
+                    label="First observed open"
+                    values={openValues}
+                />
             </div>
 
             <div className="turn-timing-latency-row">
                 <span>
-                    Median open after host
+                    This-game median open after host
                     <strong>{formatDelay(item.median_open_after_host_minutes)}</strong>
                 </span>
                 <span>
-                    Median ready after host
+                    This-game median ready after host
                     <strong>{formatDelay(item.median_ready_after_host_minutes)}</strong>
                 </span>
             </div>
@@ -139,6 +258,8 @@ export function PlayerActivityPanel(props: {
     embedded?: boolean;
 }) {
     const [items, setItems] = useState<PlayerActivityItem[]>([]);
+    const [currentGamesConsidered, setCurrentGamesConsidered] = useState(0);
+    const [scope, setScope] = useState<TimingScope>("all-current");
     const [open, setOpen] = useState(props.embedded ?? false);
 
     useEffect(() => {
@@ -150,9 +271,15 @@ export function PlayerActivityPanel(props: {
         async function load() {
             try {
                 const data = await getPlayerActivity(props.gameId, props.throughTurn);
-                if (active) setItems(data.players);
+                if (active) {
+                    setItems(data.players);
+                    setCurrentGamesConsidered(data.current_games_considered ?? 0);
+                }
             } catch {
-                if (active) setItems([]);
+                if (active) {
+                    setItems([]);
+                    setCurrentGamesConsidered(0);
+                }
             }
         }
         void load();
@@ -172,7 +299,9 @@ export function PlayerActivityPanel(props: {
         );
     }
 
-    const visibleItems = items.filter((item) => item.current_state !== "dead");
+    const visibleItems = items.filter(
+        (item) => item.current_state !== "dead" && item.race_id < 100,
+    );
 
     return (
         <section className={props.embedded ? "panel dashboard-embedded-panel turn-timing-panel" : undefined}>
@@ -180,39 +309,68 @@ export function PlayerActivityPanel(props: {
                 <div className="turn-timing-panel-heading">
                     <div>
                         <div className="eyebrow">TURN TIMING · THROUGH T{props.throughTurn}</div>
-                        <h2>Player activity by local hour</h2>
+                        <h2>Player activity across the day</h2>
                         <p>
-                            Each bar is a per-turn observation. Multiple daily habits stay
-                            visible as separate peaks instead of being collapsed into one average.
+                            Smooth curves preserve separate morning/evening habits instead of collapsing
+                            them into one average. Raw ticks under each curve are the factual per-turn samples.
                         </p>
+                        <div className="turn-timing-time-reference">
+                            <span><strong>LOCAL</strong> {browserTimezoneName()} · {formatUtcOffset()}</span>
+                            <span><strong>GLOBAL</strong> UTC</span>
+                        </div>
                     </div>
-                    {!props.embedded && (
-                        <button
-                            className="secondary-button"
-                            onClick={() => setOpen(false)}
-                            type="button"
-                        >
-                            Hide
-                        </button>
-                    )}
+                    <div className="turn-timing-heading-actions">
+                        <div className="turn-timing-scope" aria-label="Timing data scope">
+                            <button
+                                className={scope === "all-current" ? "is-active" : ""}
+                                onClick={() => setScope("all-current")}
+                                type="button"
+                            >
+                                All current games
+                            </button>
+                            <button
+                                className={scope === "this-game" ? "is-active" : ""}
+                                onClick={() => setScope("this-game")}
+                                type="button"
+                            >
+                                This game
+                            </button>
+                        </div>
+                        {!props.embedded && (
+                            <button
+                                className="secondary-button"
+                                onClick={() => setOpen(false)}
+                                type="button"
+                            >
+                                Hide
+                            </button>
+                        )}
+                    </div>
                 </div>
+
+                {scope === "all-current" && (
+                    <div className="turn-timing-scope-note">
+                        Combining same canonical usernames across {currentGamesConsidered} Running/Joining game{currentGamesConsidered === 1 ? "" : "s"}
+                        accessible to your active linked observers. Ambiguous same-game identities are excluded.
+                    </div>
+                )}
 
                 {visibleItems.length === 0 ? (
                     <p className="subtitle">No activity samples are available yet.</p>
                 ) : (
                     <div className="turn-timing-player-grid">
                         {visibleItems.map((item) => (
-                            <ActivityCard item={item} key={item.slot_id} />
+                            <ActivityCard item={item} key={item.slot_id} scope={scope} />
                         ))}
                     </div>
                 )}
 
                 <p className="turn-timing-note">
-                    Times are shown in this browser&apos;s local timezone. First-open time is
-                    bounded by the polling interval; Ready uses Planets.nu turnreadydate when available.
-                    Typical times are secondary circular-center summaries; the histograms are the source
-                    for multimodal habits. These observations describe game-turn activity, not continuous
-                    online presence.
+                    Bottom axis is this browser&apos;s local clock; the aligned top axis is UTC. Curves are
+                    circular presentation smoothing of factual time-of-day samples and are normalized per
+                    chart, so curve height should be read as habit shape rather than an absolute probability.
+                    First-open remains bounded by the polling interval; Ready uses Planets.nu turnreadydate
+                    when available. These observations describe game-turn activity, not continuous online presence.
                 </p>
             </div>
         </section>
