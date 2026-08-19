@@ -50,7 +50,7 @@ body.operational-page-dashboard-open .intel-map-panel {
 .operational-starmap-return {
     position: fixed;
     z-index: 5000;
-    top: 76px;
+    top: 12px;
     right: 14px;
     min-height: 38px;
     padding: 0 14px;
