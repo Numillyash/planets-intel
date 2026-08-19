@@ -12,8 +12,24 @@ import {
 } from "../../lib/privateAssets";
 import "./vcr-hull-artwork.css";
 
+type SideName = "left" | "right";
+
+interface PresentationGeometry {
+    left: number;
+    right: number;
+    mapX: (x: number) => number;
+}
+
 function sideMarkerClass(side: VcrReplaySideFrame): string {
     return side.is_planet ? "is-planet" : "is-ship";
+}
+
+function sideFrame(frame: VcrReplayFrame, side: SideName): VcrReplaySideFrame {
+    return side === "left" ? frame.left : frame.right;
+}
+
+function oppositeSide(side: SideName): SideName {
+    return side === "left" ? "right" : "left";
 }
 
 function CombatObjectArtwork({
@@ -116,39 +132,39 @@ function SideStatus({ label, side }: { label: string; side: VcrReplaySideFrame }
 }
 
 const TORPEDO_PRESENTATION_FRAMES = 12;
-const MIN_SHIP_VISUAL_GAP_PERCENT = 22;
+const MIN_SHIP_VISUAL_GAP_PERCENT = 28;
+const SHIP_EDGE_MARGIN_PERCENT = 12;
+const FIGHTER_LANE_COUNT = 19;
+const FIGHTER_TOP_MIN = 10;
+const FIGHTER_TOP_MAX = 90;
 
-function combatPercent(x: number): number {
-    return Math.max(4, Math.min(96, (x / 640) * 100));
+function rawCombatPercent(x: number): number {
+    return (x / 640) * 100;
 }
 
-function presentationGeometry(frame: VcrReplayFrame): {
-    left: number;
-    right: number;
-    mapX: (x: number) => number;
-} {
-    const rawLeftPercent = combatPercent(frame.left.x);
-    const rawRightPercent = combatPercent(frame.right.x);
-    const rawGap = Math.max(0.01, rawRightPercent - rawLeftPercent);
-    let left = rawLeftPercent;
-    let right = rawRightPercent;
+function clamp(value: number, minimum: number, maximum: number): number {
+    return Math.max(minimum, Math.min(maximum, value));
+}
 
-    // Combat coordinates legitimately close to 30 units, but the original Nu
-    // artwork is much wider than 30/640 of the viewport. Keep simulation
-    // coordinates untouched and expand only their presentation space so large
-    // hull sprites never sit on top of each other.
+function presentationGeometry(frame: VcrReplayFrame): PresentationGeometry {
+    const rawLeftPercent = rawCombatPercent(frame.left.x);
+    const rawRightPercent = rawCombatPercent(frame.right.x);
+    const rawGap = Math.max(0.01, rawRightPercent - rawLeftPercent);
+    let left = clamp(
+        rawLeftPercent,
+        SHIP_EDGE_MARGIN_PERCENT,
+        100 - SHIP_EDGE_MARGIN_PERCENT,
+    );
+    let right = clamp(
+        rawRightPercent,
+        SHIP_EDGE_MARGIN_PERCENT,
+        100 - SHIP_EDGE_MARGIN_PERCENT,
+    );
+
     if (right - left < MIN_SHIP_VISUAL_GAP_PERCENT) {
-        const midpoint = (left + right) / 2;
+        const midpoint = clamp((left + right) / 2, 20, 80);
         left = midpoint - MIN_SHIP_VISUAL_GAP_PERCENT / 2;
         right = midpoint + MIN_SHIP_VISUAL_GAP_PERCENT / 2;
-        if (left < 5) {
-            right += 5 - left;
-            left = 5;
-        }
-        if (right > 95) {
-            left -= right - 95;
-            right = 95;
-        }
     }
 
     const visualGap = right - left;
@@ -156,69 +172,181 @@ function presentationGeometry(frame: VcrReplayFrame): {
         left,
         right,
         mapX: (x: number) => {
-            const raw = combatPercent(x);
-            const relative = (raw - rawLeftPercent) / rawGap;
-            return Math.max(2, Math.min(98, left + relative * visualGap));
+            const relative = (rawCombatPercent(x) - rawLeftPercent) / rawGap;
+            return clamp(left + relative * visualGap, 4, 96);
         },
     };
 }
 
-function fighterTop(side: "left" | "right", track: VcrFighterTrack): number {
-    const lane = track.index % 7;
+function fighterTop(side: SideName, fighterIndex: number): number {
+    const sideOffset = side === "left" ? 0 : 5;
+    const lane = (fighterIndex * 7 + sideOffset) % FIGHTER_LANE_COUNT;
+    const progress = lane / Math.max(1, FIGHTER_LANE_COUNT - 1);
     return side === "left"
-        ? 35 + lane * 3.2
-        : 65 - lane * 3.2;
+        ? FIGHTER_TOP_MIN + progress * (FIGHTER_TOP_MAX - FIGHTER_TOP_MIN)
+        : FIGHTER_TOP_MAX - progress * (FIGHTER_TOP_MAX - FIGHTER_TOP_MIN);
 }
 
-function lineStyle(
-    start: number,
-    end: number,
-    top: number,
-): React.CSSProperties {
-    return {
-        left: `${Math.min(start, end)}%`,
-        width: `${Math.max(0.6, Math.abs(end - start))}%`,
-        top: `${top}%`,
-    };
+function trackById(
+    frame: VcrReplayFrame,
+    side: SideName,
+    fighterId: number | undefined,
+): VcrFighterTrack | null {
+    if (fighterId === undefined) return null;
+    return sideFrame(frame, side).fighter_tracks?.find((track) => track.index === fighterId) ?? null;
 }
 
-function BeamEffect({
-    effect,
+function nearestTrack(
+    frame: VcrReplayFrame,
+    side: SideName,
+    rawX: number,
+): VcrFighterTrack | null {
+    const tracks = sideFrame(frame, side).fighter_tracks ?? [];
+    let best: VcrFighterTrack | null = null;
+    let bestDistance = Number.POSITIVE_INFINITY;
+    for (const track of tracks) {
+        const distance = Math.abs(track.x - rawX);
+        if (distance < bestDistance) {
+            best = track;
+            bestDistance = distance;
+        }
+    }
+    return best;
+}
+
+function shotLabel(effect: VcrReplayEffect): string | null {
+    if (effect.kind === "fighter_attack") {
+        return `${effect.source ?? "fighter"} fighter attacks ${effect.target ?? "ship"}`;
+    }
+    if (effect.kind === "beam_fighter") {
+        return `${effect.source ?? "ship"} beam destroys ${effect.target ?? "enemy"} fighter`;
+    }
+    if (effect.kind === "beam_ship") {
+        return `${effect.source ?? "ship"} beam fires`;
+    }
+    if (effect.kind === "fighter_dogfight_loss") {
+        return `dogfight · ${effect.lost_side ?? "unknown"} fighter lost`;
+    }
+    if (effect.kind === "torpedo_launch") {
+        return `${effect.source ?? "ship"} torpedo launch`;
+    }
+    return null;
+}
+
+function ShotEffectsOverlay({
+    effects,
     frame,
-    mapX,
-    index,
+    geometry,
 }: {
-    effect: VcrReplayEffect;
+    effects: VcrReplayEffect[];
     frame: VcrReplayFrame;
-    mapX: (x: number) => number;
-    index: number;
+    geometry: PresentationGeometry;
 }) {
-    if (
-        effect.kind !== "beam_ship"
-        && effect.kind !== "beam_fighter"
-        && effect.kind !== "fighter_attack"
-    ) return null;
+    const lines: Array<{
+        key: string;
+        className: string;
+        x1: number;
+        y1: number;
+        x2: number;
+        y2: number;
+    }> = [];
 
-    const sourceSide = effect.source === "right" ? frame.right : frame.left;
-    const targetSide = effect.target === "left" ? frame.left : frame.right;
-    const sourceRaw = effect.source_x ?? sourceSide.x;
-    const targetRaw = effect.target_x ?? targetSide.x;
-    const source = mapX(sourceRaw);
-    const target = mapX(targetRaw);
-    const top = effect.kind === "fighter_attack"
-        ? (effect.source === "left" ? 45 : 55)
-        : 50 + ((index % 3) - 1) * 2.2;
+    effects.forEach((effect, index) => {
+        if (effect.kind === "beam_ship" && effect.source !== undefined) {
+            const source = effect.source;
+            const target = effect.target ?? oppositeSide(source);
+            lines.push({
+                key: `beam-ship-${index}`,
+                className: `vcr-beam-shot is-${source}`,
+                x1: geometry.mapX(effect.source_x ?? sideFrame(frame, source).x),
+                y1: 50,
+                x2: geometry.mapX(effect.target_x ?? sideFrame(frame, target).x),
+                y2: 50,
+            });
+            return;
+        }
+
+        if (effect.kind === "beam_fighter" && effect.source !== undefined) {
+            const source = effect.source;
+            const target = effect.target ?? oppositeSide(source);
+            const targetTrack = trackById(frame, target, effect.fighter_id);
+            lines.push({
+                key: `beam-fighter-${index}`,
+                className: `vcr-beam-shot is-${source} is-fighter-target`,
+                x1: geometry.mapX(effect.source_x ?? sideFrame(frame, source).x),
+                y1: 50,
+                x2: geometry.mapX(
+                    targetTrack?.x
+                    ?? effect.target_x
+                    ?? sideFrame(frame, target).x,
+                ),
+                y2: fighterTop(target, effect.fighter_id ?? targetTrack?.index ?? 0),
+            });
+            return;
+        }
+
+        if (effect.kind === "fighter_attack" && effect.source !== undefined) {
+            const source = effect.source;
+            const target = effect.target ?? oppositeSide(source);
+            const sourceTrack = trackById(frame, source, effect.fighter_id);
+            lines.push({
+                key: `fighter-ship-${index}`,
+                className: `vcr-fighter-shot is-${source}`,
+                x1: geometry.mapX(
+                    sourceTrack?.x
+                    ?? effect.source_x
+                    ?? sideFrame(frame, source).x,
+                ),
+                y1: fighterTop(source, effect.fighter_id ?? sourceTrack?.index ?? 0),
+                x2: geometry.mapX(effect.target_x ?? sideFrame(frame, target).x),
+                y2: 50,
+            });
+            return;
+        }
+
+        if (effect.kind === "fighter_dogfight_loss" && effect.lost_side !== undefined) {
+            const target = effect.lost_side;
+            const source = oppositeSide(target);
+            const rawX = effect.x ?? sideFrame(frame, target).x;
+            const sourceTrack = nearestTrack(frame, source, rawX);
+            const targetIndex = effect.fighter_id ?? 0;
+            const sourceIndex = sourceTrack?.index ?? targetIndex;
+            const targetX = geometry.mapX(rawX);
+            let sourceX = geometry.mapX(sourceTrack?.x ?? rawX);
+            if (Math.abs(sourceX - targetX) < 0.8) {
+                sourceX += source === "left" ? -1.2 : 1.2;
+            }
+            lines.push({
+                key: `fighter-dogfight-${index}`,
+                className: `vcr-fighter-shot is-${source} is-dogfight`,
+                x1: sourceX,
+                y1: fighterTop(source, sourceIndex),
+                x2: targetX,
+                y2: fighterTop(target, targetIndex),
+            });
+        }
+    });
+
+    if (lines.length === 0) return null;
 
     return (
-        <span
+        <svg
             aria-hidden="true"
-            className={
-                effect.kind === "fighter_attack"
-                    ? "vcr-fighter-shot"
-                    : `vcr-beam-shot is-${effect.source ?? "left"}`
-            }
-            style={lineStyle(source, target, top)}
-        />
+            className="vcr-shot-overlay"
+            preserveAspectRatio="none"
+            viewBox="0 0 100 100"
+        >
+            {lines.map((line) => (
+                <line
+                    className={line.className}
+                    key={line.key}
+                    x1={line.x1}
+                    x2={line.x2}
+                    y1={line.y1}
+                    y2={line.y2}
+                />
+            ))}
+        </svg>
     );
 }
 
@@ -238,7 +366,7 @@ function Battlefield({
 
     const torpedoes: Array<{
         key: string;
-        side: "left" | "right";
+        side: SideName;
         x: number;
         lane: number;
     }> = [];
@@ -254,9 +382,10 @@ function Battlefield({
             const age = frameIndex - launchIndex;
             const progress = Math.min(1, (age + 1) / TORPEDO_PRESENTATION_FRAMES);
             const sourceRaw = effect.source_x
-                ?? (effect.source === "left" ? launchFrame.left.x : launchFrame.right.x);
+                ?? sideFrame(launchFrame, effect.source).x;
+            const targetSide = effect.target ?? oppositeSide(effect.source);
             const targetRaw = effect.target_x
-                ?? (effect.source === "left" ? launchFrame.right.x : launchFrame.left.x);
+                ?? sideFrame(launchFrame, targetSide).x;
             const count = Math.max(1, effect.count ?? 1);
             for (let projectile = 0; projectile < Math.min(4, count); projectile += 1) {
                 const rawX = sourceRaw + (targetRaw - sourceRaw) * progress;
@@ -271,7 +400,7 @@ function Battlefield({
     }
 
     const fighterTracks: Array<{
-        side: "left" | "right";
+        side: SideName;
         track: VcrFighterTrack;
     }> = [
         ...(frame.left.fighter_tracks ?? []).map((track) => ({ side: "left" as const, track })),
@@ -282,15 +411,7 @@ function Battlefield({
         <div className="vcr-battlefield">
             <div className="vcr-range-line" />
 
-            {effects.map((effect, index) => (
-                <BeamEffect
-                    effect={effect}
-                    frame={frame}
-                    index={index}
-                    key={`beam-${index}-${effect.kind}`}
-                    mapX={geometry.mapX}
-                />
-            ))}
+            <ShotEffectsOverlay effects={effects} frame={frame} geometry={geometry} />
 
             {torpedoes.map((torpedo) => (
                 <span
@@ -313,7 +434,7 @@ function Battlefield({
                     key={`${side}-fighter-${track.index}`}
                     style={{
                         left: `${geometry.mapX(track.x)}%`,
-                        top: `${fighterTop(side, track)}%`,
+                        top: `${fighterTop(side, track.index)}%`,
                     }}
                     title={`${side} fighter ${track.index + 1}`}
                 />
@@ -326,7 +447,10 @@ function Battlefield({
                         aria-hidden="true"
                         className="vcr-dogfight-flash"
                         key={`dogfight-${index}`}
-                        style={{ left: `${geometry.mapX(effect.x ?? 320)}%` }}
+                        style={{
+                            left: `${geometry.mapX(effect.x ?? 320)}%`,
+                            top: `${fighterTop(effect.lost_side ?? "left", effect.fighter_id ?? 0)}%`,
+                        }}
                     >×</span>
                 );
             })}
@@ -388,10 +512,16 @@ export function CombatReplayPlayer({
     }, [frames, playing, speed]);
 
     const frame = frames[frameIndex] ?? null;
-    const currentEvents = useMemo(
-        () => frame?.events.map((event) => event.split("_").join(" ")) ?? [],
-        [frame],
-    );
+    const currentEvents = useMemo(() => {
+        if (frame === null) return [];
+        const labels = [
+            ...frame.events.map((event) => event.split("_").join(" ")),
+            ...(frame.effects ?? [])
+                .map(shotLabel)
+                .filter((label): label is string => label !== null),
+        ];
+        return [...new Set(labels)];
+    }, [frame]);
 
     if (frame === null) return <div className="error-card">Replay contains no frames.</div>;
 
@@ -441,15 +571,19 @@ export function CombatReplayPlayer({
                 className="vcr-timeline"
                 max={Math.max(0, frames.length - 1)}
                 min={0}
-                onChange={(event) => { setPlaying(false); setFrameIndex(Number(event.target.value)); }}
+                onChange={(event) => {
+                    setFrameIndex(Number(event.target.value));
+                    setPlaying(false);
+                }}
                 type="range"
                 value={frameIndex}
             />
             <div className="vcr-event-strip">
-                {currentEvents.length > 0 ? currentEvents.join(" · ") : "Combat running"}
-                {result !== undefined && frameIndex === frames.length - 1
-                    ? ` · result: ${result.join(", ").replaceAll("_", " ")}`
-                    : ""}
+                {currentEvents.length > 0
+                    ? currentEvents.join(" · ")
+                    : frameIndex >= frames.length - 1 && result && result.length > 0
+                        ? result.map((item) => item.split("_").join(" ")).join(" · ")
+                        : "No weapon event this cycle"}
             </div>
         </div>
     );
