@@ -5,6 +5,7 @@ import {
     getVcrReplayTrace,
     type VcrReplayTraceResponse,
 } from "../../api/vcrReplay";
+import { markVcrReviewed } from "../../lib/vcrReviewState";
 import type {
     CombatEventSideSummary,
     CombatEventSummary,
@@ -29,10 +30,12 @@ export function VcrDashboardPanel({
     gameId,
     linkedAccountId,
     turn,
+    initialVcrId = null,
 }: {
     gameId: number;
     linkedAccountId: number;
     turn: number;
+    initialVcrId?: number | null;
 }) {
     const [events, setEvents] = useState<CombatEventSummary[]>([]);
     const [selectedIndex, setSelectedIndex] = useState(0);
@@ -52,7 +55,10 @@ export function VcrDashboardPanel({
                     (left, right) => left.vcr_id - right.vcr_id,
                 );
                 setEvents(ordered);
-                setSelectedIndex(0);
+                const requestedIndex = initialVcrId === null
+                    ? -1
+                    : ordered.findIndex((event) => event.vcr_id === initialVcrId);
+                setSelectedIndex(requestedIndex >= 0 ? requestedIndex : 0);
             })
             .catch((reason) => {
                 if (!cancelled) {
@@ -70,9 +76,18 @@ export function VcrDashboardPanel({
         return () => {
             cancelled = true;
         };
-    }, [gameId, linkedAccountId, turn]);
+    }, [gameId, initialVcrId, linkedAccountId, turn]);
 
     const selected = events[selectedIndex] ?? null;
+
+    useEffect(() => {
+        if (selected === null) return;
+        markVcrReviewed(gameId, turn, {
+            vcrId: selected.vcr_id,
+            x: selected.x,
+            y: selected.y,
+        });
+    }, [gameId, selected, turn]);
 
     useEffect(() => {
         let cancelled = false;
