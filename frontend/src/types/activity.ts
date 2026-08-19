@@ -16,11 +16,18 @@ export interface PlayerActivityItem {
     median_open_after_host_minutes: number | null;
     median_ready_after_host_minutes: number | null;
     prediction_confidence: "none" | "low" | "medium" | "high";
+    all_current_games_count: number;
+    all_current_games_open_samples: number;
+    all_current_games_ready_samples: number;
+    all_current_games_open_utc_minutes: number[];
+    all_current_games_ready_utc_minutes: number[];
+    all_current_games_prediction_confidence: "none" | "low" | "medium" | "high";
 }
 
 export interface PlayerActivityResponse {
     game_id: number;
     through_turn: number | null;
+    current_games_considered: number;
     polling_note: string;
     players: PlayerActivityItem[];
 }
