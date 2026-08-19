@@ -71,10 +71,12 @@ body.operational-page-dashboard-open .intel-map-panel {
     flex-wrap: nowrap;
 }
 
+/* The authenticated UTC/local clock owns the first row on page-style
+   dashboard surfaces. Keep game navigation in its own row below it. */
 .operational-page-surface-nav {
     position: fixed;
     z-index: 5000;
-    top: 12px;
+    top: 72px;
     right: 14px;
 }
 
