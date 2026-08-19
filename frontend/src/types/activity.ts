@@ -9,6 +9,8 @@ export interface PlayerActivityItem {
     ready_at: string | null;
     open_samples: number;
     ready_samples: number;
+    open_utc_minutes: number[];
+    ready_utc_minutes: number[];
     typical_open_utc_minute: number | null;
     typical_ready_utc_minute: number | null;
     median_open_after_host_minutes: number | null;
