@@ -5,7 +5,6 @@ import {
     markHostEventReviewedForCurrentRoute,
 } from "../../lib/hostEventReviewState";
 import type { HostEventItem } from "../../types/activity";
-import { hasCurrentCombatPosition } from "./currentCombatMapRegistry";
 import { renderY, type MapBounds } from "./mapModel";
 
 
@@ -33,13 +32,11 @@ export function hostEventKey(event: HostEventItem): string {
 
 
 /**
- * Presentation identity for a map notification.
+ * Presentation identity for one factual host-event notification.
  *
- * Host-event provenance may legitimately contain several observations of the
- * same incident. The map must not render those observer copies on top of each
- * other, so the visual key intentionally ignores source/batch metadata and the
- * generated summary text while retaining the factual incident coordinates and
- * ship name.
+ * Observer/batch provenance is deliberately not part of this key, so multiple
+ * observations of the same report render once. Distinct ship names at the same
+ * coordinates remain distinct factual events and are only clustered visually.
  */
 export function hostEventVisualKey(event: HostEventItem): string {
     return [
@@ -49,6 +46,11 @@ export function hostEventVisualKey(event: HostEventItem): string {
         event.y ?? "?",
         normalizedEventLabel(event.ship_name),
     ].join(":");
+}
+
+
+function positionKey(event: HostEventItem): string {
+    return `${event.turn}:${event.x ?? "?"}:${event.y ?? "?"}`;
 }
 
 
@@ -65,7 +67,7 @@ export function drawHostEvents({
     selectedKey: string | null;
     onSelect: (event: HostEventItem) => void;
 }): void {
-    const renderedVisualKeys = new Set<string>();
+    const uniqueEvents = new Map<string, HostEventItem>();
 
     for (const event of events) {
         if (
@@ -77,26 +79,35 @@ export function drawHostEvents({
         }
 
         const visualKey = hostEventVisualKey(event);
-        if (renderedVisualKeys.has(visualKey)) {
-            continue;
-        }
-        renderedVisualKeys.add(visualKey);
-
         if (isHostEventReviewedForCurrentRoute(event.turn, visualKey)) {
             continue;
         }
+        if (!uniqueEvents.has(visualKey)) uniqueEvents.set(visualKey, event);
+    }
 
-        // Combat VCR and long-range explosion reports are separate factual
-        // evidence, but rendering both at the same current-turn coordinate
-        // produces two competing map controls for one incident. The VCR owns
-        // the actionable map marker; the report remains available in Reports.
-        if (hasCurrentCombatPosition(event.turn, event.x, event.y)) {
-            continue;
-        }
+    // Separate factual explosions at the same coordinates are not duplicates.
+    // Render one map notification for the location so labels never overlap,
+    // while Reports continues to contain every individual explosion fact.
+    const groups = new Map<string, HostEventItem[]>();
+    for (const event of uniqueEvents.values()) {
+        const key = positionKey(event);
+        const group = groups.get(key) ?? [];
+        group.push(event);
+        groups.set(key, group);
+    }
 
-        const key = hostEventKey(event);
-        const selected = key === selectedKey;
-        const markerY = renderY(event.y, bounds);
+    for (const group of groups.values()) {
+        group.sort((left, right) =>
+            normalizedEventLabel(left.ship_name).localeCompare(
+                normalizedEventLabel(right.ship_name),
+            ),
+        );
+
+        const first = group[0];
+        if (first.x === null || first.y === null) continue;
+
+        const selected = group.some((event) => hostEventKey(event) === selectedKey);
+        const markerY = renderY(first.y, bounds);
 
         const marker = new Graphics()
             .circle(0, 0, selected ? 5.5 : 4.5)
@@ -121,14 +132,17 @@ export function drawHostEvents({
                 alpha: 0.95,
             });
 
-        marker.position.set(event.x, markerY);
+        marker.position.set(first.x, markerY);
         marker.eventMode = "static";
         marker.cursor = "pointer";
 
+        const labelText = group.length === 1
+            ? first.ship_name
+                ? `Explosion · ${first.ship_name}`
+                : "Explosion"
+            : `Explosions ×${group.length}`;
         const label = new Text({
-            text: event.ship_name
-                ? `Explosion · ${event.ship_name}`
-                : "Explosion",
+            text: labelText,
             style: {
                 fill: selected ? 0xfff0b5 : 0xffa9ae,
                 fontFamily: "Inter, Arial, sans-serif",
@@ -141,19 +155,24 @@ export function drawHostEvents({
             },
             resolution: 2,
         });
-        label.position.set(event.x + 16, markerY - 7);
+        label.position.set(first.x + 16, markerY - 7);
         label.eventMode = "none";
 
         marker.on("pointertap", (pointerEvent) => {
             pointerEvent.stopPropagation();
 
-            // Map review state is presentation-only. Keep the factual report
-            // in history/Reports, but remove its notification immediately and
-            // remember that choice across a reload for this game + turn.
-            markHostEventReviewedForCurrentRoute(event.turn, visualKey);
+            // This is notification state only. Every factual report remains in
+            // Reports and provenance; reviewing the cluster merely removes the
+            // map notification for its individual explosion reports.
+            for (const event of group) {
+                markHostEventReviewedForCurrentRoute(
+                    event.turn,
+                    hostEventVisualKey(event),
+                );
+            }
             marker.visible = false;
             label.visible = false;
-            onSelect(event);
+            onSelect(first);
         });
 
         world.addChild(marker);
