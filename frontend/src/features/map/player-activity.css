@@ -172,12 +172,14 @@
     text-align: right;
 }
 
+.turn-timing-summary-row,
 .turn-timing-latency-row {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
 }
 
+.turn-timing-summary-row > span,
 .turn-timing-latency-row > span {
     display: flex;
     align-items: baseline;
@@ -188,6 +190,16 @@
     background: #0c1926;
     color: #7189a3;
     font-size: 10px;
+}
+
+.turn-timing-summary-row > span {
+    border: 1px solid #1c3044;
+    background: #0a1724;
+}
+
+.turn-timing-summary-row strong {
+    color: #a9c8e8;
+    font-size: 12px;
 }
 
 .turn-timing-latency-row strong {
@@ -218,6 +230,7 @@
         flex-direction: column;
     }
 
+    .turn-timing-summary-row,
     .turn-timing-latency-row {
         grid-template-columns: 1fr;
     }
