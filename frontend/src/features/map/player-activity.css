@@ -19,15 +19,75 @@
 }
 
 .turn-timing-panel-heading p {
-    max-width: 760px;
+    max-width: 800px;
     margin: 0;
     color: #8ca1bc;
     line-height: 1.45;
 }
 
+.turn-timing-time-reference {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+    margin-top: 9px;
+    color: #7189a4;
+    font-size: 10px;
+}
+
+.turn-timing-time-reference strong {
+    color: #a7bfd7;
+    font-size: 9px;
+    letter-spacing: 0.08em;
+}
+
+.turn-timing-heading-actions {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 8px;
+}
+
+.turn-timing-scope {
+    display: flex;
+    overflow: hidden;
+    border: 1px solid #2a4058;
+    border-radius: 7px;
+    background: #08121d;
+}
+
+.turn-timing-scope button {
+    padding: 7px 9px;
+    border: 0;
+    border-right: 1px solid #24384f;
+    background: transparent;
+    color: #7890aa;
+    font: inherit;
+    font-size: 10px;
+    cursor: pointer;
+}
+
+.turn-timing-scope button:last-child {
+    border-right: 0;
+}
+
+.turn-timing-scope button.is-active {
+    background: #173149;
+    color: #dbeafa;
+}
+
+.turn-timing-scope-note {
+    padding: 8px 10px;
+    border: 1px solid #21364d;
+    border-radius: 7px;
+    background: #0a1622;
+    color: #7790aa;
+    font-size: 10px;
+    line-height: 1.4;
+}
+
 .turn-timing-player-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(440px, 1fr));
     gap: 10px;
 }
 
@@ -96,7 +156,7 @@
     gap: 12px;
 }
 
-.turn-timing-histogram {
+.turn-timing-density {
     min-width: 0;
     padding: 9px 10px 7px;
     border: 1px solid #1f3146;
@@ -104,82 +164,114 @@
     background: #07101a;
 }
 
-.turn-timing-histogram-heading {
+.turn-timing-density-heading {
     display: flex;
     align-items: baseline;
     justify-content: space-between;
     gap: 8px;
-    margin-bottom: 6px;
+    margin-bottom: 3px;
 }
 
-.turn-timing-histogram-heading strong {
+.turn-timing-density-heading strong {
     color: #bccfe3;
     font-size: 11px;
 }
 
-.turn-timing-histogram-heading span {
+.turn-timing-density-heading span {
     color: #688099;
     font-size: 9px;
 }
 
-.turn-timing-bars {
-    display: grid;
-    grid-template-columns: repeat(24, minmax(0, 1fr));
-    align-items: end;
-    gap: 2px;
-    height: 78px;
-    padding-top: 5px;
-    border-bottom: 1px solid #26384d;
-    background:
-        linear-gradient(to top, rgba(91, 119, 149, 0.09) 1px, transparent 1px) 0 0 / 100% 25%;
-}
-
-.turn-timing-bar-cell {
-    display: flex;
-    height: 100%;
-    align-items: flex-end;
-    justify-content: stretch;
-}
-
-.turn-timing-bar {
+.turn-timing-density-svg {
+    display: block;
     width: 100%;
-    min-height: 0;
-    border-radius: 2px 2px 0 0;
-    background: #4b8fca;
-    box-shadow: 0 0 4px rgba(75, 143, 202, 0.38);
+    height: 94px;
+    overflow: visible;
 }
 
-.turn-timing-histogram.is-ready .turn-timing-bar {
-    background: #5cae78;
-    box-shadow: 0 0 4px rgba(92, 174, 120, 0.35);
+.turn-timing-grid-line {
+    stroke: rgba(91, 119, 149, 0.15);
+    stroke-width: 0.8;
+    vector-effect: non-scaling-stroke;
 }
 
-.turn-timing-axis {
+.turn-timing-density-area {
+    fill: rgba(73, 139, 198, 0.14);
+}
+
+.turn-timing-density-line {
+    fill: none;
+    stroke: #559bd4;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    vector-effect: non-scaling-stroke;
+}
+
+.turn-timing-density.is-ready .turn-timing-density-area {
+    fill: rgba(86, 171, 116, 0.13);
+}
+
+.turn-timing-density.is-ready .turn-timing-density-line {
+    stroke: #65b980;
+}
+
+.turn-timing-sample-tick {
+    stroke: #8299b2;
+    stroke-width: 1;
+    opacity: 0.7;
+    vector-effect: non-scaling-stroke;
+}
+
+.turn-timing-density.is-ready .turn-timing-sample-tick {
+    stroke: #83c89a;
+}
+
+.turn-timing-now-line {
+    stroke: #e1bd69;
+    stroke-width: 1;
+    stroke-dasharray: 3 3;
+    opacity: 0.68;
+    vector-effect: non-scaling-stroke;
+}
+
+.turn-timing-dual-axis {
     display: grid;
-    grid-template-columns: repeat(4, 1fr) auto;
-    margin-top: 4px;
+    grid-template-columns: 34px repeat(4, 1fr) auto;
+    align-items: center;
     color: #61768e;
     font-size: 8px;
+    font-variant-numeric: tabular-nums;
 }
 
-.turn-timing-axis span:nth-child(2),
-.turn-timing-axis span:nth-child(3),
-.turn-timing-axis span:nth-child(4) {
+.turn-timing-dual-axis.is-utc {
+    margin: 4px 0 -2px;
+}
+
+.turn-timing-dual-axis.is-local {
+    margin-top: -5px;
+}
+
+.turn-timing-dual-axis b {
+    color: #7891aa;
+    font-size: 7px;
+    letter-spacing: 0.06em;
+}
+
+.turn-timing-dual-axis span {
     text-align: center;
 }
 
-.turn-timing-axis span:last-child {
+.turn-timing-dual-axis span:last-child {
     text-align: right;
 }
 
-.turn-timing-summary-row,
 .turn-timing-latency-row {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
 }
 
-.turn-timing-summary-row > span,
 .turn-timing-latency-row > span {
     display: flex;
     align-items: baseline;
@@ -190,16 +282,6 @@
     background: #0c1926;
     color: #7189a3;
     font-size: 10px;
-}
-
-.turn-timing-summary-row > span {
-    border: 1px solid #1c3044;
-    background: #0a1724;
-}
-
-.turn-timing-summary-row strong {
-    color: #a9c8e8;
-    font-size: 12px;
 }
 
 .turn-timing-latency-row strong {
@@ -213,10 +295,24 @@
     line-height: 1.45;
 }
 
-@media (max-width: 900px) {
-    .turn-timing-player-grid,
+@media (max-width: 1050px) {
     .turn-timing-chart-grid {
         grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 900px) {
+    .turn-timing-player-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .turn-timing-panel-heading {
+        flex-direction: column;
+    }
+
+    .turn-timing-heading-actions {
+        width: 100%;
+        justify-content: space-between;
     }
 }
 
@@ -225,12 +321,20 @@
         grid-template-columns: 1fr;
     }
 
-    .turn-timing-panel-heading,
-    .turn-timing-player-card > header {
+    .turn-timing-player-card > header,
+    .turn-timing-heading-actions {
         flex-direction: column;
+        align-items: stretch;
     }
 
-    .turn-timing-summary-row,
+    .turn-timing-scope {
+        width: 100%;
+    }
+
+    .turn-timing-scope button {
+        flex: 1 1 0;
+    }
+
     .turn-timing-latency-row {
         grid-template-columns: 1fr;
     }
