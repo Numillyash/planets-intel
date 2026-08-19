@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import argparse
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from itertools import combinations
@@ -13,6 +13,24 @@ from app.db.session import SessionLocal
 from app.models.game import Game
 from app.models.game_player_slot import GamePlayerSlot
 from app.models.player_turn_activity_observation import PlayerTurnActivityObservation
+
+
+# These are activity/state labels that can occur in legacy or degraded slot
+# identity rows. They are not reliable Planets.nu account identities and must
+# never be grouped as if they were usernames for cross-game behavior analysis.
+NON_IDENTITY_USERNAMES = frozenset(
+    {
+        "dead",
+        "open",
+        "ready",
+        "ready marker",
+        "ready_marker",
+        "unopened",
+        "computer",
+        "unknown",
+        "empty",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -34,6 +52,11 @@ class TimingSample:
 
 def canonical_username(value: str) -> str:
     return " ".join(value.casefold().split())
+
+
+def is_reliable_username(value: str) -> bool:
+    canonical = canonical_username(value)
+    return bool(canonical) and canonical not in NON_IDENTITY_USERNAMES
 
 
 def parse_utc_offset(value: str) -> int:
@@ -84,6 +107,21 @@ def format_histogram(minutes: Iterable[int]) -> str:
     return " ".join(items) if items else "—"
 
 
+def cross_game_pairs(samples: Iterable[TimingSample]) -> list[tuple[TimingSample, TimingSample]]:
+    """Return only pairs from different games.
+
+    Cross-game behavioral comparison must never use two slots from the same
+    game, even if degraded identity data accidentally gave them the same
+    username.
+    """
+
+    return [
+        (left, right)
+        for left, right in combinations(samples, 2)
+        if left.game_id != right.game_id
+    ]
+
+
 def _sample_for_slot(
     slot: SlotRef,
     rows: list[PlayerTurnActivityObservation],
@@ -113,6 +151,18 @@ def _sample_for_slot(
         ready_minutes=tuple(ready),
         open_minutes=tuple(opened),
     )
+
+
+def _reliable_cross_game_slots(slots: list[SlotRef]) -> list[SlotRef]:
+    """Drop ambiguous same-game duplicate identities.
+
+    A real Planets.nu account can occupy at most one player slot in a game.
+    If the same canonical username appears in multiple slots of the same game,
+    that game's rows are not trustworthy identity evidence for this diagnostic.
+    """
+
+    counts = Counter(slot.game_id for slot in slots)
+    return [slot for slot in slots if counts[slot.game_id] == 1]
 
 
 def load_repeated_player_samples(
@@ -147,6 +197,8 @@ def load_repeated_player_samples(
     slots_by_user: dict[str, list[SlotRef]] = defaultdict(list)
     for slot, game in slot_rows:
         key = canonical_username(slot.username)
+        if not is_reliable_username(slot.username):
+            continue
         if usernames is not None and key not in usernames:
             continue
         slots_by_user[key].append(
@@ -159,7 +211,8 @@ def load_repeated_player_samples(
         )
 
     result: dict[str, list[TimingSample]] = {}
-    for username, slots in slots_by_user.items():
+    for username, raw_slots in slots_by_user.items():
+        slots = _reliable_cross_game_slots(raw_slots)
         unique_games = {slot.game_id for slot in slots}
         if len(unique_games) < 2:
             continue
@@ -178,9 +231,9 @@ def load_repeated_player_samples(
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
-            "Compare the same Planets.nu username across games using observed per-turn "
-            "Ready/Open time-of-day distributions. Ready is exact when turnreadydate is present; "
-            "Open is polling-bound."
+            "Compare the same reliable Planets.nu username across different games using "
+            "observed per-turn Ready/Open time-of-day distributions. Ready is exact when "
+            "turnreadydate is present; Open is polling-bound."
         )
     )
     parser.add_argument(
@@ -214,12 +267,13 @@ def main() -> None:
     )
 
     if not groups:
-        print("No usernames with observations in at least two games were found.")
+        print("No reliable usernames with observations in at least two different games were found.")
         return
 
     print("Cross-game player timing comparison")
     print("READY = Planets.nu turnreadydate when available; OPEN = first polling observation.")
     print("Overlap = hourly histogram intersection: 100% identical distribution, 0% disjoint hours.")
+    print("Ambiguous duplicate slot identities and activity-state placeholders are excluded.")
     print()
 
     for username, samples in sorted(groups.items()):
@@ -233,7 +287,7 @@ def main() -> None:
 
         eligible_pairs = 0
         ready_overlaps: list[float] = []
-        for left, right in combinations(samples, 2):
+        for left, right in cross_game_pairs(samples):
             if (
                 len(left.ready_minutes) < args.min_ready_samples
                 or len(right.ready_minutes) < args.min_ready_samples
@@ -253,7 +307,7 @@ def main() -> None:
 
         if eligible_pairs == 0:
             print(
-                f"No game pair has >= {args.min_ready_samples} Ready samples on both sides."
+                f"No different-game pair has >= {args.min_ready_samples} Ready samples on both sides."
             )
         elif ready_overlaps:
             print(
