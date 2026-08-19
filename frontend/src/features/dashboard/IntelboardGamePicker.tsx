@@ -1,14 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
-import {
-    getAccountGames,
-    getGame,
-    getPlanetsAccounts,
-} from "../../api/client";
-import {
-    readRememberedObserverId,
-    rememberObserverId,
-} from "../../lib/observerSelection";
+import { getAccountGames, getGame, getPlanetsAccounts } from "../../api/client";
+import { readRememberedObserverId, rememberObserverId } from "../../lib/observerSelection";
 import { raceName } from "../../lib/races";
 import type {
     AccountGameSummary,
@@ -39,10 +32,6 @@ function gamePath(observer: string, gameId: number): string {
     return `/intelboard/${encodeURIComponent(observer)}/${gameId}`;
 }
 
-function pickerPath(observer: string): string {
-    return `/intelboard/${encodeURIComponent(observer)}`;
-}
-
 function routedObserver(pathname: string): string | null {
     const match = pathname.match(/^\/intelboard\/([^/]+)\/?$/i);
     if (match === null) return null;
@@ -54,9 +43,7 @@ function routedObserver(pathname: string): string | null {
 }
 
 function sameObserver(left: string | null, right: string): boolean {
-    return left !== null && left.localeCompare(right, undefined, {
-        sensitivity: "accent",
-    }) === 0;
+    return left !== null && left.localeCompare(right, undefined, { sensitivity: "accent" }) === 0;
 }
 
 function isRunning(game: AccountGameSummary): boolean {
@@ -85,14 +72,10 @@ function observerPlayer(
     account: PlanetsAccountResponse,
 ): PlayerInfo | null {
     if (details === undefined) return null;
-
     if (account.planets_account_id !== null) {
-        const byId = details.players.find(
-            (player) => player.account_id === account.planets_account_id,
-        );
+        const byId = details.players.find((player) => player.account_id === account.planets_account_id);
         if (byId !== undefined) return byId;
     }
-
     const username = account.planets_username.trim().toLocaleLowerCase();
     return details.players.find(
         (player) => player.username.trim().toLocaleLowerCase() === username,
@@ -115,10 +98,6 @@ function officialTurnMarkerState(marker: string | undefined): PlayerTurnState | 
     if (normalized === "o") return "viewed";
     if (normalized === "x") return "inactive";
     if (normalized === "c") return "computer";
-
-    // Planets.nu games/list encodes a completed turn with a race marker.
-    // Treat every remaining non-whitespace marker as DONE instead of trying to
-    // reinterpret the race encoding locally (important for races 10+).
     return marker.trim() === "" ? null : "ready";
 }
 
@@ -131,7 +110,6 @@ function compactTurnStates(
     const states: PlayerTurnState[] = [];
     const account = officialTurnMarkerState(accountTurnStatus?.[slot - 1]);
     if (account !== null) states.push(account);
-
     if (loadInfoMatchesTurn) {
         const loadInfo = officialTurnMarkerState(loadInfoTurnStatus?.[slot - 1]);
         if (loadInfo !== null) states.push(loadInfo);
@@ -152,38 +130,22 @@ function gameTurnState(
         slot,
         loadInfoMatchesTurn,
     );
-
-    // Structural states are monotonic inside one game turn. Once either public
-    // game object reports a slot dead/inactive or computer, stale progress
-    // metadata from another endpoint must not resurrect it.
     if (compactStates.includes("inactive")) return "inactive";
     if (compactStates.includes("computer")) return "computer";
-
     if (player === null) {
         if (compactStates.includes("ready")) return "ready";
         if (compactStates.includes("viewed")) return "viewed";
         if (compactStates.includes("unopened")) return "unopened";
         return "empty";
     }
-
     if (loadInfoMatchesTurn) {
         if (player.race_id >= 100) return "computer";
         if (player.status !== 1) return "inactive";
     }
-
-    const loadInfo = loadInfoMatchesTurn
-        ? loadInfoTurnState(player)
-        : "unknown";
-
-    // Opening/submitting a turn is monotonic within one turn. games/list, the
-    // loadinfo game object, and loadinfo.players[] can be refreshed at slightly
-    // different moments, so the most advanced compatible factual state wins.
-    // This is especially important when one compact rail still says '_' while
-    // another public source already reports VIEWED.
+    const loadInfo = loadInfoMatchesTurn ? loadInfoTurnState(player) : "unknown";
     if (compactStates.includes("ready") || loadInfo === "ready") return "ready";
     if (compactStates.includes("viewed") || loadInfo === "viewed") return "viewed";
     if (compactStates.includes("unopened") || loadInfo === "unopened") return "unopened";
-
     return "unknown";
 }
 
@@ -199,50 +161,27 @@ function turnStateLabel(state: PlayerTurnState): string {
     }
 }
 
-function missedTurnClass(
-    player: PlayerInfo,
-    state: PlayerTurnState,
-    loadInfoMatchesTurn: boolean,
-): string {
+function missedTurnClass(player: PlayerInfo, state: PlayerTurnState, current: boolean): string {
     if (
-        !loadInfoMatchesTurn
-        || player.status !== 1
-        || player.race_id >= 100
-        || player.turns_missed === null
-        || player.turns_missed <= 0
-    ) {
-        return "";
-    }
-
+        !current || player.status !== 1 || player.race_id >= 100
+        || player.turns_missed === null || player.turns_missed <= 0
+    ) return "";
     if (player.turns_missed >= 3) return " is-missed-critical";
-    if (player.turns_missed === 2 && state !== "ready") {
-        return " is-missed-critical-risk";
-    }
+    if (player.turns_missed === 2 && state !== "ready") return " is-missed-critical-risk";
     if (player.turns_missed === 2) return " is-missed-warning";
     return " is-missed-watch";
 }
 
-function missedTurnLabel(
-    player: PlayerInfo,
-    state: PlayerTurnState,
-    loadInfoMatchesTurn: boolean,
-): string {
+function missedTurnLabel(player: PlayerInfo, state: PlayerTurnState, current: boolean): string {
     if (
-        !loadInfoMatchesTurn
-        || player.status !== 1
-        || player.race_id >= 100
-        || player.turns_missed === null
-        || player.turns_missed <= 0
-    ) {
-        return "";
-    }
-
+        !current || player.status !== 1 || player.race_id >= 100
+        || player.turns_missed === null || player.turns_missed <= 0
+    ) return "";
     const turns = player.turns_missed;
     const base = `${turns} consecutive missed turn${turns === 1 ? "" : "s"} reported by Planets.nu`;
-    if (turns === 2 && state !== "ready") {
-        return `${base} · current turn incomplete · critical drop risk if another turn is missed`;
-    }
-    return base;
+    return turns === 2 && state !== "ready"
+        ? `${base} · current turn incomplete · critical drop risk if another turn is missed`
+        : base;
 }
 
 function PlayerTurnRail({
@@ -260,11 +199,8 @@ function PlayerTurnRail({
     for (const player of details?.players ?? []) {
         if (player.slot_id > 0) bySlot.set(player.slot_id, player);
     }
-
     const loadInfoMatchesTurn = details?.game.turn === gameTurn;
-    const loadInfoTurnStatus = loadInfoMatchesTurn
-        ? details?.game.turn_status ?? null
-        : null;
+    const loadInfoTurnStatus = loadInfoMatchesTurn ? details?.game.turn_status ?? null : null;
     const slotCount = Math.max(
         slots,
         turnStatus?.length ?? 0,
@@ -273,18 +209,10 @@ function PlayerTurnRail({
         0,
     );
     if (slotCount <= 0) return null;
-
-    const densityClass = slotCount > 20
-        ? " is-very-dense"
-        : slotCount > 14
-            ? " is-dense"
-            : "";
+    const densityClass = slotCount > 20 ? " is-very-dense" : slotCount > 14 ? " is-dense" : "";
 
     return (
-        <div
-            aria-label={`Turn status for ${slotCount} player slots`}
-            className={`intelboard-turn-rail${densityClass}`}
-        >
+        <div aria-label={`Turn status for ${slotCount} player slots`} className={`intelboard-turn-rail${densityClass}`}>
             {Array.from({ length: slotCount }, (_, index) => {
                 const slot = index + 1;
                 const player = bySlot.get(slot) ?? null;
@@ -295,7 +223,6 @@ function PlayerTurnRail({
                     player,
                     loadInfoMatchesTurn,
                 );
-
                 if (player === null) {
                     return (
                         <span
@@ -307,26 +234,13 @@ function PlayerTurnRail({
                         </span>
                     );
                 }
-
-                const username = player.username.trim() || "computer";
-                const missedClass = missedTurnClass(
-                    player,
-                    state,
-                    loadInfoMatchesTurn,
-                );
-                const missedLabel = missedTurnLabel(
-                    player,
-                    state,
-                    loadInfoMatchesTurn,
-                );
+                const missedClass = missedTurnClass(player, state, loadInfoMatchesTurn);
+                const missedLabel = missedTurnLabel(player, state, loadInfoMatchesTurn);
                 return (
                     <span
                         className={`intelboard-turn-cell is-${state}${missedClass}`}
                         key={slot}
-                        title={
-                            `${raceName(player.race_id)} / slot ${slot} / ${username} · ${turnStateLabel(state)}`
-                            + (missedLabel ? ` · ${missedLabel}` : "")
-                        }
+                        title={`${raceName(player.race_id)} / slot ${slot} / ${player.username.trim() || "computer"} · ${turnStateLabel(state)}${missedLabel ? ` · ${missedLabel}` : ""}`}
                     >
                         {slot}
                     </span>
@@ -348,9 +262,7 @@ function GameRow({
     const player = observerPlayer(details, account);
     const running = isRunning(game);
     const loadInfoMatchesTurn = details?.game.turn === game.turn;
-    const loadInfoTurnStatus = loadInfoMatchesTurn
-        ? details?.game.turn_status ?? null
-        : null;
+    const loadInfoTurnStatus = loadInfoMatchesTurn ? details?.game.turn_status ?? null : null;
     const ownState = !running || player === null
         ? null
         : gameTurnState(
@@ -360,20 +272,14 @@ function GameRow({
             player,
             loadInfoMatchesTurn,
         );
-    const typeLabel = game.is_custom
-        ? "Custom"
-        : game.is_private
-            ? "Private"
-            : "Standard";
+    const typeLabel = game.is_custom ? "Custom" : game.is_private ? "Private" : "Standard";
 
     return (
         <button
             className="intelboard-game-row"
             onClick={() => {
                 rememberObserverId(account.id);
-                window.location.assign(
-                    gamePath(account.planets_username, game.id),
-                );
+                window.location.assign(gamePath(account.planets_username, game.id));
             }}
             type="button"
         >
@@ -383,23 +289,16 @@ function GameRow({
                     <h2>{game.name}</h2>
                     <p>{game.short_description || typeLabel}</p>
                 </div>
-                <span
-                    className={
-                        "intelboard-game-status"
-                        + (running ? " is-running" : "")
-                    }
-                >
+                <span className={`intelboard-game-status${running ? " is-running" : ""}`}>
                     {game.status_name}
                 </span>
             </div>
-
             <div className="intelboard-game-row-meta">
                 <span><strong>T{game.turn}</strong> turn</span>
                 <span><strong>{game.slots}</strong> slots</span>
                 <span><strong>{typeLabel}</strong></span>
                 <span className="intelboard-next-host">{game.time_to_host || "Host time unknown"}</span>
             </div>
-
             {player !== null && (
                 <div className="intelboard-observer-game-summary">
                     <span><strong>{player.planets ?? "—"}</strong> planets</span>
@@ -407,13 +306,11 @@ function GameRow({
                     <span><strong>{player.starbases ?? "—"}</strong> bases</span>
                     {ownState !== null && (
                         <span className={`intelboard-own-turn-state is-${ownState}`}>
-                            <i aria-hidden="true" />
-                            {turnStateLabel(ownState)}
+                            <i aria-hidden="true" />{turnStateLabel(ownState)}
                         </span>
                     )}
                 </div>
             )}
-
             {running && (
                 <PlayerTurnRail
                     details={details}
@@ -450,24 +347,14 @@ function AccountColumn({
 }) {
     const orderedGames = useMemo(() => sortedGames(games), [games]);
     const [profileImageFailed, setProfileImageFailed] = useState(false);
-
-    useEffect(() => {
-        setProfileImageFailed(false);
-    }, [account.profile_image_url]);
-
-    const showProfileImage = (
-        account.profile_image_url !== null
-        && account.profile_image_url.trim() !== ""
-        && !profileImageFailed
+    useEffect(() => setProfileImageFailed(false), [account.profile_image_url]);
+    const showProfileImage = Boolean(
+        account.profile_image_url?.trim() && !profileImageFailed,
     );
 
     return (
         <section className={`intelboard-account-column${selected ? " is-selected" : ""}`}>
-            <button
-                className="intelboard-account-header"
-                onClick={onSelect}
-                type="button"
-            >
+            <button className="intelboard-account-header" onClick={onSelect} type="button">
                 <div className="intelboard-account-avatar">
                     {showProfileImage ? (
                         <img
@@ -479,9 +366,7 @@ function AccountColumn({
                             src={account.profile_image_url ?? undefined}
                         />
                     ) : (
-                        <span aria-hidden="true">
-                            {accountInitials(account.planets_username)}
-                        </span>
+                        <span aria-hidden="true">{accountInitials(account.planets_username)}</span>
                     )}
                 </div>
                 <div>
@@ -519,10 +404,7 @@ function AccountColumn({
     );
 }
 
-export function IntelboardGamePicker({
-    user,
-    onLogout,
-}: IntelboardGamePickerProps) {
+export function IntelboardGamePicker({ user, onLogout }: IntelboardGamePickerProps) {
     const [accounts, setAccounts] = useState<PlanetsAccountResponse[]>([]);
     const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null);
     const [gamesByAccountId, setGamesByAccountId] = useState<Record<number, AccountGameSummary[]>>({});
@@ -535,7 +417,6 @@ export function IntelboardGamePicker({
 
     useEffect(() => {
         let cancelled = false;
-
         async function loadAccounts() {
             setLoadingAccounts(true);
             setError(null);
@@ -544,9 +425,7 @@ export function IntelboardGamePicker({
                 if (cancelled) return;
                 const active = response.accounts.filter((account) => account.is_active);
                 const routeObserver = routedObserver(window.location.pathname);
-                const routed = active.find((account) =>
-                    sameObserver(routeObserver, account.planets_username),
-                ) ?? null;
+                const routed = active.find((account) => sameObserver(routeObserver, account.planets_username)) ?? null;
                 const rememberedId = readRememberedObserverId();
                 const remembered = rememberedId === null
                     ? null
@@ -555,41 +434,28 @@ export function IntelboardGamePicker({
                 setAccounts(active);
                 setSelectedAccountId(selected?.id ?? null);
                 if (selected !== null) rememberObserverId(selected.id);
+                if (window.location.pathname !== "/intelboard") {
+                    window.history.replaceState(
+                        null,
+                        "",
+                        `/intelboard${window.location.search}${window.location.hash}`,
+                    );
+                }
             } catch (reason) {
                 if (!cancelled) {
-                    setError(
-                        reason instanceof Error
-                            ? reason.message
-                            : "Failed to load linked Planets.nu accounts",
-                    );
+                    setError(reason instanceof Error ? reason.message : "Failed to load linked Planets.nu accounts");
                 }
             } finally {
                 if (!cancelled) setLoadingAccounts(false);
             }
         }
-
         void loadAccounts();
-        return () => {
-            cancelled = true;
-        };
+        return () => { cancelled = true; };
     }, []);
 
-    const selectedAccount = accounts.find(
-        (account) => account.id === selectedAccountId,
-    ) ?? null;
-
     useEffect(() => {
-        if (selectedAccount === null) return;
-        rememberObserverId(selectedAccount.id);
-        const desiredPath = pickerPath(selectedAccount.planets_username);
-        if (window.location.pathname !== desiredPath) {
-            window.history.replaceState(
-                null,
-                "",
-                `${desiredPath}${window.location.search}${window.location.hash}`,
-            );
-        }
-    }, [selectedAccount]);
+        if (selectedAccountId !== null) rememberObserverId(selectedAccountId);
+    }, [selectedAccountId]);
 
     useEffect(() => {
         let cancelled = false;
@@ -602,7 +468,6 @@ export function IntelboardGamePicker({
         async function loadAllGames(initial: boolean) {
             if (initial) setLoadingGames(true);
             setError(null);
-
             const results = await Promise.all(
                 accounts.map(async (account) => {
                     try {
@@ -629,7 +494,6 @@ export function IntelboardGamePicker({
                 nextErrors[result.accountId] = result.error;
                 for (const game of result.games ?? []) gameIds.add(game.id);
             }
-
             const ids = Array.from(gameIds);
             const details = await Promise.allSettled(ids.map((gameId) => getGame(gameId)));
             if (cancelled) return;
@@ -648,9 +512,7 @@ export function IntelboardGamePicker({
             setErrorsByAccountId(nextErrors);
             setDetailsByGameId((previous) => {
                 const next = new Map(previous);
-                for (const [gameId, detailsValue] of refreshedDetails) {
-                    next.set(gameId, detailsValue);
-                }
+                for (const [gameId, detailsValue] of refreshedDetails) next.set(gameId, detailsValue);
                 return next;
             });
             if (initial) setLoadingGames(false);
@@ -684,7 +546,6 @@ export function IntelboardGamePicker({
                     <h1>Choose a game</h1>
                     <p>Each linked observer keeps its own operational game list and turn state.</p>
                 </div>
-
                 <div className="intelboard-game-menu-user">
                     <div>
                         <span>Signed in as</span>
@@ -716,10 +577,7 @@ export function IntelboardGamePicker({
                             error={errorsByAccountId[account.id] ?? null}
                             games={gamesByAccountId[account.id] ?? []}
                             key={account.id}
-                            onSelect={() => {
-                                rememberObserverId(account.id);
-                                setSelectedAccountId(account.id);
-                            }}
+                            onSelect={() => setSelectedAccountId(account.id)}
                             selected={account.id === selectedAccountId}
                         />
                     ))}
