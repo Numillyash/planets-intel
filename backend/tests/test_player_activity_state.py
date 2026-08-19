@@ -1,6 +1,11 @@
 import unittest
+from datetime import datetime, timedelta, timezone
 
-from app.services.player_activity import _activity_state, _player_turn_status
+from app.services.player_activity import (
+    _activity_state,
+    _minute_samples,
+    _player_turn_status,
+)
 
 
 class PlayerActivityStateTests(unittest.TestCase):
@@ -75,6 +80,21 @@ class PlayerActivityStateTests(unittest.TestCase):
         self.assertIsNone(_player_turn_status(False))
         self.assertEqual(_player_turn_status(0), 0)
         self.assertEqual(_player_turn_status(2), 2)
+
+    def test_minute_samples_keep_separate_morning_and_evening_modes(self) -> None:
+        samples = [
+            datetime(2026, 8, 1, 6, 15, tzinfo=timezone.utc),
+            datetime(2026, 8, 2, 18, 45, tzinfo=timezone.utc),
+            datetime(
+                2026,
+                8,
+                3,
+                9,
+                30,
+                tzinfo=timezone(timedelta(hours=3)),
+            ),
+        ]
+        self.assertEqual(_minute_samples(samples), [375, 1125, 390])
 
 
 if __name__ == "__main__":
