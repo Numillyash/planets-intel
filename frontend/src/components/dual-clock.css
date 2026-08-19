@@ -1,3 +1,11 @@
+.global-time-strip {
+    display: flex;
+    justify-content: flex-end;
+    padding: 6px clamp(18px, 3vw, 48px);
+    border-bottom: 1px solid #1a2a3c;
+    background: #060b12;
+}
+
 .dual-clock {
     display: flex;
     align-items: stretch;
@@ -52,6 +60,11 @@
 }
 
 @media (max-width: 620px) {
+    .global-time-strip {
+        justify-content: stretch;
+        padding: 6px 12px;
+    }
+
     .dual-clock {
         width: 100%;
         justify-content: stretch;
