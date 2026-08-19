@@ -204,11 +204,12 @@ def historical_host_events(
 def player_activity_analysis(
     game_id: int = Path(gt=0),
     through_turn: int | None = Query(default=None, gt=0),
-    _user: AppUser = Depends(require_user),
+    user: AppUser = Depends(require_user),
 ) -> dict[str, object]:
     return get_player_activity_analysis(
         game_id=game_id,
         through_turn=through_turn,
+        user_id=user.id,
     )
 
 
