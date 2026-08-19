@@ -204,14 +204,16 @@
 }
 
 @keyframes vcr-destruction-burst {
-    0% { opacity: 0; transform: translate(-50%, -50%) scale(0.2); }
-    18% { opacity: 1; transform: translate(-50%, -50%) scale(1.35); }
-    100% { opacity: 0; transform: translate(-50%, -50%) scale(4.4); }
+    0% { opacity: 0; visibility: visible; transform: translate(-50%, -50%) scale(0.2); }
+    18% { opacity: 1; visibility: visible; transform: translate(-50%, -50%) scale(1.35); }
+    99% { visibility: visible; }
+    100% { opacity: 0; visibility: hidden; transform: translate(-50%, -50%) scale(4.4); }
 }
 
 @keyframes vcr-destroyed-label {
-    0%, 55% { opacity: 1; }
-    100% { opacity: 0; }
+    0%, 55% { opacity: 1; visibility: visible; }
+    99% { visibility: visible; }
+    100% { opacity: 0; visibility: hidden; }
 }
 
 .vcr-shot-overlay {
