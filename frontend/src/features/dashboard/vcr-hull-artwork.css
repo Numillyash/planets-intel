@@ -1,21 +1,61 @@
 .vcr-player .vcr-battlefield {
-    min-height: 300px;
+    min-height: 330px;
 }
 
 .vcr-player .vcr-combat-object {
+    top: 50%;
+    display: block;
     width: 220px;
-    gap: 5px;
+    height: 0;
+    gap: 0;
     z-index: 4;
+    transform: translateX(-50%);
+    pointer-events: none;
+}
+
+.vcr-combat-visual {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    display: flex;
+    width: 200px;
+    height: 132px;
+    align-items: center;
+    justify-content: center;
+    transform: translate(-50%, -50%);
+}
+
+.vcr-combat-label {
+    position: absolute;
+    top: 72px;
+    left: 50%;
+    display: grid;
+    width: 210px;
+    gap: 3px;
+    transform: translateX(-50%);
+    text-align: center;
 }
 
 .vcr-player .vcr-combat-object strong {
+    display: block;
     max-width: 210px;
-    margin-top: 2px;
+    overflow: hidden;
+    margin: 0;
     line-height: 1.15;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .vcr-player .vcr-combat-object small {
+    display: block;
     line-height: 1.1;
+}
+
+.vcr-combat-label .is-destroyed-label {
+    color: #ff8f70;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
 }
 
 .vcr-hull-artwork-shell {
@@ -76,6 +116,54 @@
     display: block;
 }
 
+.vcr-combat-object.is-destroyed .vcr-hull-artwork-shell,
+.vcr-combat-object.is-destroyed .vcr-object-marker {
+    animation: vcr-object-destroy 850ms ease-out forwards;
+}
+
+.vcr-destruction-burst {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    z-index: 12;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    background: radial-gradient(circle, #fffbd0 0 12%, #ffd154 20%, #ff6b32 48%, rgba(255, 55, 24, 0.25) 70%, transparent 72%);
+    box-shadow:
+        0 0 18px rgba(255, 229, 126, 1),
+        0 0 42px rgba(255, 104, 42, 0.95),
+        0 0 72px rgba(255, 54, 31, 0.55);
+    animation: vcr-destruction-burst 900ms ease-out forwards;
+}
+
+.vcr-destruction-burst::before,
+.vcr-destruction-burst::after {
+    position: absolute;
+    inset: -12px;
+    border: 2px solid rgba(255, 184, 72, 0.8);
+    border-radius: 50%;
+    content: "";
+}
+
+.vcr-destruction-burst::after {
+    inset: -24px;
+    border-color: rgba(255, 89, 48, 0.55);
+}
+
+@keyframes vcr-object-destroy {
+    0% { opacity: 1; transform: scale(1); }
+    30% { opacity: 1; transform: scale(1.08); filter: brightness(2.2); }
+    100% { opacity: 0; transform: scale(0.18); filter: brightness(3); }
+}
+
+@keyframes vcr-destruction-burst {
+    0% { opacity: 0; transform: translate(-50%, -50%) scale(0.2); }
+    18% { opacity: 1; transform: translate(-50%, -50%) scale(1.35); }
+    100% { opacity: 0; transform: translate(-50%, -50%) scale(4.4); }
+}
+
 .vcr-shot-overlay {
     position: absolute;
     inset: 0;
@@ -127,7 +215,6 @@
 .vcr-torpedo-projectile {
     position: absolute;
     z-index: 5;
-    top: 50%;
     display: block;
     width: 34px;
     height: 12px;
@@ -152,6 +239,10 @@
 
 .vcr-torpedo-projectile.is-right {
     transform: translate(-50%, -50%) scaleX(-1);
+}
+
+.vcr-torpedo-projectile.is-miss-course {
+    opacity: 0.78;
 }
 
 .vcr-fighter {
@@ -201,13 +292,128 @@
     pointer-events: none;
 }
 
+.vcr-vital-bars {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.vcr-vital-bars label {
+    display: grid;
+    gap: 4px;
+}
+
+.vcr-vital-bars label > span {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 6px;
+    color: #7690ac;
+    font-size: 0.62rem;
+    text-transform: uppercase;
+}
+
+.vcr-vital-bars label > span strong {
+    color: #e9f3ff;
+    font-size: 0.75rem;
+}
+
+.vcr-vital-bars label > span small {
+    color: #667d97;
+    font-size: 0.52rem;
+    text-transform: none;
+}
+
+.vcr-vital-bars progress {
+    width: 100%;
+    height: 10px;
+    accent-color: #58a8e7;
+}
+
+.vcr-vital-bars .is-hull progress {
+    accent-color: #75c27f;
+}
+
+.vcr-status-card.is-destroyed .vcr-vital-bars .is-hull progress {
+    accent-color: #df654f;
+}
+
+.vcr-status-card dl {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.vcr-charge-bars {
+    gap: 7px;
+}
+
+.vcr-weapon-charge-row,
+.vcr-fighter-bays {
+    display: grid;
+    grid-template-columns: 70px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    color: #71869f;
+    font-size: 0.62rem;
+}
+
+.vcr-weapon-charge-slots {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(18px, 1fr));
+    gap: 3px;
+}
+
+.vcr-weapon-charge-slots progress {
+    width: 100%;
+    height: 8px;
+    accent-color: #72b7f0;
+}
+
+.vcr-fighter-bay-pips {
+    display: flex;
+    min-width: 0;
+    flex-wrap: wrap;
+    gap: 3px;
+}
+
+.vcr-fighter-bay-pips i {
+    display: block;
+    width: 7px;
+    height: 7px;
+    border: 1px solid #47789f;
+    border-radius: 2px;
+    background: #16344d;
+    box-shadow: 0 0 3px rgba(78, 162, 217, 0.3);
+}
+
+.vcr-fighter-bays small {
+    color: #6a829d;
+    white-space: nowrap;
+}
+
+.vcr-fighter-bays.is-launching .vcr-fighter-bay-pips i {
+    border-color: #8ce8aa;
+    background: #2e9a58;
+    box-shadow: 0 0 8px rgba(80, 222, 130, 0.75);
+}
+
 @media (max-width: 900px) {
     .vcr-player .vcr-battlefield {
-        min-height: 270px;
+        min-height: 300px;
     }
 
     .vcr-player .vcr-combat-object {
         width: 180px;
+    }
+
+    .vcr-combat-visual {
+        width: 170px;
+        height: 112px;
+    }
+
+    .vcr-combat-label {
+        top: 62px;
+        width: 175px;
     }
 
     .vcr-hull-artwork-shell,
@@ -222,5 +428,18 @@
 
     .vcr-player .vcr-combat-object strong {
         max-width: 175px;
+    }
+
+    .vcr-vital-bars {
+        grid-template-columns: 1fr;
+    }
+
+    .vcr-weapon-charge-row,
+    .vcr-fighter-bays {
+        grid-template-columns: 62px minmax(0, 1fr);
+    }
+
+    .vcr-fighter-bays small {
+        grid-column: 1 / -1;
     }
 }
