@@ -153,6 +153,30 @@ class VcrTraceFighterSafetyTests(unittest.TestCase):
                 self.assertIn("destroyed", side)
                 self.assertIn("bay_count", side)
 
+    def test_destroyed_transition_is_exposed_without_changing_result(self) -> None:
+        payload = _fighter_payload()
+        payload["right"]["shield"] = 0
+        payload["right"]["damage"] = 99
+
+        plain = replay_nuhost_from_nu_catalog(
+            payload,
+            beams=[],
+            torpedoes=[],
+            settings=SETTINGS,
+        )
+        traced = replay_nuhost_trace(
+            payload,
+            beams=[],
+            torpedoes=[],
+            settings=SETTINGS,
+        )
+
+        self.assertEqual(traced["result"], plain["result"])
+        self.assertTrue(traced["frames"][-1]["right"]["destroyed"])
+        self.assertTrue(
+            any("right_destroyed" in frame["events"] for frame in traced["frames"])
+        )
+
     def test_dogfight_kill_hook_emits_presentation_event_without_rng(self) -> None:
         engine = TracingNuHostClassicReplay(
             seed=17,
