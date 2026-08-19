@@ -505,9 +505,9 @@ export function CombatReplayPlayer({
                     setPlaying(false);
                     return current;
                 }
-                return Math.min(frames.length - 1, current + Math.max(1, Math.round(speed * 2)));
+                return Math.min(frames.length - 1, current + 1);
             });
-        }, 50);
+        }, Math.max(12, Math.round(50 / speed)));
         return () => window.clearInterval(timer);
     }, [frames, playing, speed]);
 
