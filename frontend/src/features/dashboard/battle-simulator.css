@@ -139,6 +139,13 @@
     margin-top: 10px;
 }
 
+/* The VCR-derived planner has exactly two editable ammo values per side.
+   Keep its cards balanced without changing the real three-toggle modifier
+   grid used by the standalone simulator. */
+.battle-sim-mean-grid .battle-sim-fields-3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .battle-sim-queue-column {
     border: 1px solid #1e3146;
     border-radius: 10px;
@@ -455,6 +462,7 @@
 @media (max-width: 680px) {
     .battle-sim-fields-4,
     .battle-sim-fields-3,
+    .battle-sim-mean-grid .battle-sim-fields-3,
     .battle-sim-weapon-row {
         grid-template-columns: 1fr;
     }
