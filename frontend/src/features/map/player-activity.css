@@ -1,0 +1,224 @@
+.turn-timing-panel {
+    padding: 18px 20px;
+}
+
+.turn-timing-panel-inner {
+    display: grid;
+    gap: 16px;
+}
+
+.turn-timing-panel-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 18px;
+}
+
+.turn-timing-panel-heading h2 {
+    margin: 4px 0 5px;
+}
+
+.turn-timing-panel-heading p {
+    max-width: 760px;
+    margin: 0;
+    color: #8ca1bc;
+    line-height: 1.45;
+}
+
+.turn-timing-player-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+    gap: 10px;
+}
+
+.turn-timing-player-card {
+    display: grid;
+    gap: 12px;
+    min-width: 0;
+    padding: 12px 14px;
+    border: 1px solid #24384f;
+    border-radius: 9px;
+    background: #09131e;
+}
+
+.turn-timing-player-card > header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.turn-timing-player-card > header > div {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+}
+
+.turn-timing-player-card > header strong {
+    overflow: hidden;
+    color: #e7f0fb;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.turn-timing-player-card > header small {
+    color: #718aa6;
+}
+
+.turn-timing-state {
+    flex: 0 0 auto;
+    padding: 3px 7px;
+    border: 1px solid #314861;
+    border-radius: 999px;
+    background: #0c1926;
+    color: #8fa8c3;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.turn-timing-state.is-ready,
+.turn-timing-state.is-ready_marker {
+    border-color: rgba(66, 157, 104, 0.7);
+    background: rgba(24, 87, 52, 0.34);
+    color: #86d4a5;
+}
+
+.turn-timing-state.is-open {
+    border-color: rgba(205, 147, 63, 0.72);
+    background: rgba(97, 66, 20, 0.36);
+    color: #e7ba70;
+}
+
+.turn-timing-chart-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.turn-timing-histogram {
+    min-width: 0;
+    padding: 9px 10px 7px;
+    border: 1px solid #1f3146;
+    border-radius: 7px;
+    background: #07101a;
+}
+
+.turn-timing-histogram-heading {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.turn-timing-histogram-heading strong {
+    color: #bccfe3;
+    font-size: 11px;
+}
+
+.turn-timing-histogram-heading span {
+    color: #688099;
+    font-size: 9px;
+}
+
+.turn-timing-bars {
+    display: grid;
+    grid-template-columns: repeat(24, minmax(0, 1fr));
+    align-items: end;
+    gap: 2px;
+    height: 78px;
+    padding-top: 5px;
+    border-bottom: 1px solid #26384d;
+    background:
+        linear-gradient(to top, rgba(91, 119, 149, 0.09) 1px, transparent 1px) 0 0 / 100% 25%;
+}
+
+.turn-timing-bar-cell {
+    display: flex;
+    height: 100%;
+    align-items: flex-end;
+    justify-content: stretch;
+}
+
+.turn-timing-bar {
+    width: 100%;
+    min-height: 0;
+    border-radius: 2px 2px 0 0;
+    background: #4b8fca;
+    box-shadow: 0 0 4px rgba(75, 143, 202, 0.38);
+}
+
+.turn-timing-histogram.is-ready .turn-timing-bar {
+    background: #5cae78;
+    box-shadow: 0 0 4px rgba(92, 174, 120, 0.35);
+}
+
+.turn-timing-axis {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr) auto;
+    margin-top: 4px;
+    color: #61768e;
+    font-size: 8px;
+}
+
+.turn-timing-axis span:nth-child(2),
+.turn-timing-axis span:nth-child(3),
+.turn-timing-axis span:nth-child(4) {
+    text-align: center;
+}
+
+.turn-timing-axis span:last-child {
+    text-align: right;
+}
+
+.turn-timing-latency-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.turn-timing-latency-row > span {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    background: #0c1926;
+    color: #7189a3;
+    font-size: 10px;
+}
+
+.turn-timing-latency-row strong {
+    color: #c9d8e8;
+}
+
+.turn-timing-note {
+    margin: 0;
+    color: #7187a4;
+    font-size: 10px;
+    line-height: 1.45;
+}
+
+@media (max-width: 900px) {
+    .turn-timing-player-grid,
+    .turn-timing-chart-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 560px) {
+    .turn-timing-player-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .turn-timing-panel-heading,
+    .turn-timing-player-card > header {
+        flex-direction: column;
+    }
+
+    .turn-timing-latency-row {
+        grid-template-columns: 1fr;
+    }
+}
