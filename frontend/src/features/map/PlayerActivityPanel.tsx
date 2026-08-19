@@ -2,11 +2,113 @@ import { useEffect, useState } from "react";
 import { getPlayerActivity } from "../../api/activity";
 import type { PlayerActivityItem } from "../../types/activity";
 
-function localTime(minute: number | null): string {
-    if (minute === null) return "learning";
-    const value = new Date();
-    value.setUTCHours(0, minute, 0, 0);
-    return value.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+function localHourCounts(utcMinutes: number[]): number[] {
+    const counts = Array.from({ length: 24 }, () => 0);
+    const offsetMinutes = -new Date().getTimezoneOffset();
+    for (const raw of utcMinutes) {
+        if (!Number.isFinite(raw)) continue;
+        const utc = Math.trunc(raw);
+        const localMinute = ((utc + offsetMinutes) % 1440 + 1440) % 1440;
+        counts[Math.floor(localMinute / 60)] += 1;
+    }
+    return counts;
+}
+
+function formatDelay(minutes: number | null): string {
+    if (minutes === null || !Number.isFinite(minutes)) return "—";
+    const rounded = Math.max(0, Math.round(minutes));
+    const hours = Math.floor(rounded / 60);
+    const rest = rounded % 60;
+    if (hours === 0) return `${rest}m`;
+    if (rest === 0) return `${hours}h`;
+    return `${hours}h ${rest}m`;
+}
+
+function TimingHistogram({
+    label,
+    values,
+    kind,
+}: {
+    label: string;
+    values: number[];
+    kind: "open" | "ready";
+}) {
+    const counts = localHourCounts(values);
+    const maximum = Math.max(1, ...counts);
+
+    return (
+        <div className={`turn-timing-histogram is-${kind}`}>
+            <div className="turn-timing-histogram-heading">
+                <strong>{label}</strong>
+                <span>{values.length} turn{values.length === 1 ? "" : "s"}</span>
+            </div>
+            <div
+                aria-label={`${label} local-time distribution`}
+                className="turn-timing-bars"
+                role="img"
+            >
+                {counts.map((count, hour) => (
+                    <span
+                        className="turn-timing-bar-cell"
+                        key={hour}
+                        title={`${String(hour).padStart(2, "0")}:00–${String(hour).padStart(2, "0")}:59 · ${count}`}
+                    >
+                        <span
+                            className="turn-timing-bar"
+                            style={{
+                                height: count === 0
+                                    ? 0
+                                    : `${Math.max(12, count * 100 / maximum)}%`,
+                            }}
+                        />
+                    </span>
+                ))}
+            </div>
+            <div className="turn-timing-axis" aria-hidden="true">
+                <span>00</span><span>06</span><span>12</span><span>18</span><span>24</span>
+            </div>
+        </div>
+    );
+}
+
+function ActivityCard({ item }: { item: PlayerActivityItem }) {
+    return (
+        <article className="turn-timing-player-card">
+            <header>
+                <div>
+                    <strong>{item.username}</strong>
+                    <small>slot {item.slot_id} · {item.prediction_confidence} confidence</small>
+                </div>
+                <span className={`turn-timing-state is-${item.current_state}`}>
+                    {item.current_state.split("_").join(" ")}
+                </span>
+            </header>
+
+            <div className="turn-timing-chart-grid">
+                <TimingHistogram
+                    kind="open"
+                    label="First observed open"
+                    values={item.open_utc_minutes ?? []}
+                />
+                <TimingHistogram
+                    kind="ready"
+                    label="Turn ready"
+                    values={item.ready_utc_minutes ?? []}
+                />
+            </div>
+
+            <div className="turn-timing-latency-row">
+                <span>
+                    Median open after host
+                    <strong>{formatDelay(item.median_open_after_host_minutes)}</strong>
+                </span>
+                <span>
+                    Median ready after host
+                    <strong>{formatDelay(item.median_ready_after_host_minutes)}</strong>
+                </span>
+            </div>
+        </article>
+    );
 }
 
 export function PlayerActivityPanel(props: {
@@ -43,7 +145,7 @@ export function PlayerActivityPanel(props: {
                 onClick={() => setOpen(true)}
                 type="button"
             >
-                Player activity · {items.length}
+                Turn timing · {items.length}
             </button>
         );
     }
@@ -51,27 +153,21 @@ export function PlayerActivityPanel(props: {
     const visibleItems = items.filter((item) => item.current_state !== "dead");
 
     return (
-        <section className={props.embedded ? "panel dashboard-embedded-panel" : undefined}>
-            <div
-                style={{
-                    maxHeight: props.embedded ? "none" : 260,
-                    overflowY: "auto",
-                    padding: props.embedded ? 0 : 8,
-                    border: props.embedded ? 0 : "1px solid rgba(57,71,93,.78)",
-                    borderRadius: props.embedded ? 0 : 8,
-                    background: props.embedded ? "transparent" : "rgba(8,13,21,.96)",
-                }}
-            >
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+        <section className={props.embedded ? "panel dashboard-embedded-panel turn-timing-panel" : undefined}>
+            <div className="turn-timing-panel-inner">
+                <div className="turn-timing-panel-heading">
                     <div>
-                        <div className="eyebrow">Turn status · T{props.throughTurn}</div>
-                        <strong>Player activity and readiness</strong>
+                        <div className="eyebrow">TURN TIMING · THROUGH T{props.throughTurn}</div>
+                        <h2>Player activity by local hour</h2>
+                        <p>
+                            Each bar is a per-turn observation. Multiple daily habits stay
+                            visible as separate peaks instead of being collapsed into one average.
+                        </p>
                     </div>
                     {!props.embedded && (
                         <button
                             className="secondary-button"
                             onClick={() => setOpen(false)}
-                            style={{ padding: "3px 7px" }}
                             type="button"
                         >
                             Hide
@@ -80,35 +176,20 @@ export function PlayerActivityPanel(props: {
                 </div>
 
                 {visibleItems.length === 0 ? (
-                    <p className="subtitle" style={{ marginTop: 10 }}>
-                        No activity samples are available yet.
-                    </p>
+                    <p className="subtitle">No activity samples are available yet.</p>
                 ) : (
-                    <div className="dashboard-activity-grid">
-                        {visibleItems.map((item) => {
-                            const minute = item.typical_open_utc_minute
-                                ?? item.typical_ready_utc_minute;
-                            return (
-                                <div className="dashboard-activity-card" key={item.slot_id}>
-                                    <div>
-                                        <strong>{item.username}</strong>
-                                        <span>{item.current_state}</span>
-                                    </div>
-                                    <small>
-                                        likely activity ~{localTime(minute)} · {item.prediction_confidence}
-                                    </small>
-                                    <small>
-                                        {item.open_samples} open · {item.ready_samples} ready samples
-                                    </small>
-                                </div>
-                            );
-                        })}
+                    <div className="turn-timing-player-grid">
+                        {visibleItems.map((item) => (
+                            <ActivityCard item={item} key={item.slot_id} />
+                        ))}
                     </div>
                 )}
 
-                <div style={{ color: "#7187a4", fontSize: 10, marginTop: 10 }}>
-                    Open time is first observed within the polling interval; Ready uses turnreadydate when available. This estimates game activity, not continuous online presence.
-                </div>
+                <p className="turn-timing-note">
+                    Times are shown in this browser&apos;s local timezone. First-open time is
+                    bounded by the polling interval; Ready uses Planets.nu turnreadydate when available.
+                    These observations describe game-turn activity, not continuous online presence.
+                </p>
             </div>
         </section>
     );
