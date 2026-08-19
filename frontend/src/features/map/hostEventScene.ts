@@ -1,6 +1,7 @@
 import { Container, Graphics, Text } from "pixi.js";
 
 import type { HostEventItem } from "../../types/activity";
+import { hasCurrentCombatPosition } from "./currentCombatMapRegistry";
 import { renderY, type MapBounds } from "./mapModel";
 
 
@@ -38,6 +39,14 @@ export function drawHostEvents({
             || event.x === null
             || event.y === null
         ) {
+            continue;
+        }
+
+        // Combat VCR and long-range explosion reports are separate factual
+        // evidence, but rendering both at the same current-turn coordinate
+        // produces two competing map controls for one incident. The VCR owns
+        // the actionable map marker; the report remains available in Reports.
+        if (hasCurrentCombatPosition(event.turn, event.x, event.y)) {
             continue;
         }
 
