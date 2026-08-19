@@ -4,6 +4,11 @@ import {
     getHistoricalCombinedIntel,
     getHistoricalPrivateIntel,
 } from "../../api/history";
+import {
+    readGameSurfaceRoute,
+    subscribeGameSurfaceRoute,
+    writeGameSurfaceRoute,
+} from "../../lib/uiRouteState";
 import type {
     GameDetailsResponse,
     LatestPrivateIntelResponse,
@@ -67,6 +72,12 @@ const TABS: Array<{ id: GameDashboardTab; label: string }> = [
     { id: "advantages", label: "Advantages" },
     { id: "settings", label: "Settings" },
 ];
+
+function dashboardTabFromRoute(value: string | null): GameDashboardTab {
+    return TABS.some((tab) => tab.id === value)
+        ? value as GameDashboardTab
+        : "dashboard";
+}
 
 function playerName(
     game: GameDetailsResponse,
@@ -135,14 +146,30 @@ export function GameDashboard({
     refreshing: boolean;
     onRefresh: () => void;
 }) {
-    const [activeTab, setActiveTab] =
-        useState<GameDashboardTab>("dashboard");
+    const [activeTab, setActiveTab] = useState<GameDashboardTab>(() => {
+        const route = readGameSurfaceRoute();
+        return route.view === "dashboard"
+            ? dashboardTabFromRoute(route.tab)
+            : "dashboard";
+    });
     const [dashboardTurn, setDashboardTurn] = useState(game.game.turn);
     const [historicalIntel, setHistoricalIntel] =
         useState<PrivateIntelMapResponse | null>(null);
     const [historicalLoading, setHistoricalLoading] = useState(false);
     const [historicalError, setHistoricalError] = useState<string | null>(null);
     const previousCurrentTurn = useRef(game.game.turn);
+
+    function selectTab(tab: GameDashboardTab) {
+        setActiveTab(tab);
+        writeGameSurfaceRoute("dashboard", tab);
+    }
+
+    useEffect(() => subscribeGameSurfaceRoute(() => {
+        const route = readGameSurfaceRoute();
+        if (route.view === "dashboard") {
+            setActiveTab(dashboardTabFromRoute(route.tab));
+        }
+    }), []);
 
     useEffect(() => {
         setDashboardTurn(game.game.turn);
@@ -253,7 +280,7 @@ export function GameDashboard({
                     <button
                         className={activeTab === tab.id ? "is-active" : ""}
                         key={tab.id}
-                        onClick={() => setActiveTab(tab.id)}
+                        onClick={() => selectTab(tab.id)}
                         type="button"
                     >
                         {tab.label}
@@ -303,62 +330,38 @@ export function GameDashboard({
                 {activeTab === "dashboard" && (
                     <>
                         <section className="summary-grid game-dashboard-summary">
-                            <button
-                                className="summary-card"
-                                onClick={() => setActiveTab("planets")}
-                                type="button"
-                            >
+                            <button className="summary-card" onClick={() => selectTab("planets")} type="button">
                                 <span>Planets</span>
                                 <strong>
                                     {historicalMode
                                         ? intelCounts?.planets ?? "—"
-                                        : myPlayer?.planets
-                                            ?? intelCounts?.planets
-                                            ?? "—"}
+                                        : myPlayer?.planets ?? intelCounts?.planets ?? "—"}
                                 </strong>
                             </button>
-                            <button
-                                className="summary-card"
-                                onClick={() => setActiveTab("starships")}
-                                type="button"
-                            >
+                            <button className="summary-card" onClick={() => selectTab("starships")} type="button">
                                 <span>Starships</span>
                                 <strong>
                                     {historicalMode
                                         ? intelCounts?.ships ?? "—"
-                                        : myPlayer?.ships
-                                            ?? intelCounts?.ships
-                                            ?? "—"}
+                                        : myPlayer?.ships ?? intelCounts?.ships ?? "—"}
                                 </strong>
                             </button>
-                            <button
-                                className="summary-card"
-                                onClick={() => setActiveTab("starbases")}
-                                type="button"
-                            >
+                            <button className="summary-card" onClick={() => selectTab("starbases")} type="button">
                                 <span>Starbases</span>
                                 <strong>
                                     {historicalMode
                                         ? intelCounts?.starbases ?? "—"
-                                        : myPlayer?.starbases
-                                            ?? intelCounts?.starbases
-                                            ?? "—"}
+                                        : myPlayer?.starbases ?? intelCounts?.starbases ?? "—"}
                                 </strong>
                             </button>
-                            <button
-                                className="summary-card"
-                                onClick={() => setActiveTab("scoreboard")}
-                                type="button"
-                            >
+                            <button className="summary-card" onClick={() => selectTab("scoreboard")} type="button">
                                 <span>Turn state</span>
                                 <strong>
                                     {historicalMode
                                         ? `Snapshot T${dashboardTurn}`
                                         : myPlayer?.turn_ready === null || myPlayer === null
                                             ? "—"
-                                            : myPlayer.turn_ready
-                                                ? "Ready"
-                                                : "Open"}
+                                            : myPlayer.turn_ready ? "Ready" : "Open"}
                                 </strong>
                             </button>
                             <div className="summary-card">
@@ -385,37 +388,23 @@ export function GameDashboard({
                                     </p>
                                 </div>
                                 {historicalMode ? (
-                                    <button
-                                        className="secondary-button"
-                                        onClick={returnToLive}
-                                        type="button"
-                                    >
+                                    <button className="secondary-button" onClick={returnToLive} type="button">
                                         Return to live
                                     </button>
                                 ) : (
-                                    <button
-                                        className="secondary-button"
-                                        disabled={refreshing}
-                                        onClick={onRefresh}
-                                        type="button"
-                                    >
+                                    <button className="secondary-button" disabled={refreshing} onClick={onRefresh} type="button">
                                         {refreshing ? "Syncing…" : "Refresh intel"}
                                     </button>
                                 )}
                             </div>
 
                             <div className="game-dashboard-launch-grid">
-                                {TABS.filter((tab) => tab.id !== "dashboard")
-                                    .map((tab) => (
-                                        <button
-                                            key={tab.id}
-                                            onClick={() => setActiveTab(tab.id)}
-                                            type="button"
-                                        >
-                                            <strong>{tab.label}</strong>
-                                            <small>Open section</small>
-                                        </button>
-                                    ))}
+                                {TABS.filter((tab) => tab.id !== "dashboard").map((tab) => (
+                                    <button key={tab.id} onClick={() => selectTab(tab.id)} type="button">
+                                        <strong>{tab.label}</strong>
+                                        <small>Open section</small>
+                                    </button>
+                                ))}
                             </div>
                         </section>
                     </>
@@ -451,10 +440,7 @@ export function GameDashboard({
                         <div className="panel-header">
                             <div>
                                 <h2>Planet List · T{dashboardTurn}</h2>
-                                <p>
-                                    {activeIntel?.planets.length ?? 0}
-                                    {" factual planet observations for this snapshot."}
-                                </p>
+                                <p>{activeIntel?.planets.length ?? 0}{" factual planet observations for this snapshot."}</p>
                             </div>
                         </div>
                         <div className="table-wrapper">
@@ -473,10 +459,7 @@ export function GameDashboard({
                                         return (
                                             <tr key={planet.planet_id}>
                                                 <td>{planet.planet_id}</td>
-                                                <td className="player-name">
-                                                    {planet.name
-                                                        ?? `Planet ${planet.planet_id}`}
-                                                </td>
+                                                <td className="player-name">{planet.name ?? `Planet ${planet.planet_id}`}</td>
                                                 <td>{playerName(game, planet.owner_id)}</td>
                                                 <td>{formatInteger(facts.clans)}</td>
                                                 <td>{formatInteger(facts.mines)}</td>
@@ -493,19 +476,8 @@ export function GameDashboard({
                     </section>
                 )}
 
-                {activeTab === "starships" && (
-                    <StarshipListPanel
-                        game={game}
-                        intel={activeIntel}
-                    />
-                )}
-
-                {activeTab === "starbases" && (
-                    <StarbaseListPanel
-                        game={game}
-                        intel={activeIntel}
-                    />
-                )}
+                {activeTab === "starships" && <StarshipListPanel game={game} intel={activeIntel} />}
+                {activeTab === "starbases" && <StarbaseListPanel game={game} intel={activeIntel} />}
 
                 {activeTab === "scoreboard" && (
                     <div className="game-dashboard-stack">
@@ -515,10 +487,7 @@ export function GameDashboard({
                             snapshotTurn={historicalMode ? dashboardTurn : null}
                         />
                         {history !== null && (
-                            <MilitaryScoreChart
-                                history={history.items}
-                                players={game.players}
-                            />
+                            <MilitaryScoreChart history={history.items} players={game.players} />
                         )}
                     </div>
                 )}
@@ -541,28 +510,18 @@ export function GameDashboard({
                 )}
 
                 {activeTab === "turn-timing" && (
-                    <PlayerActivityPanel
-                        embedded
-                        gameId={game.game.id}
-                        throughTurn={dashboardTurn}
-                    />
+                    <PlayerActivityPanel embedded gameId={game.game.id} throughTurn={dashboardTurn} />
                 )}
 
                 {activeTab === "diplomacy" && (
                     historicalMode ? (
-                        <HistoricalUnavailable
-                            title="Historical diplomacy snapshot unavailable"
-                            turn={dashboardTurn}
-                        >
+                        <HistoricalUnavailable title="Historical diplomacy snapshot unavailable" turn={dashboardTurn}>
                             Relations are currently stored as canonical live game metadata,
                             not as turn-indexed factual snapshots. Showing today's relations
                             here would falsely label current state as historical evidence.
                         </HistoricalUnavailable>
                     ) : (
-                        <DiplomacyPanel
-                            game={game}
-                            observerSlotId={mySlot}
-                        />
+                        <DiplomacyPanel game={game} observerSlotId={mySlot} />
                     )
                 )}
 
@@ -574,35 +533,26 @@ export function GameDashboard({
                         linkedAccountId={selectedAccount.id}
                         onOpenTurn={(turn) => {
                             setDashboardTurn(turn);
-                            setActiveTab("dashboard");
+                            selectTab("dashboard");
                         }}
                     />
                 )}
 
                 {activeTab === "advantages" && (
                     historicalMode ? (
-                        <HistoricalUnavailable
-                            title="Historical advantages snapshot unavailable"
-                            turn={dashboardTurn}
-                        >
+                        <HistoricalUnavailable title="Historical advantages snapshot unavailable" turn={dashboardTurn}>
                             Player advantage activation is not yet persisted as a
                             turn-indexed snapshot. The live advantage set is intentionally
                             hidden while browsing a historical turn.
                         </HistoricalUnavailable>
                     ) : (
-                        <AdvantagesPanel
-                            game={game}
-                            observerSlotId={mySlot}
-                        />
+                        <AdvantagesPanel game={game} observerSlotId={mySlot} />
                     )
                 )}
 
                 {activeTab === "settings" && (
                     historicalMode ? (
-                        <HistoricalUnavailable
-                            title="Historical game-settings snapshot unavailable"
-                            turn={dashboardTurn}
-                        >
+                        <HistoricalUnavailable title="Historical game-settings snapshot unavailable" turn={dashboardTurn}>
                             The current canonical game settings are not evidence that the
                             same mutable settings were active on this historical turn.
                         </HistoricalUnavailable>
