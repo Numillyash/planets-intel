@@ -131,13 +131,14 @@ function WeaponChargeRow({
 function SideStatus({
     label,
     side,
-    launching,
+    launchBayIndex,
 }: {
     label: string;
     side: VcrReplaySideFrame;
-    launching: boolean;
+    launchBayIndex: number | null;
 }) {
     const integrity = hullIntegrity(side);
+    const displayedBayCount = Math.min(30, side.bay_count);
     return (
         <article className={`vcr-status-card${side.destroyed ? " is-destroyed" : ""}`}>
             <div>
@@ -170,11 +171,17 @@ function SideStatus({
                 <WeaponChargeRow label="Beams" slots={side.beam_slots} />
                 <WeaponChargeRow label="Launchers" slots={side.launcher_slots} />
                 {side.bay_count > 0 && (
-                    <div className={`vcr-fighter-bays${launching ? " is-launching" : ""}`}>
+                    <div className="vcr-fighter-bays">
                         <span>Fighter bays</span>
-                        <div className="vcr-fighter-bay-pips" title="Classic combat uses a per-cycle launch roll; there is no continuous fighter-bay charge counter.">
-                            {Array.from({ length: Math.min(30, side.bay_count) }, (_, index) => (
-                                <i key={index} />
+                        <div
+                            className="vcr-fighter-bay-pips"
+                            title="Presentation-only sequential launch indicator. Classic combat exposes the launch event and bay count, but not which physical bay fired."
+                        >
+                            {Array.from({ length: displayedBayCount }, (_, index) => (
+                                <i
+                                    className={launchBayIndex === index ? "is-active" : undefined}
+                                    key={index}
+                                />
                             ))}
                         </div>
                         <small>{side.bay_count} bays · launch roll</small>
@@ -186,6 +193,7 @@ function SideStatus({
 }
 
 const TORPEDO_PRESENTATION_FRAMES = 12;
+const DESTRUCTION_PRESENTATION_FRAMES = 24;
 const MIN_SHIP_VISUAL_GAP_PERCENT = 28;
 const COMBAT_RAW_LEFT = 30;
 const COMBAT_RAW_RIGHT = 610;
@@ -233,6 +241,44 @@ function fighterTop(side: SideName, fighterIndex: number): number {
     return side === "left"
         ? FIGHTER_TOP_MIN + progress * (FIGHTER_TOP_MAX - FIGHTER_TOP_MIN)
         : FIGHTER_TOP_MAX - progress * (FIGHTER_TOP_MAX - FIGHTER_TOP_MIN);
+}
+
+function activeLaunchBayIndex(
+    frames: VcrReplayFrame[],
+    frameIndex: number,
+    side: SideName,
+    bayCount: number,
+): number | null {
+    const displayedBayCount = Math.min(30, bayCount);
+    if (displayedBayCount <= 0) return null;
+    const currentHasLaunch = (frames[frameIndex]?.effects ?? []).some(
+        (effect) => effect.kind === "fighter_launch" && effect.source === side,
+    );
+    if (!currentHasLaunch) return null;
+
+    let launches = 0;
+    for (let index = 0; index <= frameIndex; index += 1) {
+        launches += (frames[index]?.effects ?? []).filter(
+            (effect) => effect.kind === "fighter_launch" && effect.source === side,
+        ).length;
+    }
+    return Math.max(0, launches - 1) % displayedBayCount;
+}
+
+function recentDestructionKey(
+    frames: VcrReplayFrame[],
+    frameIndex: number,
+    side: SideName,
+): string | null {
+    const firstIndex = Math.max(0, frameIndex - DESTRUCTION_PRESENTATION_FRAMES + 1);
+    for (let index = frameIndex; index >= firstIndex; index -= 1) {
+        const currentDestroyed = sideFrame(frames[index], side).destroyed;
+        const previousDestroyed = index > 0
+            ? sideFrame(frames[index - 1], side).destroyed
+            : false;
+        if (currentDestroyed && !previousDestroyed) return `${side}-${index}`;
+    }
+    return null;
 }
 
 function trackById(
@@ -411,6 +457,25 @@ function Battlefield({
     const hitLeft = frame.events.includes("left_hit");
     const hitRight = frame.events.includes("right_hit");
     const effects = frame.effects ?? [];
+    const [dismissedDestructions, setDismissedDestructions] = useState<string[]>([]);
+
+    useEffect(() => {
+        setDismissedDestructions([]);
+    }, [frames]);
+
+    const leftDestructionKey = recentDestructionKey(frames, frameIndex, "left");
+    const rightDestructionKey = recentDestructionKey(frames, frameIndex, "right");
+    const showLeftDestruction = leftDestructionKey !== null
+        && !dismissedDestructions.includes(leftDestructionKey);
+    const showRightDestruction = rightDestructionKey !== null
+        && !dismissedDestructions.includes(rightDestructionKey);
+
+    function dismissDestruction(key: string | null): void {
+        if (key === null) return;
+        setDismissedDestructions((current) => (
+            current.includes(key) ? current : [...current, key]
+        ));
+    }
 
     const torpedoes: Array<{
         key: string;
@@ -462,9 +527,6 @@ function Battlefield({
         ...(frame.left.fighter_tracks ?? []).map((track) => ({ side: "left" as const, track })),
         ...(frame.right.fighter_tracks ?? []).map((track) => ({ side: "right" as const, track })),
     ];
-
-    const leftLaunching = effects.some((effect) => effect.kind === "fighter_launch" && effect.source === "left");
-    const rightLaunching = effects.some((effect) => effect.kind === "fighter_launch" && effect.source === "right");
 
     return (
         <div className="vcr-battlefield">
@@ -520,13 +582,29 @@ function Battlefield({
             >
                 <div className="vcr-combat-visual">
                     <CombatObjectArtwork facing="right" side={frame.left} />
-                    {frame.left.destroyed && <span aria-hidden="true" className="vcr-destruction-burst" />}
+                    {showLeftDestruction && (
+                        <button
+                            aria-label="Dismiss left destruction effect"
+                            className="vcr-destruction-burst"
+                            key={leftDestructionKey ?? "left-destruction"}
+                            onClick={() => dismissDestruction(leftDestructionKey)}
+                            type="button"
+                        />
+                    )}
                 </div>
-                <div className="vcr-combat-label">
-                    <strong>{frame.left.name ?? `#${frame.left.object_id ?? "?"}`}</strong>
-                    {frame.left.fighters_out > 0 && <small>{frame.left.fighters_out} fighters out</small>}
-                    {frame.left.destroyed && <small className="is-destroyed-label">destroyed</small>}
-                </div>
+                {(!frame.left.destroyed || showLeftDestruction) && (
+                    <div className={`vcr-combat-label${frame.left.destroyed ? " is-destroyed" : ""}`}>
+                        <strong>{frame.left.name ?? `#${frame.left.object_id ?? "?"}`}</strong>
+                        {frame.left.fighters_out > 0 && <small>{frame.left.fighters_out} fighters out</small>}
+                        {showLeftDestruction && (
+                            <button
+                                className="is-destroyed-label"
+                                onClick={() => dismissDestruction(leftDestructionKey)}
+                                type="button"
+                            >destroyed · click to dismiss</button>
+                        )}
+                    </div>
+                )}
             </div>
             <div
                 className={`vcr-combat-object ${sideMarkerClass(frame.right)}${hitRight ? " is-hit" : ""}${frame.right.destroyed ? " is-destroyed" : ""}`}
@@ -534,13 +612,29 @@ function Battlefield({
             >
                 <div className="vcr-combat-visual">
                     <CombatObjectArtwork facing="left" side={frame.right} />
-                    {frame.right.destroyed && <span aria-hidden="true" className="vcr-destruction-burst" />}
+                    {showRightDestruction && (
+                        <button
+                            aria-label="Dismiss right destruction effect"
+                            className="vcr-destruction-burst"
+                            key={rightDestructionKey ?? "right-destruction"}
+                            onClick={() => dismissDestruction(rightDestructionKey)}
+                            type="button"
+                        />
+                    )}
                 </div>
-                <div className="vcr-combat-label">
-                    <strong>{frame.right.name ?? `#${frame.right.object_id ?? "?"}`}</strong>
-                    {frame.right.fighters_out > 0 && <small>{frame.right.fighters_out} fighters out</small>}
-                    {frame.right.destroyed && <small className="is-destroyed-label">destroyed</small>}
-                </div>
+                {(!frame.right.destroyed || showRightDestruction) && (
+                    <div className={`vcr-combat-label${frame.right.destroyed ? " is-destroyed" : ""}`}>
+                        <strong>{frame.right.name ?? `#${frame.right.object_id ?? "?"}`}</strong>
+                        {frame.right.fighters_out > 0 && <small>{frame.right.fighters_out} fighters out</small>}
+                        {showRightDestruction && (
+                            <button
+                                className="is-destroyed-label"
+                                onClick={() => dismissDestruction(rightDestructionKey)}
+                                type="button"
+                            >destroyed · click to dismiss</button>
+                        )}
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -596,11 +690,17 @@ export function CombatReplayPlayer({
 
     if (frame === null) return <div className="error-card">Replay contains no frames.</div>;
 
-    const leftLaunching = (frame.effects ?? []).some(
-        (effect) => effect.kind === "fighter_launch" && effect.source === "left",
+    const leftLaunchBayIndex = activeLaunchBayIndex(
+        frames,
+        frameIndex,
+        "left",
+        frame.left.bay_count,
     );
-    const rightLaunching = (frame.effects ?? []).some(
-        (effect) => effect.kind === "fighter_launch" && effect.source === "right",
+    const rightLaunchBayIndex = activeLaunchBayIndex(
+        frames,
+        frameIndex,
+        "right",
+        frame.right.bay_count,
     );
 
     return (
@@ -612,8 +712,8 @@ export function CombatReplayPlayer({
             )}
             <Battlefield frame={frame} frameIndex={frameIndex} frames={frames} />
             <div className="vcr-status-grid">
-                <SideStatus label="LEFT" launching={leftLaunching} side={frame.left} />
-                <SideStatus label="RIGHT" launching={rightLaunching} side={frame.right} />
+                <SideStatus label="LEFT" launchBayIndex={leftLaunchBayIndex} side={frame.left} />
+                <SideStatus label="RIGHT" launchBayIndex={rightLaunchBayIndex} side={frame.right} />
             </div>
             <div className="vcr-controls">
                 <button
