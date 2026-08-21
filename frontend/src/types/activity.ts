@@ -91,3 +91,14 @@ export interface GameActivityResponse {
     count: number;
     items: GameActivityItem[];
 }
+
+export interface SendGameMessageResponse {
+    game_id: number;
+    linked_account_id: number;
+    sender_player_id: number;
+    recipient_player_ids: number[];
+    upstream_accepted: boolean;
+    reconciled: boolean;
+    upstream_html: string | null;
+    reconciliation_detail: string | null;
+}
