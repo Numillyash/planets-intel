@@ -393,9 +393,8 @@ function AccountColumn({
                         {orderedGames.map((game) => (
                             <GameRow
                                 account={account}
-                                detailsByGameId={detailsByGameId}
-                                error={errorsByAccountId[account.id] ?? null}
-                                games={gamesByAccountId[account.id] ?? []}
+                                details={detailsByGameId.get(game.id)}
+                                game={game}
                                 key={game.id}
                             />
                         ))}
