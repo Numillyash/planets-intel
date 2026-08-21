@@ -57,75 +57,93 @@ High-value items:
 - Finish Fight-or-Fail risk semantics from factual Host/game rules instead of generic missed-turn thresholds.
 - Continue accumulating `first open` polling observations and validate whether cross-game activity profiles remain useful at larger sample sizes.
 - Improve notification/review workflow for host reports, combat and communications without deleting factual history.
+- Expand cross-game player intelligence by canonical username where provenance and access scope are valid.
+- Improve combat/intel summaries so VCR, reports, score deltas and factual ship observations explain one another without collapsing fact/inference/simulation layers.
 
-### 2. Unified movement-phase model
+### 2. Diplomacy and communications write-path
 
-This is the largest missing deterministic planning subsystem in the durable architecture.
+This is now the preferred first upstream-write feature. It is intentionally narrower than ship/order submission.
+
+Current state:
+
+- Diplomacy is read-only and exposes factual/raw relation data.
+- Communications are available as read-side intelligence, but there is no IntelBoard compose/send workflow.
 
 Implement in this order:
 
-1. fuel consumption / reachability model;
-2. Tow resolution;
-3. integrate Tow ahead of normal movement / Move Most / Intercept;
-4. consolidate normal movement, warp wells, Tow, Intercept and unresolved envelopes into one reproducible `ShipPrediction` / movement-phase result;
-5. expose uncertainty explicitly when Host behavior or required facts are unavailable.
+1. Reverse/validate the Planets.nu endpoints and payload semantics for sending messages and changing diplomacy.
+2. Add a narrow authenticated backend adapter bound to one explicit linked observer/account.
+3. Add message composition in the Communications UI:
+   - explicit recipient(s);
+   - body preview;
+   - explicit Send action;
+   - refresh/reconcile after successful send;
+   - never silently retry a write.
+4. Add editable outgoing diplomacy in the Diplomacy UI:
+   - show current factual `you -> them` and `them -> you` separately;
+   - present only named relation states whose numeric mapping is validated;
+   - changing `you -> them` requires an explicit action/confirmation;
+   - refresh/reconcile from upstream after the write.
+5. Keep messages/diplomacy separate from Submit Turn and from local ship-order drafts.
 
-The result should feed both starmap prediction and turn review rather than maintain separate movement implementations.
+Writes must always be explicit, observer-scoped and auditable. A failed/unknown upstream response must not be presented as a successful change.
 
-### 3. Battle Planner -> operational planning integration
+### 3. Battle Planner -> intelligence integration
 
-The standalone simulator exists; next step is to connect it to real planning workflow.
+The standalone simulator exists. The near-term goal is intelligence support, not order automation.
 
-- launch scenarios directly from selected map ships/planets/VCR evidence;
+- launch scenarios directly from selected observed ships/planets/VCR evidence;
 - preserve `current factual`, `combat-time factual`, `manual assumption` and `simulation` provenance independently;
-- support sequential likely combats / battle-order review;
-- make result summaries usable from the map without treating simulated outcomes as intel facts.
+- compare observed enemy fleets against known/reconstructed friendly forces;
+- support sequential combat analysis where useful for threat assessment;
+- make result summaries usable from the map/intel surfaces without treating simulated outcomes as facts.
 
-### 4. Order drafting expansion
+### 4. Player / opponent dossiers
 
-Current local drafts are scaffolding. Expand explicit draftable orders while keeping all writes local:
+Build cross-game intelligence around canonical player identity where the user has access to the source games.
 
-- missions and mission parameters;
-- waypoint / warp / intercept / tow target;
-- cargo transfers where facts and API semantics are understood;
-- planet and starbase orders;
-- build orders;
-- validation against known game rules and available resources.
+Candidate evidence:
 
-No draft changes canonical observations.
+- Ready/Open activity profile across current games;
+- race/game participation;
+- historical score trends;
+- recurring ship/fleet patterns;
+- diplomacy history where factual data exists;
+- communications history available to the observer;
+- combat/VCR behavior and known carrier/loadout evidence.
 
-### 5. Turn review
+This should be descriptive intelligence first. Do not turn sparse history into personality claims or unsupported deterministic predictions.
 
-Build a single pre-submit review surface combining:
+### 5. Notification and review center
 
-- changed orders;
-- predicted movement with uncertainty;
-- fuel/resource validation;
-- likely combats / Battle Planner links;
-- unresolved warnings;
-- stale-observation/provenance warnings.
+Unify actionable intelligence notifications:
 
-This is the safety boundary before any upstream write path.
+- unread/new communications;
+- VCRs;
+- explosion/host reports;
+- notable score/military/PP changes;
+- Fight-or-Fail risk;
+- newly observed or materially changed enemy ships/fleets.
 
-### 6. Explicit Planets.nu write path
+Review state remains local UI state unless the upstream API itself has a factual read/unread state that is explicitly modeled.
 
-Only after draft and review semantics are stable:
+### Deferred: movement, fuel, Tow and turn-order workflow
 
-1. implement a narrow Planets.nu write adapter;
-2. save explicit reviewed orders upstream;
-3. keep submit-turn as a separate explicit action;
-4. reconcile saved/submitted state back against upstream facts;
-5. post-host reconciliation must distinguish accepted orders, changed facts and predictions that did not occur.
+Fuel modeling, Tow resolution, unified movement phases, expanded local order drafting, turn review and full Planets.nu order/submit-turn write paths are deliberately deferred.
+
+Reason: the currently active games on the linked accounts do not use fuel, and the product priority is intelligence/analysis rather than reproducing the complete turn-order client.
+
+Existing movement prediction remains available, but new work should not prioritize fuel/Tow until an active-game requirement or a higher-level product need makes it relevant.
 
 ## Recommended next feature after current deploy
 
-Start with **movement fuel model**, unless runtime testing reveals an operational-UI correctness defect that should block the milestone.
+Start with the **Diplomacy + Communications narrow write-path**, while continuing intelligence-only work in parallel.
 
-Why fuel first:
+Recommended sequence:
 
-- movement prediction already exists and is useful;
-- without fuel, reachability can still present physically impossible plans;
-- Tow depends on movement/fuel semantics and should follow immediately;
-- both are prerequisites for trustworthy turn review and eventual upstream submission.
-
-Priority Point attribution can be developed in parallel as an intelligence-only feature because it does not block the write-path architecture.
+1. validate and deploy the current Home/Accounts/nav checkpoint;
+2. reverse/confirm Planets.nu message and diplomacy write endpoints using the linked-account API model;
+3. implement message sending with explicit confirmation/reconciliation;
+4. implement editable outgoing diplomacy with validated relation-state mappings;
+5. return to Priority Point attribution, Fight-or-Fail semantics and opponent/cross-game intelligence;
+6. leave fuel/Tow/order submission deferred until they become relevant to active games.
