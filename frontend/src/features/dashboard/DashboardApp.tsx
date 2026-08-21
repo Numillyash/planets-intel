@@ -26,7 +26,6 @@ import type {
     PlanetsAccountResponse,
     ScoreHistoryResponse,
 } from "../../types/api";
-import { AccountSettings } from "../account/AccountSettings";
 import { PrivateIntelMap } from "../map/PrivateIntelMap";
 import { GameDashboard } from "./GameDashboard";
 
@@ -103,8 +102,6 @@ export function DashboardApp({
     const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null);
     const [accountsLoading, setAccountsLoading] = useState(true);
     const [accountsError, setAccountsError] = useState<string | null>(null);
-    const [accountsRevision, setAccountsRevision] = useState(0);
-    const [accountPageOpen, setAccountPageOpen] = useState(false);
 
     const [games, setGames] = useState<AccountGameSummary[]>([]);
     const [selectedGameId, setSelectedGameId] = useState<number | null>(null);
@@ -181,7 +178,7 @@ export function DashboardApp({
         return () => {
             cancelled = true;
         };
-    }, [accountsRevision, initialRoute.observer]);
+    }, [initialRoute.observer]);
 
     useEffect(() => {
         rememberObserverId(selectedAccountId);
@@ -460,57 +457,20 @@ export function DashboardApp({
         );
     }
 
-    if (accounts.length === 0 || accountPageOpen) {
+    if (accounts.length === 0) {
         return (
-            <main className="app-shell">
-                <header className="topbar">
-                    <div>
-                        <div className="eyebrow">Planets.nu Intel</div>
-                        <h1>Accounts</h1>
-                        <p className="subtitle">
-                            Linked Planets.nu observers, intel sharing and local account security.
-                        </p>
-                    </div>
-                    <div className="topbar-actions">
-                        {accounts.length > 0 && (
-                            <button
-                                className="secondary-button"
-                                onClick={() => setAccountPageOpen(false)}
-                                type="button"
-                            >
-                                Back to game
-                            </button>
-                        )}
-                        <div className="user-menu">
-                            <div>
-                                <span className="user-label">Signed in as</span>
-                                <strong>{user.display_name}</strong>
-                            </div>
-                            <button
-                                className="secondary-button"
-                                disabled={loggingOut}
-                                onClick={() => void handleLogout()}
-                                type="button"
-                            >
-                                {loggingOut ? "Signing out…" : "Sign out"}
-                            </button>
-                        </div>
-                    </div>
-                </header>
-
-                <AccountSettings
-                    accounts={accounts}
-                    onAccountsChanged={() =>
-                        setAccountsRevision((value) => value + 1)
-                    }
-                />
-
-                {accounts.length === 0 && (
-                    <div className="error-card" style={{ marginTop: 18 }}>
-                        <h1>No active observers</h1>
-                        <p>Link a Planets.nu account above to begin.</p>
-                    </div>
-                )}
+            <main className="app-shell centered-state">
+                <div className="error-card">
+                    <h1>No active observers</h1>
+                    <p>Manage linked Planets.nu accounts from the shared Games home.</p>
+                    <button
+                        className="secondary-button"
+                        onClick={() => window.location.assign("/intelboard")}
+                        type="button"
+                    >
+                        Open Games
+                    </button>
+                </div>
             </main>
         );
     }
@@ -529,13 +489,6 @@ export function DashboardApp({
                 </div>
 
                 <div className="topbar-actions">
-                    <button
-                        className="secondary-button"
-                        onClick={() => setAccountPageOpen(true)}
-                        type="button"
-                    >
-                        Accounts
-                    </button>
                     {game && (
                         <div className="game-status">
                             <span className="status-badge">{game.game.status_name}</span>
