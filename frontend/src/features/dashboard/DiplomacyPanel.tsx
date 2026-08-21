@@ -1,11 +1,25 @@
 import type { GameDetailsResponse } from "../../types/api";
 
+const RELATION_LABELS = new Map<number, string>([
+    [-1, "Blocked Communications"],
+    [0, "None"],
+    [1, "Send Ambassador"],
+    [2, "Safe Passage"],
+    [3, "Share Intel"],
+    [4, "Full Alliance"],
+]);
+
 function playerLabel(
     game: GameDetailsResponse,
     slotId: number,
 ): string {
     const player = game.players.find((item) => item.slot_id === slotId);
     return player ? `${player.username} · slot ${slotId}` : `slot ${slotId}`;
+}
+
+function relationLabel(value: number): string {
+    const named = RELATION_LABELS.get(value);
+    return named === undefined ? `Unknown code ${value}` : `${named} · ${value}`;
 }
 
 export function DiplomacyPanel({
@@ -45,9 +59,11 @@ export function DiplomacyPanel({
                 <div>
                     <h2>Diplomacy</h2>
                     <p>
-                        Relations from {playerLabel(game, observerSlotId)} only.
-                        Raw Nu relation codes are retained until a named-status
-                        mapping is explicitly validated.
+                        Relations for {playerLabel(game, observerSlotId)}.
+                        `relation_to` is your outgoing setting; `relation_from`
+                        is the other player's setting toward you. Known Nu codes
+                        are named below; unknown values remain explicit rather
+                        than being guessed.
                     </p>
                 </div>
             </div>
@@ -71,11 +87,11 @@ export function DiplomacyPanel({
                             <dl>
                                 <div>
                                     <dt>You → them</dt>
-                                    <dd>{relation.relation_from}</dd>
+                                    <dd>{relationLabel(relation.relation_to)}</dd>
                                 </div>
                                 <div>
                                     <dt>Them → you</dt>
-                                    <dd>{relation.relation_to}</dd>
+                                    <dd>{relationLabel(relation.relation_from)}</dd>
                                 </div>
                                 <div>
                                     <dt>Conflict</dt>
