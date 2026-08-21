@@ -7,6 +7,7 @@ from app.planetsnu.client import (
     PlanetsNuAmbiguousWriteError,
     PlanetsNuClient,
     PlanetsNuError,
+    _encode_nonpublic_text,
 )
 
 
@@ -107,6 +108,12 @@ class _CaptureWriteAsyncClient:
 
 
 class PlanetsNuClientTests(unittest.IsolatedAsyncioTestCase):
+    def test_nonpublic_message_text_escape_is_explicit(self):
+        self.assertEqual(
+            _encode_nonpublic_text("status & plans = ready"),
+            "status ||| plans ::: ready",
+        )
+
     async def test_load_turn_falls_back_direct_after_proxy_transport_failure(self):
         _FallbackAsyncClient.attempts = []
         client = PlanetsNuClient()
@@ -164,7 +171,7 @@ class PlanetsNuClientTests(unittest.IsolatedAsyncioTestCase):
             ["http://proxy.invalid:8080"],
         )
 
-    async def test_send_message_posts_form_encoded_fields_once(self):
+    async def test_send_message_posts_encoded_nonpublic_body_once(self):
         _CaptureWriteAsyncClient.attempts = []
         _CaptureWriteAsyncClient.requests = []
         client = PlanetsNuClient()
@@ -193,7 +200,7 @@ class PlanetsNuClientTests(unittest.IsolatedAsyncioTestCase):
                 "playerid": 4,
                 "apikey": "secret",
                 "to": "2,7",
-                "body": "status & plans = ready",
+                "body": "status ||| plans ::: ready",
             },
         )
 
