@@ -13,6 +13,10 @@ class PlanetsNuAuthError(PlanetsNuError):
     pass
 
 
+class PlanetsNuAmbiguousWriteError(PlanetsNuError):
+    """The write request may have reached Planets.nu but no response was received."""
+
+
 class PlanetsNuClient:
     def __init__(self) -> None:
         settings = get_settings()
@@ -30,6 +34,7 @@ class PlanetsNuClient:
         headers: dict[str, str] | None = None,
         use_proxy: bool = False,
         allow_proxy_fallback: bool = True,
+        ambiguous_write: bool = False,
     ) -> httpx.Response:
         """Perform one request path, optionally falling back direct after proxy transport failure.
 
@@ -37,9 +42,10 @@ class PlanetsNuClient:
         errors and API-level errors are handled by the caller and must not be
         retried through another path, because the server already answered.
 
-        Write callers must set ``allow_proxy_fallback=False``. A transport error
-        after a write request leaves delivery ambiguous; silently retrying the
-        same write through another route could duplicate the user action.
+        Write callers must set ``allow_proxy_fallback=False`` and
+        ``ambiguous_write=True``. A transport error after a write request leaves
+        delivery ambiguous; silently retrying the same write through another
+        route could duplicate the user action.
         """
 
         primary_proxy = self.proxy_url if use_proxy else None
@@ -67,7 +73,8 @@ class PlanetsNuClient:
                 route = "proxy" if proxy is not None else "direct"
                 failures.append(f"{route} {exc.__class__.__name__}")
 
-        raise PlanetsNuError(
+        error_type = PlanetsNuAmbiguousWriteError if ambiguous_write else PlanetsNuError
+        raise error_type(
             "Planets.nu request failed: " + "; ".join(failures)
         )
 
@@ -106,6 +113,7 @@ class PlanetsNuClient:
         headers: dict[str, str] | None = None,
         use_proxy: bool = False,
         allow_proxy_fallback: bool = True,
+        ambiguous_write: bool = False,
     ) -> Any:
         url = f"{self.base_url}/{path.lstrip('/')}"
 
@@ -116,6 +124,7 @@ class PlanetsNuClient:
             headers=headers,
             use_proxy=use_proxy,
             allow_proxy_fallback=allow_proxy_fallback,
+            ambiguous_write=ambiguous_write,
         )
 
         try:
@@ -281,6 +290,7 @@ class PlanetsNuClient:
             },
             use_proxy=True,
             allow_proxy_fallback=False,
+            ambiguous_write=True,
         )
 
         if not isinstance(payload, dict):
