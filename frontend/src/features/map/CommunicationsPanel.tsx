@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { getGameActivity } from "../../api/activity";
+import { getGameActivity, sendGameMessage } from "../../api/activity";
+import { getGame, getPlanetsAccounts } from "../../api/client";
+import type { PlayerInfo } from "../../types/api";
 import type { GameActivityItem } from "../../types/activity";
 
 
@@ -151,6 +153,27 @@ function replaceChatChannelInLocation(channelKey: string): void {
 }
 
 
+function playerMatchesChannel(
+    player: PlayerInfo,
+    channel: CommunicationChannel,
+): boolean {
+    if (channel.kind !== "private") return false;
+    const item = channel.items.find((candidate) =>
+        candidate.conversation_with_id !== null
+        || candidate.conversation_with_name !== null,
+    );
+    if (item === undefined) return false;
+    if (
+        item.conversation_with_id !== null
+        && player.account_id === item.conversation_with_id
+    ) {
+        return true;
+    }
+    const name = item.conversation_with_name?.trim().toLocaleLowerCase();
+    return Boolean(name && player.username.trim().toLocaleLowerCase() === name);
+}
+
+
 export function CommunicationsPanel(props: {
     gameId: number;
     linkedAccountId: number;
@@ -158,9 +181,21 @@ export function CommunicationsPanel(props: {
     const [items, setItems] = useState<GameActivityItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [refreshRevision, setRefreshRevision] = useState(0);
     const [selectedChannelKey, setSelectedChannelKey] = useState(
         () => chatChannelFromLocation(),
     );
+
+    const [players, setPlayers] = useState<PlayerInfo[]>([]);
+    const [senderSlotId, setSenderSlotId] = useState<number | null>(null);
+    const [rosterError, setRosterError] = useState<string | null>(null);
+    const [composeOpen, setComposeOpen] = useState(false);
+    const [recipientIds, setRecipientIds] = useState<number[]>([]);
+    const [draftBody, setDraftBody] = useState("");
+    const [sending, setSending] = useState(false);
+    const [sendError, setSendError] = useState<string | null>(null);
+    const [sendNotice, setSendNotice] = useState<string | null>(null);
+    const [sendWarning, setSendWarning] = useState<string | null>(null);
 
     useEffect(() => {
         const handlePopState = () => {
@@ -186,6 +221,50 @@ export function CommunicationsPanel(props: {
             })
             .finally(() => {
                 if (active) setLoading(false);
+            });
+        return () => { active = false; };
+    }, [props.gameId, props.linkedAccountId, refreshRevision]);
+
+    useEffect(() => {
+        let active = true;
+        setRosterError(null);
+        void Promise.all([
+            getGame(props.gameId),
+            getPlanetsAccounts(),
+        ])
+            .then(([game, accounts]) => {
+                if (!active) return;
+                const linked = accounts.accounts.find(
+                    (account) => account.id === props.linkedAccountId,
+                ) ?? null;
+                const sender = linked === null
+                    ? null
+                    : game.players.find(
+                        (player) =>
+                            linked.planets_account_id !== null
+                            && player.account_id === linked.planets_account_id,
+                    ) ?? game.players.find(
+                        (player) =>
+                            player.username.trim().toLocaleLowerCase()
+                            === linked.planets_username.trim().toLocaleLowerCase(),
+                    ) ?? null;
+                setPlayers(game.players);
+                setSenderSlotId(sender?.slot_id ?? null);
+                if (linked === null || sender === null) {
+                    setRosterError(
+                        "Writable observer slot could not be resolved from the current game roster.",
+                    );
+                }
+            })
+            .catch((reason: unknown) => {
+                if (!active) return;
+                setPlayers([]);
+                setSenderSlotId(null);
+                setRosterError(
+                    reason instanceof Error
+                        ? reason.message
+                        : "Failed to load message recipients",
+                );
             });
         return () => { active = false; };
     }, [props.gameId, props.linkedAccountId]);
@@ -256,6 +335,80 @@ export function CommunicationsPanel(props: {
     const privateChannels = channels.filter((channel) => channel.kind === "private");
     const generalChannel = channels.find((channel) => channel.kind === "general");
     const activityChannel = channels.find((channel) => channel.kind === "activity");
+    const recipientPlayers = players
+        .filter(
+            (player) =>
+                player.status === 1
+                && player.race_id < 100
+                && player.slot_id !== senderSlotId,
+        )
+        .sort((left, right) => left.slot_id - right.slot_id);
+
+    function openComposer(forChannel?: CommunicationChannel) {
+        setSendError(null);
+        setSendNotice(null);
+        setSendWarning(null);
+        if (forChannel?.kind === "private") {
+            const matched = recipientPlayers.find((player) =>
+                playerMatchesChannel(player, forChannel),
+            );
+            setRecipientIds(matched ? [matched.slot_id] : []);
+        } else {
+            setRecipientIds([]);
+        }
+        setComposeOpen(true);
+    }
+
+    function toggleRecipient(slotId: number) {
+        setRecipientIds((current) =>
+            current.includes(slotId)
+                ? current.filter((item) => item !== slotId)
+                : [...current, slotId].sort((left, right) => left - right),
+        );
+    }
+
+    async function handleSend() {
+        const body = draftBody.trim();
+        if (!body || recipientIds.length === 0 || sending) return;
+        const names = recipientPlayers
+            .filter((player) => recipientIds.includes(player.slot_id))
+            .map((player) => `${player.username} (slot ${player.slot_id})`);
+        const confirmed = window.confirm(
+            `Send this message via Planets.nu to ${names.join(", ")}?`,
+        );
+        if (!confirmed) return;
+
+        setSending(true);
+        setSendError(null);
+        setSendNotice(null);
+        setSendWarning(null);
+        try {
+            const result = await sendGameMessage(
+                props.gameId,
+                props.linkedAccountId,
+                recipientIds,
+                body,
+            );
+            if (result.upstream_accepted && result.reconciled) {
+                setSendNotice("Message sent and observed in the refreshed Planets.nu communications feed.");
+            } else if (result.upstream_accepted) {
+                setSendWarning(
+                    result.reconciliation_detail
+                    ?? "Planets.nu accepted the message, but the refreshed feed has not confirmed it yet.",
+                );
+            }
+            setDraftBody("");
+            setRecipientIds([]);
+            setComposeOpen(false);
+            setRefreshRevision((value) => value + 1);
+        } catch (reason) {
+            setSendError(
+                reason instanceof Error ? reason.message : "Message send failed",
+            );
+        } finally {
+            setSending(false);
+        }
+    }
 
     return (
         <section className="panel dashboard-embedded-panel">
@@ -269,7 +422,119 @@ export function CommunicationsPanel(props: {
                         chronological order. System and diplomacy records stay in Activity.
                     </p>
                 </div>
+                <button
+                    className="primary-button"
+                    disabled={rosterError !== null || recipientPlayers.length === 0}
+                    onClick={() => openComposer(selectedChannel)}
+                    type="button"
+                >
+                    {selectedChannel?.kind === "private" ? "Reply" : "New message"}
+                </button>
             </div>
+
+            {sendNotice && <div className="auth-success" role="status">{sendNotice}</div>}
+            {sendWarning && <div className="intelboard-account-warning" role="status">{sendWarning}</div>}
+            {sendError && <div className="auth-error" role="alert">{sendError}</div>}
+            {rosterError && <p>{rosterError}</p>}
+
+            {composeOpen && (
+                <div
+                    className="panel"
+                    style={{
+                        marginBottom: 16,
+                        padding: 16,
+                        borderColor: "rgba(95, 167, 255, 0.46)",
+                    }}
+                >
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+                        <div>
+                            <div className="eyebrow">Explicit Planets.nu write</div>
+                            <h3 style={{ margin: "3px 0 4px" }}>Compose message</h3>
+                            <small>
+                                IntelBoard sends once. A lost response is reported as unknown delivery and is never retried automatically.
+                            </small>
+                        </div>
+                        <button
+                            className="secondary-button"
+                            disabled={sending}
+                            onClick={() => setComposeOpen(false)}
+                            type="button"
+                        >
+                            Cancel
+                        </button>
+                    </div>
+
+                    <div style={{ marginTop: 14 }}>
+                        <div className="eyebrow">Recipients</div>
+                        <div
+                            style={{
+                                display: "grid",
+                                gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
+                                gap: 7,
+                                marginTop: 8,
+                            }}
+                        >
+                            {recipientPlayers.map((player) => (
+                                <label
+                                    key={player.slot_id}
+                                    style={{
+                                        display: "flex",
+                                        gap: 8,
+                                        alignItems: "center",
+                                        padding: "8px 10px",
+                                        border: "1px solid rgba(104, 127, 151, 0.28)",
+                                        borderRadius: 8,
+                                    }}
+                                >
+                                    <input
+                                        checked={recipientIds.includes(player.slot_id)}
+                                        disabled={sending}
+                                        onChange={() => toggleRecipient(player.slot_id)}
+                                        type="checkbox"
+                                    />
+                                    <span>
+                                        <strong>{player.username}</strong>
+                                        <small style={{ display: "block" }}>slot {player.slot_id}</small>
+                                    </span>
+                                </label>
+                            ))}
+                        </div>
+                    </div>
+
+                    <label style={{ display: "block", marginTop: 14 }}>
+                        <span className="eyebrow">Message</span>
+                        <textarea
+                            disabled={sending}
+                            maxLength={20000}
+                            onChange={(event) => setDraftBody(event.target.value)}
+                            placeholder="Write a Planets.nu in-game message…"
+                            rows={6}
+                            style={{ width: "100%", marginTop: 8, resize: "vertical" }}
+                            value={draftBody}
+                        />
+                    </label>
+
+                    <div
+                        style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            gap: 12,
+                            alignItems: "center",
+                            marginTop: 10,
+                        }}
+                    >
+                        <small>{draftBody.length.toLocaleString()} / 20,000</small>
+                        <button
+                            className="primary-button"
+                            disabled={sending || recipientIds.length === 0 || !draftBody.trim()}
+                            onClick={() => void handleSend()}
+                            type="button"
+                        >
+                            {sending ? "Sending…" : `Send to ${recipientIds.length}`}
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {loading && <p>Loading communications…</p>}
             {error && <p>{error}</p>}
