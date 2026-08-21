@@ -29,17 +29,22 @@ class PlanetsNuClient:
         data: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
         use_proxy: bool = False,
+        allow_proxy_fallback: bool = True,
     ) -> httpx.Response:
-        """Perform a request, retrying direct after a proxy transport failure.
+        """Perform one request path, optionally falling back direct after proxy transport failure.
 
         The fallback is deliberately limited to transport failures. HTTP status
         errors and API-level errors are handled by the caller and must not be
         retried through another path, because the server already answered.
+
+        Write callers must set ``allow_proxy_fallback=False``. A transport error
+        after a write request leaves delivery ambiguous; silently retrying the
+        same write through another route could duplicate the user action.
         """
 
         primary_proxy = self.proxy_url if use_proxy else None
         attempts: list[str | None] = [primary_proxy]
-        if primary_proxy is not None:
+        if primary_proxy is not None and allow_proxy_fallback:
             attempts.append(None)
 
         failures: list[str] = []
@@ -100,6 +105,7 @@ class PlanetsNuClient:
         data: dict[str, Any],
         headers: dict[str, str] | None = None,
         use_proxy: bool = False,
+        allow_proxy_fallback: bool = True,
     ) -> Any:
         url = f"{self.base_url}/{path.lstrip('/')}"
 
@@ -109,6 +115,7 @@ class PlanetsNuClient:
             data=data,
             headers=headers,
             use_proxy=use_proxy,
+            allow_proxy_fallback=allow_proxy_fallback,
         )
 
         try:
@@ -239,6 +246,51 @@ class PlanetsNuClient:
                 "Planets.nu loadturn response has no rst object"
             )
 
+        return payload
+
+    async def send_message(
+        self,
+        *,
+        game_id: int,
+        player_id: int,
+        api_key: str,
+        recipient_player_ids: list[int],
+        body: str,
+    ) -> dict[str, Any]:
+        """Send one explicit in-game message without any transport retry.
+
+        Planets.nu accepts a comma-separated list of recipient player slots on
+        ``game/sendmessage``. We use a form POST so ordinary ``&``/``=`` text is
+        encoded by the HTTP client rather than applying the old query-string
+        substitution convention used by legacy clients.
+        """
+
+        payload = await self.post_form(
+            "game/sendmessage",
+            data={
+                "gameid": game_id,
+                "playerid": player_id,
+                "apikey": api_key,
+                "to": ",".join(str(item) for item in recipient_player_ids),
+                "body": body,
+            },
+            headers={
+                "Origin": "https://planets.nu",
+                "Referer": "https://planets.nu/",
+                "User-Agent": "Mozilla/5.0",
+            },
+            use_proxy=True,
+            allow_proxy_fallback=False,
+        )
+
+        if not isinstance(payload, dict):
+            raise PlanetsNuError(
+                "Planets.nu sendmessage response is not an object"
+            )
+        if payload.get("success") is False:
+            raise PlanetsNuError(
+                str(payload.get("error", "Planets.nu sendmessage failed"))
+            )
         return payload
 
     async def load_info(
