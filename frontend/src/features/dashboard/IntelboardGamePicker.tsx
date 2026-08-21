@@ -10,6 +10,7 @@ import type {
     PlanetsAccountResponse,
     PlayerInfo,
 } from "../../types/api";
+import { AccountSettings } from "../account/AccountSettings";
 import "./intelboard-game-picker.css";
 
 interface IntelboardGamePickerProps {
@@ -392,8 +393,9 @@ function AccountColumn({
                         {orderedGames.map((game) => (
                             <GameRow
                                 account={account}
-                                details={detailsByGameId.get(game.id)}
-                                game={game}
+                                detailsByGameId={detailsByGameId}
+                                error={errorsByAccountId[account.id] ?? null}
+                                games={gamesByAccountId[account.id] ?? []}
                                 key={game.id}
                             />
                         ))}
@@ -406,6 +408,7 @@ function AccountColumn({
 
 export function IntelboardGamePicker({ user, onLogout }: IntelboardGamePickerProps) {
     const [accounts, setAccounts] = useState<PlanetsAccountResponse[]>([]);
+    const [accountsRevision, setAccountsRevision] = useState(0);
     const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null);
     const [gamesByAccountId, setGamesByAccountId] = useState<Record<number, AccountGameSummary[]>>({});
     const [errorsByAccountId, setErrorsByAccountId] = useState<Record<number, string | null>>({});
@@ -451,7 +454,7 @@ export function IntelboardGamePicker({ user, onLogout }: IntelboardGamePickerPro
         }
         void loadAccounts();
         return () => { cancelled = true; };
-    }, []);
+    }, [accountsRevision]);
 
     useEffect(() => {
         if (selectedAccountId !== null) rememberObserverId(selectedAccountId);
@@ -461,7 +464,9 @@ export function IntelboardGamePicker({ user, onLogout }: IntelboardGamePickerPro
         let cancelled = false;
         if (accounts.length === 0) {
             setGamesByAccountId({});
+            setErrorsByAccountId({});
             setDetailsByGameId(new Map());
+            setLoadingGames(false);
             return () => { cancelled = true; };
         }
 
@@ -562,12 +567,21 @@ export function IntelboardGamePicker({ user, onLogout }: IntelboardGamePickerPro
                 </div>
             </header>
 
+            <div style={{ marginBottom: 14 }}>
+                <AccountSettings
+                    accounts={accounts}
+                    onAccountsChanged={() => setAccountsRevision((value) => value + 1)}
+                />
+            </div>
+
             {loadingAccounts || loadingGames ? (
                 <div className="intelboard-game-menu-state">Loading observers and games…</div>
             ) : error !== null ? (
                 <div className="intelboard-game-menu-state is-error">{error}</div>
             ) : accounts.length === 0 ? (
-                <div className="intelboard-game-menu-state">No active Planets.nu observers are linked.</div>
+                <div className="intelboard-game-menu-state">
+                    No active Planets.nu observers are linked. Open Account settings above to link one.
+                </div>
             ) : (
                 <section className="intelboard-account-grid">
                     {accounts.map((account) => (
