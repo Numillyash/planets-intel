@@ -17,6 +17,17 @@ class PlanetsNuAmbiguousWriteError(PlanetsNuError):
     """The write request may have reached Planets.nu but no response was received."""
 
 
+def _encode_nonpublic_text(value: str) -> str:
+    """Apply the legacy Planets.nu non-public API text escaping convention.
+
+    This is separate from ordinary form/url encoding. Historical client/API
+    documentation specifies these substitutions for message text so literal
+    ampersands and equals signs are not interpreted as protocol separators.
+    """
+
+    return value.replace("&", "|||").replace("=", ":::")
+
+
 class PlanetsNuClient:
     def __init__(self) -> None:
         settings = get_settings()
@@ -266,13 +277,7 @@ class PlanetsNuClient:
         recipient_player_ids: list[int],
         body: str,
     ) -> dict[str, Any]:
-        """Send one explicit in-game message without any transport retry.
-
-        Planets.nu accepts a comma-separated list of recipient player slots on
-        ``game/sendmessage``. We use a form POST so ordinary ``&``/``=`` text is
-        encoded by the HTTP client rather than applying the old query-string
-        substitution convention used by legacy clients.
-        """
+        """Send one explicit in-game message without any transport retry."""
 
         payload = await self.post_form(
             "game/sendmessage",
@@ -281,7 +286,7 @@ class PlanetsNuClient:
                 "playerid": player_id,
                 "apikey": api_key,
                 "to": ",".join(str(item) for item in recipient_player_ids),
-                "body": body,
+                "body": _encode_nonpublic_text(body),
             },
             headers={
                 "Origin": "https://planets.nu",
