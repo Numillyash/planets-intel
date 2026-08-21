@@ -21,6 +21,10 @@ class CommunicationWriteError(RuntimeError):
     pass
 
 
+class CommunicationWriteUpstreamError(CommunicationWriteError):
+    """Planets.nu returned a definite error for the requested write."""
+
+
 class CommunicationWriteAmbiguousError(CommunicationWriteError):
     """The upstream write may have succeeded but IntelBoard received no answer."""
 
@@ -166,8 +170,11 @@ def _validate_recipients(
 def _activity_ids(activity: dict[str, object] | None) -> set[int]:
     if activity is None:
         return set()
+    items = activity.get("items")
+    if not isinstance(items, list):
+        return set()
     result: set[int] = set()
-    for item in activity.get("items", []):
+    for item in items:
         if not isinstance(item, dict):
             continue
         value = item.get("activity_id")
@@ -186,6 +193,9 @@ def _reconciled_message(
 ) -> bool:
     if activity is None:
         return False
+    items = activity.get("items")
+    if not isinstance(items, list):
+        return False
 
     expected_body = _message_key(body)
     concrete_targets = {
@@ -193,7 +203,7 @@ def _reconciled_message(
         for value in recipient_account_ids.values()
         if value is not None
     }
-    for item in activity.get("items", []):
+    for item in items:
         if not isinstance(item, dict):
             continue
         activity_id = item.get("activity_id")
@@ -201,7 +211,8 @@ def _reconciled_message(
             continue
         if item.get("source_id") != sender_planets_account_id:
             continue
-        if _message_key(item.get("message") if isinstance(item.get("message"), str) else None) != expected_body:
+        raw_message = item.get("message")
+        if _message_key(raw_message if isinstance(raw_message, str) else None) != expected_body:
             continue
 
         # For a single direct recipient, require the factual target account when
@@ -243,7 +254,10 @@ async def send_owned_game_message(
     api_key = decrypt_credential(str(account["api_key_encrypted"]))
     try:
         client = PlanetsNuClient()
-        current = await client.load_turn(game_id=game_id, api_key=api_key)
+        try:
+            current = await client.load_turn(game_id=game_id, api_key=api_key)
+        except PlanetsNuError as exc:
+            raise CommunicationWriteUpstreamError(str(exc)) from exc
         sender_player_id, sender_planets_account_id = _validate_sender(
             payload=current,
             account=account,
@@ -269,7 +283,7 @@ async def send_owned_game_message(
                 "IntelBoard did not retry the write. Refresh communications before sending again."
             ) from exc
         except PlanetsNuError as exc:
-            raise CommunicationWriteError(str(exc)) from exc
+            raise CommunicationWriteUpstreamError(str(exc)) from exc
     finally:
         del api_key
 
