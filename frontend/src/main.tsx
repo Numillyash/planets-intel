@@ -178,9 +178,11 @@ function App() {
 
     if (!user) return <LoginScreen onLogin={handleLogin} />;
 
-    // /intelboard is a bootstrap URL. Once the picker resolves an observer it
-    // canonicalizes itself to /intelboard/<observer>. Keep both forms routed to
-    // the picker; /intelboard/<observer>/<game> remains the dashboard route.
+    // /intelboard is the canonical shared game/account home. Legacy
+    // /intelboard/<observer> links are still routed to the picker and are
+    // canonicalized there. /intelboard/<observer>/<game> remains the
+    // observer-aware operational game route because private-intel provenance
+    // can differ between linked observers.
     const gamePickerRoute = /^\/intelboard(?:\/[^/]+)?\/?$/i.test(
         window.location.pathname,
     );
