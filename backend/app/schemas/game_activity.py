@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 ActivityKind = Literal[
@@ -37,3 +37,37 @@ class GameActivityResponse(BaseModel):
     linked_account_id: int
     count: int = Field(ge=0)
     items: list[GameActivityItemResponse]
+
+
+class SendGameMessageRequest(BaseModel):
+    linked_account_id: int = Field(gt=0)
+    recipient_player_ids: list[int] = Field(min_length=1, max_length=31)
+    body: str = Field(min_length=1, max_length=20000)
+
+    @field_validator("recipient_player_ids")
+    @classmethod
+    def validate_recipients(cls, value: list[int]) -> list[int]:
+        if any(isinstance(item, bool) or item <= 0 for item in value):
+            raise ValueError("recipient player ids must be positive integers")
+        deduplicated = list(dict.fromkeys(value))
+        if not deduplicated:
+            raise ValueError("select at least one recipient")
+        return deduplicated
+
+    @field_validator("body")
+    @classmethod
+    def validate_body(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("message body must not be blank")
+        return value
+
+
+class SendGameMessageResponse(BaseModel):
+    game_id: int
+    linked_account_id: int
+    sender_player_id: int
+    recipient_player_ids: list[int]
+    upstream_accepted: bool
+    reconciled: bool
+    upstream_html: str | None = None
+    reconciliation_detail: str | None = None
