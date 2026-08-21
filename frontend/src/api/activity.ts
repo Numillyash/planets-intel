@@ -2,7 +2,20 @@ import type {
     GameActivityResponse,
     HostEventsResponse,
     PlayerActivityResponse,
+    SendGameMessageResponse,
 } from "../types/activity";
+
+
+async function responseError(response: Response): Promise<string> {
+    let detail = `${response.status} ${response.statusText}`;
+    try {
+        const payload = await response.json() as { detail?: string };
+        if (payload.detail) detail = payload.detail;
+    } catch {
+        // Keep the status fallback.
+    }
+    return detail;
+}
 
 
 async function apiGet<T>(url: string): Promise<T> {
@@ -14,14 +27,7 @@ async function apiGet<T>(url: string): Promise<T> {
     });
 
     if (!response.ok) {
-        let detail = `${response.status} ${response.statusText}`;
-        try {
-            const payload = await response.json() as { detail?: string };
-            if (payload.detail) detail = payload.detail;
-        } catch {
-            // Keep the status fallback.
-        }
-        throw new Error(`API request failed: ${detail}`);
+        throw new Error(`API request failed: ${await responseError(response)}`);
     }
 
     return response.json() as Promise<T>;
@@ -60,4 +66,35 @@ export function getGameActivity(
     return apiGet<GameActivityResponse>(
         `/api/games/${gameId}/communications?linked_account_id=${linkedAccountId}&limit=${limit}`,
     );
+}
+
+
+export async function sendGameMessage(
+    gameId: number,
+    linkedAccountId: number,
+    recipientPlayerIds: number[],
+    body: string,
+): Promise<SendGameMessageResponse> {
+    const response = await fetch(
+        `/api/games/${gameId}/communications/messages`,
+        {
+            method: "POST",
+            credentials: "same-origin",
+            headers: {
+                Accept: "application/json",
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                linked_account_id: linkedAccountId,
+                recipient_player_ids: recipientPlayerIds,
+                body,
+            }),
+        },
+    );
+
+    if (!response.ok) {
+        throw new Error(`Message send failed: ${await responseError(response)}`);
+    }
+
+    return response.json() as Promise<SendGameMessageResponse>;
 }
