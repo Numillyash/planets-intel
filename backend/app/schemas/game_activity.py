@@ -10,12 +10,17 @@ ActivityKind = Literal[
     "player_message",
     "unclassified",
 ]
+ActivityVisibilitySource = Literal[
+    "ingame_activity",
+    "private_activity",
+]
 
 
 class GameActivityItemResponse(BaseModel):
     activity_id: int
     activity_type: int | None
     scope: int | None
+    visibility_source: ActivityVisibilitySource | None = None
     turn: int | None
     parent_id: int | None
     source_id: int | None
