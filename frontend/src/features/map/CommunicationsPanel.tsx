@@ -64,9 +64,9 @@ function threadedOrder(items: GameActivityItem[]): GameActivityItem[] {
     for (const item of items) {
         const parentId = item.parent_id;
         if (
-            parentId !== null &&
-            parentId > 0 &&
-            byId.has(parentId)
+            parentId !== null
+            && parentId > 0
+            && byId.has(parentId)
         ) {
             const children = childrenByParent.get(parentId) ?? [];
             children.push(item);
@@ -94,9 +94,6 @@ function threadedOrder(items: GameActivityItem[]): GameActivityItem[] {
     };
 
     for (const root of roots) appendThread(root);
-
-    // Fail closed on malformed/cyclic reply graphs: keep every factual record,
-    // but do not fabricate a parent relationship that is absent from the feed.
     for (const item of newestFirst(items)) appendThread(item);
 
     return ordered;
@@ -113,7 +110,18 @@ function newestKey(items: GameActivityItem[]): string {
 }
 
 
+function normalizedConversationPlayerIds(item: GameActivityItem): number[] {
+    return [...new Set(item.conversation_player_ids ?? [])]
+        .filter((value) => Number.isInteger(value) && value > 0)
+        .sort((left, right) => left - right);
+}
+
+
 function privateChannelKey(item: GameActivityItem): string {
+    const playerIds = normalizedConversationPlayerIds(item);
+    if (playerIds.length > 0) {
+        return `private:slots:${playerIds.join(",")}`;
+    }
     if (item.conversation_with_id !== null) {
         return `private:${item.conversation_with_id}`;
     }
@@ -154,24 +162,36 @@ function replaceChatChannelInLocation(channelKey: string): void {
 }
 
 
-function playerMatchesChannel(
-    player: PlayerInfo,
+function recipientIdsForChannel(
     channel: CommunicationChannel,
-): boolean {
-    if (channel.kind !== "private") return false;
+    players: PlayerInfo[],
+): number[] {
+    if (channel.kind !== "private") return [];
+
+    for (const item of channel.items) {
+        const ids = normalizedConversationPlayerIds(item);
+        if (ids.length > 0) return ids;
+    }
+
     const item = channel.items.find((candidate) =>
         candidate.conversation_with_id !== null
         || candidate.conversation_with_name !== null,
     );
-    if (item === undefined) return false;
-    if (
-        item.conversation_with_id !== null
-        && player.account_id === item.conversation_with_id
-    ) {
-        return true;
+    if (item === undefined) return [];
+
+    if (item.conversation_with_id !== null) {
+        const player = players.find(
+            (candidate) => candidate.account_id === item.conversation_with_id,
+        );
+        return player ? [player.slot_id] : [];
     }
+
     const name = item.conversation_with_name?.trim().toLocaleLowerCase();
-    return Boolean(name && player.username.trim().toLocaleLowerCase() === name);
+    if (!name) return [];
+    const player = players.find(
+        (candidate) => candidate.username.trim().toLocaleLowerCase() === name,
+    );
+    return player ? [player.slot_id] : [];
 }
 
 
@@ -219,7 +239,11 @@ export function CommunicationsPanel(props: {
             .catch((reason: unknown) => {
                 if (!active) return;
                 setItems([]);
-                setError(reason instanceof Error ? reason.message : "Failed to load communications");
+                setError(
+                    reason instanceof Error
+                        ? reason.message
+                        : "Failed to load communications",
+                );
             })
             .finally(() => {
                 if (active) setLoading(false);
@@ -274,9 +298,15 @@ export function CommunicationsPanel(props: {
     const channels = useMemo<CommunicationChannel[]>(() => {
         const general = items.filter((item) => item.kind === "player_message");
         const activity = items.filter(
-            (item) => item.kind === "system" || item.kind === "diplomacy" || item.kind === "unclassified",
+            (item) =>
+                item.kind === "system"
+                || item.kind === "diplomacy"
+                || item.kind === "unclassified",
         );
-        const privateGroups = new Map<string, { label: string; items: GameActivityItem[] }>();
+        const privateGroups = new Map<
+            string,
+            { label: string; items: GameActivityItem[] }
+        >();
 
         for (const item of items) {
             if (item.kind !== "private_message") continue;
@@ -333,7 +363,9 @@ export function CommunicationsPanel(props: {
         replaceChatChannelInLocation(channelKey);
     }
 
-    const selectedChannel = channels.find((channel) => channel.key === selectedChannelKey) ?? channels[0];
+    const selectedChannel = channels.find(
+        (channel) => channel.key === selectedChannelKey,
+    ) ?? channels[0];
     const privateChannels = channels.filter((channel) => channel.kind === "private");
     const generalChannel = channels.find((channel) => channel.kind === "general");
     const activityChannel = channels.find((channel) => channel.kind === "activity");
@@ -351,11 +383,14 @@ export function CommunicationsPanel(props: {
         setSendNotice(null);
         setSendWarning(null);
         if (forChannel?.kind === "private") {
-            const matched = recipientPlayers.find((player) =>
-                playerMatchesChannel(player, forChannel),
+            const channelRecipients = recipientIdsForChannel(
+                forChannel,
+                recipientPlayers,
+            ).filter((slotId) =>
+                recipientPlayers.some((player) => player.slot_id === slotId),
             );
             setComposeMode("private");
-            setRecipientIds(matched ? [matched.slot_id] : []);
+            setRecipientIds(channelRecipients);
         } else {
             setComposeMode("general");
             setRecipientIds([]);
@@ -366,9 +401,7 @@ export function CommunicationsPanel(props: {
     function chooseComposeMode(mode: ComposeMode) {
         setComposeMode(mode);
         setSendError(null);
-        if (mode === "general") {
-            setRecipientIds([]);
-        }
+        if (mode === "general") setRecipientIds([]);
     }
 
     function toggleRecipient(slotId: number) {
@@ -382,19 +415,17 @@ export function CommunicationsPanel(props: {
     async function handleSend() {
         const body = draftBody.trim();
         if (!body || sending) return;
-        if (composeMode === "general") {
-            setSendError(
-                "Public Board write is not connected yet: Planets.nu uses a separate posting path, and IntelBoard will not guess its payload.",
-            );
-            return;
-        }
-        if (recipientIds.length === 0) return;
+        if (composeMode === "private" && recipientIds.length === 0) return;
 
+        const recipients = composeMode === "general" ? [] : recipientIds;
         const names = recipientPlayers
-            .filter((player) => recipientIds.includes(player.slot_id))
+            .filter((player) => recipients.includes(player.slot_id))
             .map((player) => `${player.username} (slot ${player.slot_id})`);
+        const destination = composeMode === "general"
+            ? "the Public Board"
+            : names.join(", ");
         const confirmed = window.confirm(
-            `Send this private message via Planets.nu to ${names.join(", ")}?`,
+            `Send this ${composeMode === "general" ? "public" : "private"} message via Planets.nu to ${destination}?`,
         );
         if (!confirmed) return;
 
@@ -406,12 +437,14 @@ export function CommunicationsPanel(props: {
             const result = await sendGameMessage(
                 props.gameId,
                 props.linkedAccountId,
-                recipientIds,
+                recipients,
                 body,
             );
             if (result.upstream_accepted && result.reconciled) {
                 setSendNotice(
-                    "Private message sent and observed in the refreshed Planets.nu communications feed.",
+                    composeMode === "general"
+                        ? "Public Board message sent and observed in the refreshed Planets.nu communications feed."
+                        : "Private message sent and observed in the refreshed Planets.nu communications feed.",
                 );
             } else if (result.upstream_accepted) {
                 setSendWarning(
@@ -434,12 +467,11 @@ export function CommunicationsPanel(props: {
 
     const sendDisabled = sending
         || !draftBody.trim()
-        || composeMode === "general"
-        || recipientIds.length === 0;
+        || (composeMode === "private" && recipientIds.length === 0);
     const sendLabel = sending
         ? "Sending…"
         : composeMode === "general"
-            ? "Public Board write not connected"
+            ? "Post to Public Board"
             : `Send privately to ${recipientIds.length}`;
 
     return (
@@ -449,9 +481,9 @@ export function CommunicationsPanel(props: {
                     <div className="eyebrow">Observer communications</div>
                     <h2>Communications</h2>
                     <p>
-                        General chat and direct conversations are separated by player.
-                        Root messages run newest first; replies stay under their root in
-                        chronological order. System and diplomacy records stay in Activity.
+                        Public Board and direct conversations are separated. Private
+                        groups created by IntelBoard retain their exact recipient set.
+                        System and diplomacy records stay in Activity.
                     </p>
                 </div>
                 <button
@@ -510,7 +542,7 @@ export function CommunicationsPanel(props: {
                                 type="button"
                             >
                                 <strong>Public Board</strong>
-                                <span>Public game activity · write path pending verification</span>
+                                <span>Visible to the game · verified official sendmessage format</span>
                             </button>
                             <button
                                 className={composeMode === "private" ? "is-active" : ""}
@@ -524,7 +556,7 @@ export function CommunicationsPanel(props: {
                         </div>
                     </div>
 
-                    {composeMode === "private" ? (
+                    {composeMode === "private" && (
                         <div style={{ marginTop: 14 }}>
                             <div className="eyebrow">Recipients</div>
                             <div
@@ -566,10 +598,6 @@ export function CommunicationsPanel(props: {
                                 </small>
                             )}
                         </div>
-                    ) : (
-                        <div className="communications-compose-hint" style={{ marginTop: 12 }}>
-                            Public Board is a separate Planets.nu posting mechanism. Reading it is supported; sending stays disabled until the exact current request payload is captured and verified.
-                        </div>
                     )}
 
                     <label style={{ display: "block", marginTop: 14 }}>
@@ -579,7 +607,11 @@ export function CommunicationsPanel(props: {
                             disabled={sending}
                             maxLength={20000}
                             onChange={(event) => setDraftBody(event.target.value)}
-                            placeholder="Write a Planets.nu in-game message…"
+                            placeholder={
+                                composeMode === "general"
+                                    ? "Write a Public Board message…"
+                                    : "Write a private Planets.nu message…"
+                            }
                             rows={6}
                             value={draftBody}
                         />
@@ -691,7 +723,7 @@ export function CommunicationsPanel(props: {
                                         ? "Direct conversation"
                                         : selectedChannel?.kind === "activity"
                                             ? "System feed"
-                                            : "Player chat"}
+                                            : "Public Board"}
                                 </div>
                                 <h3 style={{ margin: "3px 0 0" }}>{selectedChannel?.label ?? "General"}</h3>
                             </div>
@@ -706,7 +738,7 @@ export function CommunicationsPanel(props: {
 
                         {selectedChannel?.kind === "private" && selectedChannel.label === "Private thread" && (
                             <small style={{ display: "block", marginBottom: 10 }}>
-                                Planets.nu marked this thread private but did not expose one factual conversation partner (for example, a multi-recipient message).
+                                Planets.nu marked this thread private but did not expose one factual conversation partner.
                             </small>
                         )}
 
@@ -740,10 +772,8 @@ export function CommunicationsPanel(props: {
                                             {item.target_name ? ` → ${item.target_name}` : ""}
                                         </small>
                                     )}
-                                    {selectedChannel.kind === "private" && item.target_name && (
-                                        <small>
-                                            {item.source_name ?? "unknown sender"} → {item.target_name}
-                                        </small>
+                                    {selectedChannel.kind === "private" && item.conversation_with_name && (
+                                        <small>Conversation: {item.conversation_with_name}</small>
                                     )}
                                     <div style={{ whiteSpace: "pre-wrap", marginTop: 7 }}>
                                         {readableMessage(item.message)}
