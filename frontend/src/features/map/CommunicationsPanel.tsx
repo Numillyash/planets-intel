@@ -365,6 +365,7 @@ export function CommunicationsPanel(props: {
 
     function chooseComposeMode(mode: ComposeMode) {
         setComposeMode(mode);
+        setSendError(null);
         if (mode === "general") {
             setRecipientIds([]);
         }
@@ -380,21 +381,20 @@ export function CommunicationsPanel(props: {
 
     async function handleSend() {
         const body = draftBody.trim();
-        const recipients = composeMode === "general" ? [] : recipientIds;
-        if (
-            !body
-            || sending
-            || (composeMode === "private" && recipients.length === 0)
-        ) return;
+        if (!body || sending) return;
+        if (composeMode === "general") {
+            setSendError(
+                "Public Board write is not connected yet: Planets.nu uses a separate posting path, and IntelBoard will not guess its payload.",
+            );
+            return;
+        }
+        if (recipientIds.length === 0) return;
 
         const names = recipientPlayers
-            .filter((player) => recipients.includes(player.slot_id))
+            .filter((player) => recipientIds.includes(player.slot_id))
             .map((player) => `${player.username} (slot ${player.slot_id})`);
-        const destination = composeMode === "general"
-            ? "General chat (visible to the game)"
-            : names.join(", ");
         const confirmed = window.confirm(
-            `Send this message via Planets.nu to ${destination}?`,
+            `Send this private message via Planets.nu to ${names.join(", ")}?`,
         );
         if (!confirmed) return;
 
@@ -406,14 +406,12 @@ export function CommunicationsPanel(props: {
             const result = await sendGameMessage(
                 props.gameId,
                 props.linkedAccountId,
-                recipients,
+                recipientIds,
                 body,
             );
             if (result.upstream_accepted && result.reconciled) {
                 setSendNotice(
-                    composeMode === "general"
-                        ? "General message sent and observed in the refreshed Planets.nu communications feed."
-                        : "Private message sent and observed in the refreshed Planets.nu communications feed.",
+                    "Private message sent and observed in the refreshed Planets.nu communications feed.",
                 );
             } else if (result.upstream_accepted) {
                 setSendWarning(
@@ -436,11 +434,12 @@ export function CommunicationsPanel(props: {
 
     const sendDisabled = sending
         || !draftBody.trim()
-        || (composeMode === "private" && recipientIds.length === 0);
+        || composeMode === "general"
+        || recipientIds.length === 0;
     const sendLabel = sending
         ? "Sending…"
         : composeMode === "general"
-            ? "Send to General"
+            ? "Public Board write not connected"
             : `Send privately to ${recipientIds.length}`;
 
     return (
@@ -510,12 +509,12 @@ export function CommunicationsPanel(props: {
                                 onClick={() => chooseComposeMode("general")}
                                 type="button"
                             >
-                                <strong>General chat</strong>
-                                <span>Visible to players in the game</span>
+                                <strong>Public Board</strong>
+                                <span>Public game activity · write path pending verification</span>
                             </button>
                             <button
                                 className={composeMode === "private" ? "is-active" : ""}
-                                disabled={sending}
+                                disabled={sending || recipientPlayers.length === 0}
                                 onClick={() => chooseComposeMode("private")}
                                 type="button"
                             >
@@ -569,7 +568,7 @@ export function CommunicationsPanel(props: {
                         </div>
                     ) : (
                         <div className="communications-compose-hint" style={{ marginTop: 12 }}>
-                            This message will be posted to the game's general communications feed.
+                            Public Board is a separate Planets.nu posting mechanism. Reading it is supported; sending stays disabled until the exact current request payload is captured and verified.
                         </div>
                     )}
 
