@@ -7,6 +7,7 @@ import type { GameActivityItem } from "../../types/activity";
 
 
 type ChannelKind = "general" | "private" | "activity";
+type ComposeMode = "general" | "private";
 
 interface CommunicationChannel {
     key: string;
@@ -124,7 +125,7 @@ function privateChannelKey(item: GameActivityItem): string {
 
 
 function privateChannelLabel(item: GameActivityItem): string {
-    return item.conversation_with_name ?? "Unknown player";
+    return item.conversation_with_name ?? "Private thread";
 }
 
 
@@ -190,6 +191,7 @@ export function CommunicationsPanel(props: {
     const [senderSlotId, setSenderSlotId] = useState<number | null>(null);
     const [rosterError, setRosterError] = useState<string | null>(null);
     const [composeOpen, setComposeOpen] = useState(false);
+    const [composeMode, setComposeMode] = useState<ComposeMode>("general");
     const [recipientIds, setRecipientIds] = useState<number[]>([]);
     const [draftBody, setDraftBody] = useState("");
     const [sending, setSending] = useState(false);
@@ -352,11 +354,20 @@ export function CommunicationsPanel(props: {
             const matched = recipientPlayers.find((player) =>
                 playerMatchesChannel(player, forChannel),
             );
+            setComposeMode("private");
             setRecipientIds(matched ? [matched.slot_id] : []);
         } else {
+            setComposeMode("general");
             setRecipientIds([]);
         }
         setComposeOpen(true);
+    }
+
+    function chooseComposeMode(mode: ComposeMode) {
+        setComposeMode(mode);
+        if (mode === "general") {
+            setRecipientIds([]);
+        }
     }
 
     function toggleRecipient(slotId: number) {
@@ -369,12 +380,21 @@ export function CommunicationsPanel(props: {
 
     async function handleSend() {
         const body = draftBody.trim();
-        if (!body || recipientIds.length === 0 || sending) return;
+        const recipients = composeMode === "general" ? [] : recipientIds;
+        if (
+            !body
+            || sending
+            || (composeMode === "private" && recipients.length === 0)
+        ) return;
+
         const names = recipientPlayers
-            .filter((player) => recipientIds.includes(player.slot_id))
+            .filter((player) => recipients.includes(player.slot_id))
             .map((player) => `${player.username} (slot ${player.slot_id})`);
+        const destination = composeMode === "general"
+            ? "General chat (visible to the game)"
+            : names.join(", ");
         const confirmed = window.confirm(
-            `Send this message via Planets.nu to ${names.join(", ")}?`,
+            `Send this message via Planets.nu to ${destination}?`,
         );
         if (!confirmed) return;
 
@@ -386,11 +406,15 @@ export function CommunicationsPanel(props: {
             const result = await sendGameMessage(
                 props.gameId,
                 props.linkedAccountId,
-                recipientIds,
+                recipients,
                 body,
             );
             if (result.upstream_accepted && result.reconciled) {
-                setSendNotice("Message sent and observed in the refreshed Planets.nu communications feed.");
+                setSendNotice(
+                    composeMode === "general"
+                        ? "General message sent and observed in the refreshed Planets.nu communications feed."
+                        : "Private message sent and observed in the refreshed Planets.nu communications feed.",
+                );
             } else if (result.upstream_accepted) {
                 setSendWarning(
                     result.reconciliation_detail
@@ -410,6 +434,15 @@ export function CommunicationsPanel(props: {
         }
     }
 
+    const sendDisabled = sending
+        || !draftBody.trim()
+        || (composeMode === "private" && recipientIds.length === 0);
+    const sendLabel = sending
+        ? "Sending…"
+        : composeMode === "general"
+            ? "Send to General"
+            : `Send privately to ${recipientIds.length}`;
+
     return (
         <section className="panel dashboard-embedded-panel">
             <div className="panel-header">
@@ -424,7 +457,7 @@ export function CommunicationsPanel(props: {
                 </div>
                 <button
                     className="primary-button"
-                    disabled={rosterError !== null || recipientPlayers.length === 0}
+                    disabled={rosterError !== null}
                     onClick={() => openComposer(selectedChannel)}
                     type="button"
                 >
@@ -465,51 +498,90 @@ export function CommunicationsPanel(props: {
                     </div>
 
                     <div style={{ marginTop: 14 }}>
-                        <div className="eyebrow">Recipients</div>
+                        <div className="eyebrow">Delivery</div>
                         <div
-                            style={{
-                                display: "grid",
-                                gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
-                                gap: 7,
-                                marginTop: 8,
-                            }}
+                            aria-label="Message visibility"
+                            className="communications-compose-mode"
+                            role="group"
                         >
-                            {recipientPlayers.map((player) => (
-                                <label
-                                    key={player.slot_id}
-                                    style={{
-                                        display: "flex",
-                                        gap: 8,
-                                        alignItems: "center",
-                                        padding: "8px 10px",
-                                        border: "1px solid rgba(104, 127, 151, 0.28)",
-                                        borderRadius: 8,
-                                    }}
-                                >
-                                    <input
-                                        checked={recipientIds.includes(player.slot_id)}
-                                        disabled={sending}
-                                        onChange={() => toggleRecipient(player.slot_id)}
-                                        type="checkbox"
-                                    />
-                                    <span>
-                                        <strong>{player.username}</strong>
-                                        <small style={{ display: "block" }}>slot {player.slot_id}</small>
-                                    </span>
-                                </label>
-                            ))}
+                            <button
+                                className={composeMode === "general" ? "is-active" : ""}
+                                disabled={sending}
+                                onClick={() => chooseComposeMode("general")}
+                                type="button"
+                            >
+                                <strong>General chat</strong>
+                                <span>Visible to players in the game</span>
+                            </button>
+                            <button
+                                className={composeMode === "private" ? "is-active" : ""}
+                                disabled={sending}
+                                onClick={() => chooseComposeMode("private")}
+                                type="button"
+                            >
+                                <strong>Private message</strong>
+                                <span>Only selected recipients</span>
+                            </button>
                         </div>
                     </div>
+
+                    {composeMode === "private" ? (
+                        <div style={{ marginTop: 14 }}>
+                            <div className="eyebrow">Recipients</div>
+                            <div
+                                style={{
+                                    display: "grid",
+                                    gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
+                                    gap: 7,
+                                    marginTop: 8,
+                                }}
+                            >
+                                {recipientPlayers.map((player) => (
+                                    <label
+                                        key={player.slot_id}
+                                        style={{
+                                            display: "flex",
+                                            gap: 8,
+                                            alignItems: "center",
+                                            padding: "8px 10px",
+                                            border: "1px solid rgba(104, 127, 151, 0.28)",
+                                            borderRadius: 8,
+                                        }}
+                                    >
+                                        <input
+                                            checked={recipientIds.includes(player.slot_id)}
+                                            disabled={sending}
+                                            onChange={() => toggleRecipient(player.slot_id)}
+                                            type="checkbox"
+                                        />
+                                        <span>
+                                            <strong>{player.username}</strong>
+                                            <small style={{ display: "block" }}>slot {player.slot_id}</small>
+                                        </span>
+                                    </label>
+                                ))}
+                            </div>
+                            {recipientIds.length === 0 && (
+                                <small className="communications-compose-hint">
+                                    Select at least one player for a private message.
+                                </small>
+                            )}
+                        </div>
+                    ) : (
+                        <div className="communications-compose-hint" style={{ marginTop: 12 }}>
+                            This message will be posted to the game's general communications feed.
+                        </div>
+                    )}
 
                     <label style={{ display: "block", marginTop: 14 }}>
                         <span className="eyebrow">Message</span>
                         <textarea
+                            className="communications-message-textarea"
                             disabled={sending}
                             maxLength={20000}
                             onChange={(event) => setDraftBody(event.target.value)}
                             placeholder="Write a Planets.nu in-game message…"
                             rows={6}
-                            style={{ width: "100%", marginTop: 8, resize: "vertical" }}
                             value={draftBody}
                         />
                     </label>
@@ -526,11 +598,11 @@ export function CommunicationsPanel(props: {
                         <small>{draftBody.length.toLocaleString()} / 20,000</small>
                         <button
                             className="primary-button"
-                            disabled={sending || recipientIds.length === 0 || !draftBody.trim()}
+                            disabled={sendDisabled}
                             onClick={() => void handleSend()}
                             type="button"
                         >
-                            {sending ? "Sending…" : `Send to ${recipientIds.length}`}
+                            {sendLabel}
                         </button>
                     </div>
                 </div>
@@ -629,7 +701,13 @@ export function CommunicationsPanel(props: {
 
                         {selectedChannel?.kind === "general" && (
                             <small style={{ display: "block", marginBottom: 10 }}>
-                                Player-authored messages that are not identified as direct threads.
+                                Public player-authored messages visible in the game communications feed.
+                            </small>
+                        )}
+
+                        {selectedChannel?.kind === "private" && selectedChannel.label === "Private thread" && (
+                            <small style={{ display: "block", marginBottom: 10 }}>
+                                Planets.nu marked this thread private but did not expose one factual conversation partner (for example, a multi-recipient message).
                             </small>
                         )}
 
@@ -661,6 +739,11 @@ export function CommunicationsPanel(props: {
                                         <small>
                                             {item.source_name ?? "unknown source"}
                                             {item.target_name ? ` → ${item.target_name}` : ""}
+                                        </small>
+                                    )}
+                                    {selectedChannel.kind === "private" && item.target_name && (
+                                        <small>
+                                            {item.source_name ?? "unknown sender"} → {item.target_name}
                                         </small>
                                     )}
                                     <div style={{ whiteSpace: "pre-wrap", marginTop: 7 }}>
