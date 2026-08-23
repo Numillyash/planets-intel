@@ -210,6 +210,14 @@ def _payload_with_resolved_player_slot(
     return normalized_payload
 
 
+def _add_activity_result(
+    total: dict[str, int],
+    result: dict[str, int],
+) -> None:
+    total["game_activity_seen"] += result["game_activity_seen"]
+    total["game_activity_inserted"] += result["game_activity_inserted"]
+
+
 async def sync_private_game(
     linked_account_id: int,
     game_id: int,
@@ -232,7 +240,8 @@ async def sync_private_game(
         planets_username = account.planets_username
 
     api_key = decrypt_credential(encrypted_api_key)
-    game_activity: list[dict[str, Any]] = []
+    ingame_activity: list[dict[str, Any]] = []
+    private_activity_for_game: list[dict[str, Any]] = []
     private_activity_by_game: dict[int, list[dict[str, Any]]] = {}
     ingame_activity_seen = 0
     private_activity_seen = 0
@@ -308,7 +317,6 @@ async def sync_private_game(
                     planets_account_id=identity.planets_account_id,
                 )
                 ingame_activity_seen = len(ingame_activity)
-                game_activity.extend(ingame_activity)
             except PlanetsNuError as exc:
                 game_activity_error = str(exc)
 
@@ -327,9 +335,8 @@ async def sync_private_game(
                     len(records)
                     for records in private_activity_by_game.values()
                 )
-                private_for_game = private_activity_by_game.get(game_id, [])
-                private_activity_seen = len(private_for_game)
-                game_activity.extend(private_for_game)
+                private_activity_for_game = private_activity_by_game.get(game_id, [])
+                private_activity_seen = len(private_activity_for_game)
             except PlanetsNuError as exc:
                 private_activity_error = str(exc)
 
@@ -384,12 +391,27 @@ async def sync_private_game(
             "game_activity_seen": 0,
             "game_activity_inserted": 0,
         }
-        if turn is None and game_activity:
-            activity_result = persist_game_activity_observations(
-                session,
-                observer_planets_account_id=linked_account_id,
-                game_id=game_id,
-                activity=game_activity,
+        if turn is None and ingame_activity:
+            _add_activity_result(
+                activity_result,
+                persist_game_activity_observations(
+                    session,
+                    observer_planets_account_id=linked_account_id,
+                    game_id=game_id,
+                    activity=ingame_activity,
+                    visibility_source="ingame_activity",
+                ),
+            )
+        if turn is None and private_activity_for_game:
+            _add_activity_result(
+                activity_result,
+                persist_game_activity_observations(
+                    session,
+                    observer_planets_account_id=linked_account_id,
+                    game_id=game_id,
+                    activity=private_activity_for_game,
+                    visibility_source="private_activity",
+                ),
             )
 
         cross_game_activity_seen = 0
@@ -416,6 +438,7 @@ async def sync_private_game(
                     observer_planets_account_id=linked_account_id,
                     game_id=activity_game_id,
                     activity=records,
+                    visibility_source="private_activity",
                 )
                 cross_game_activity_seen += cross_result["game_activity_seen"]
                 cross_game_activity_inserted += cross_result[
