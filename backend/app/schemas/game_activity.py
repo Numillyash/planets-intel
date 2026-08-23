@@ -13,6 +13,7 @@ ActivityKind = Literal[
 ActivityVisibilitySource = Literal[
     "ingame_activity",
     "private_activity",
+    "outgoing_private_write",
 ]
 
 
@@ -21,6 +22,7 @@ class GameActivityItemResponse(BaseModel):
     activity_type: int | None
     scope: int | None
     visibility_source: ActivityVisibilitySource | None = None
+    outgoing_recipient_player_ids: list[int] | None = None
     turn: int | None
     parent_id: int | None
     source_id: int | None
@@ -35,6 +37,7 @@ class GameActivityItemResponse(BaseModel):
     thread_root_id: int | None = None
     conversation_with_id: int | None = None
     conversation_with_name: str | None = None
+    conversation_player_ids: list[int] = Field(default_factory=list)
 
 
 class GameActivityResponse(BaseModel):
@@ -46,10 +49,10 @@ class GameActivityResponse(BaseModel):
 
 class SendGameMessageRequest(BaseModel):
     linked_account_id: int = Field(gt=0)
-    # This route wraps Planets.nu game/sendmessage and is intentionally a
-    # direct/private-message contract. Public Board posting is a separate
-    # upstream mechanism and must not be guessed by sending an empty `to`.
-    recipient_player_ids: list[int] = Field(min_length=1, max_length=31)
+    # Verified against the official client wire format on 2026-08-23:
+    # zero recipients means Public Board and omits the `to` form field entirely;
+    # one or more recipients means a private message and sends `to=slot[,slot…]`.
+    recipient_player_ids: list[int] = Field(default_factory=list, max_length=31)
     body: str = Field(min_length=1, max_length=20000)
 
     @field_validator("recipient_player_ids")
@@ -57,10 +60,7 @@ class SendGameMessageRequest(BaseModel):
     def validate_recipients(cls, value: list[int]) -> list[int]:
         if any(isinstance(item, bool) or item <= 0 for item in value):
             raise ValueError("recipient player ids must be positive integers")
-        deduplicated = list(dict.fromkeys(value))
-        if not deduplicated:
-            raise ValueError("select at least one recipient")
-        return deduplicated
+        return list(dict.fromkeys(value))
 
     @field_validator("body")
     @classmethod
