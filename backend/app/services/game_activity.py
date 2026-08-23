@@ -6,10 +6,15 @@ from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
 from app.models.game_activity_observation import GameActivityObservation
+from app.models.game_player_slot import GamePlayerSlot
 from app.models.planets_account import PlanetsAccount
 
 
-_ACTIVITY_VISIBILITY_SOURCES = {"ingame_activity", "private_activity"}
+_ACTIVITY_VISIBILITY_SOURCES = {
+    "ingame_activity",
+    "private_activity",
+    "outgoing_private_write",
+}
 
 
 def _integer(raw: dict[str, Any], key: str) -> int | None:
@@ -22,6 +27,18 @@ def _integer(raw: dict[str, Any], key: str) -> int | None:
 def _text(raw: dict[str, Any], key: str) -> str | None:
     value = raw.get(key)
     return value if isinstance(value, str) else None
+
+
+def _normalized_recipient_player_ids(value: object) -> list[int]:
+    if not isinstance(value, list):
+        return []
+    result: list[int] = []
+    for item in value:
+        if isinstance(item, bool) or not isinstance(item, int) or item <= 0:
+            continue
+        if item not in result:
+            result.append(item)
+    return sorted(result)
 
 
 def flatten_activity_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -49,6 +66,19 @@ def flatten_activity_records(records: list[dict[str, Any]]) -> list[dict[str, An
     return flattened
 
 
+def _strongest_visibility_source(
+    previous_source: str | None,
+    observed_source: str | None,
+) -> str | None:
+    # A successful explicit private write proves more than either read endpoint.
+    if "outgoing_private_write" in {previous_source, observed_source}:
+        return "outgoing_private_write"
+    # The dedicated private activity feed is stronger than the broad feed.
+    if "private_activity" in {previous_source, observed_source}:
+        return "private_activity"
+    return observed_source or previous_source
+
+
 def persist_game_activity_observations(
     session: Session,
     *,
@@ -59,9 +89,9 @@ def persist_game_activity_observations(
 ) -> dict[str, int]:
     """Upsert observer-visible Planets.nu activity with endpoint provenance.
 
-    ``private_activity`` is sticky: once the dedicated private feed has exposed
-    an activity id to this observer, a later copy from the broad in-game feed
-    must never downgrade that factual visibility provenance.
+    Proven private visibility and explicit outgoing recipient metadata are sticky:
+    a later copy from the broad in-game feed must never downgrade facts already
+    established by the private feed or by IntelBoard's own successful write.
     """
 
     if (
@@ -83,6 +113,7 @@ def persist_game_activity_observations(
         select(
             GameActivityObservation.activity_id,
             GameActivityObservation.visibility_source,
+            GameActivityObservation.outgoing_recipient_player_ids,
         ).where(
             GameActivityObservation.observer_planets_account_id
             == observer_planets_account_id,
@@ -90,22 +121,20 @@ def persist_game_activity_observations(
             GameActivityObservation.activity_id.in_(activity_ids),
         )
     ).all()
-    existing_sources = {
-        int(activity_id): source
-        for activity_id, source in existing_rows
+    existing = {
+        int(activity_id): (source, recipients)
+        for activity_id, source, recipients in existing_rows
     }
-    existing_ids = set(existing_sources)
+    existing_ids = set(existing)
 
     rows: list[dict[str, Any]] = []
     for raw in records:
         activity_id = _integer(raw, "id")
         if activity_id is None:
             continue
-        previous_source = existing_sources.get(activity_id)
-        effective_source = (
-            "private_activity"
-            if "private_activity" in {previous_source, visibility_source}
-            else visibility_source or previous_source
+        previous_source, previous_recipients = existing.get(
+            activity_id,
+            (None, None),
         )
         rows.append(
             {
@@ -114,7 +143,13 @@ def persist_game_activity_observations(
                 "activity_id": activity_id,
                 "activity_type": _integer(raw, "activitytype"),
                 "scope": _integer(raw, "scope"),
-                "visibility_source": effective_source,
+                "visibility_source": _strongest_visibility_source(
+                    previous_source,
+                    visibility_source,
+                ),
+                "outgoing_recipient_player_ids": (
+                    _normalized_recipient_player_ids(previous_recipients) or None
+                ),
                 "turn": _integer(raw, "turn"),
                 "parent_id": _integer(raw, "parentid"),
                 "source_id": _integer(raw, "sourceid"),
@@ -140,6 +175,7 @@ def persist_game_activity_observations(
             "activity_type": stmt.excluded.activity_type,
             "scope": stmt.excluded.scope,
             "visibility_source": stmt.excluded.visibility_source,
+            "outgoing_recipient_player_ids": stmt.excluded.outgoing_recipient_player_ids,
             "turn": stmt.excluded.turn,
             "parent_id": stmt.excluded.parent_id,
             "source_id": stmt.excluded.source_id,
@@ -168,6 +204,36 @@ def persist_game_activity_observations(
     }
 
 
+def mark_outgoing_private_message(
+    *,
+    linked_account_id: int,
+    game_id: int,
+    activity_id: int,
+    recipient_player_ids: list[int],
+) -> bool:
+    """Attach factual IntelBoard write provenance to one reconciled activity."""
+
+    recipients = _normalized_recipient_player_ids(recipient_player_ids)
+    if not recipients:
+        return False
+
+    with SessionLocal() as session:
+        row = session.execute(
+            select(GameActivityObservation).where(
+                GameActivityObservation.observer_planets_account_id
+                == linked_account_id,
+                GameActivityObservation.game_id == game_id,
+                GameActivityObservation.activity_id == activity_id,
+            )
+        ).scalar_one_or_none()
+        if row is None:
+            return False
+        row.visibility_source = "outgoing_private_write"
+        row.outgoing_recipient_player_ids = recipients
+        session.commit()
+    return True
+
+
 def _root_for(
     row: GameActivityObservation,
     rows_by_id: dict[int, GameActivityObservation],
@@ -186,24 +252,31 @@ def _root_for(
     return current
 
 
+def _conversation_player_ids(
+    row: GameActivityObservation,
+    root: GameActivityObservation,
+) -> list[int]:
+    root_ids = _normalized_recipient_player_ids(
+        root.outgoing_recipient_player_ids,
+    )
+    if root_ids:
+        return root_ids
+    return _normalized_recipient_player_ids(
+        row.outgoing_recipient_player_ids,
+    )
+
+
 def _is_private_message(
     row: GameActivityObservation,
     root: GameActivityObservation,
 ) -> bool:
-    """Classify privacy from factual feed provenance before raw shape.
-
-    The dedicated ``account/privateactivity`` endpoint is authoritative evidence
-    that the observer received the activity privately. This remains true for
-    multi-recipient messages that do not expose one target id. ``scope == 3``
-    is retained as a compatibility fallback for rows stored before endpoint
-    provenance was persisted.
-    """
+    """Classify privacy from factual write/feed provenance before raw shape."""
 
     if row.activity_type != 1:
         return False
     return (
-        row.visibility_source == "private_activity"
-        or root.visibility_source == "private_activity"
+        row.visibility_source in {"private_activity", "outgoing_private_write"}
+        or root.visibility_source in {"private_activity", "outgoing_private_write"}
         or row.scope == 3
         or root.scope == 3
     )
@@ -234,9 +307,6 @@ def _conversation_partner(
         partner_name = root.source_name.strip() if root.source_name else None
         return partner_id, partner_name or None
 
-    # Multi-recipient private roots may not expose one target account. The
-    # message remains factually private, but there is no safe single partner to
-    # invent for the UI.
     return None, None
 
 
@@ -252,6 +322,7 @@ def _activity_semantics(
             "thread_root_id": None,
             "conversation_with_id": None,
             "conversation_with_name": None,
+            "conversation_player_ids": [],
         }
     if row.activity_type == 5:
         return {
@@ -259,6 +330,7 @@ def _activity_semantics(
             "thread_root_id": None,
             "conversation_with_id": None,
             "conversation_with_name": None,
+            "conversation_player_ids": [],
         }
     if row.activity_type != 1:
         return {
@@ -266,6 +338,7 @@ def _activity_semantics(
             "thread_root_id": None,
             "conversation_with_id": None,
             "conversation_with_name": None,
+            "conversation_player_ids": [],
         }
 
     root = _root_for(row, rows_by_id)
@@ -276,6 +349,7 @@ def _activity_semantics(
             "thread_root_id": root.activity_id,
             "conversation_with_id": partner_id,
             "conversation_with_name": partner_name,
+            "conversation_player_ids": _conversation_player_ids(row, root),
         }
 
     return {
@@ -283,6 +357,7 @@ def _activity_semantics(
         "thread_root_id": root.activity_id if root.activity_id != row.activity_id else None,
         "conversation_with_id": None,
         "conversation_with_name": None,
+        "conversation_player_ids": [],
     }
 
 
@@ -321,8 +396,14 @@ def get_owned_game_activity(
                 .limit(limit)
             ).scalars().all()
         )
+        slots = list(
+            session.execute(
+                select(GamePlayerSlot).where(GamePlayerSlot.game_id == game_id)
+            ).scalars().all()
+        )
 
         rows_by_id = {row.activity_id: row for row in rows}
+        slots_by_id = {slot.slot_id: slot for slot in slots}
         observer_account_id = owned_account.planets_account_id
         items = []
         for row in rows:
@@ -331,12 +412,37 @@ def get_owned_game_activity(
                 rows_by_id=rows_by_id,
                 observer_account_id=observer_account_id,
             )
+            conversation_player_ids = list(
+                semantics.get("conversation_player_ids") or [],
+            )
+            if conversation_player_ids:
+                conversation_slots = [
+                    slots_by_id[slot_id]
+                    for slot_id in conversation_player_ids
+                    if slot_id in slots_by_id
+                ]
+                if len(conversation_slots) == len(conversation_player_ids):
+                    semantics["conversation_with_name"] = " + ".join(
+                        slot.username for slot in conversation_slots
+                    )
+                    if len(conversation_slots) == 1:
+                        account_id = conversation_slots[0].account_id
+                        semantics["conversation_with_id"] = (
+                            account_id if account_id and account_id > 0 else None
+                        )
+
             items.append(
                 {
                     "activity_id": row.activity_id,
                     "activity_type": row.activity_type,
                     "scope": row.scope,
                     "visibility_source": row.visibility_source,
+                    "outgoing_recipient_player_ids": (
+                        _normalized_recipient_player_ids(
+                            row.outgoing_recipient_player_ids,
+                        )
+                        or None
+                    ),
                     "turn": row.turn,
                     "parent_id": row.parent_id,
                     "source_id": row.source_id,
