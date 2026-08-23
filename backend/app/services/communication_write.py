@@ -132,14 +132,13 @@ def _validate_recipients(
     requested_player_ids: list[int],
 ) -> tuple[list[int], dict[int, int | None]]:
     recipient_ids = list(dict.fromkeys(requested_player_ids))
+    if not recipient_ids:
+        raise CommunicationWriteError(
+            "Select at least one recipient for a private message. "
+            "Public Board posting uses a separate Planets.nu write path."
+        )
     if sender_player_id in recipient_ids:
         raise CommunicationWriteError("Cannot send an in-game message to the sender slot")
-
-    # An empty recipient list is the explicit public/general-chat mode used by
-    # Planets.nu's game/sendmessage endpoint (`to=`).  It needs no roster
-    # recipient validation; sender validation above still applies unchanged.
-    if not recipient_ids:
-        return [], {}
 
     with SessionLocal() as session:
         slots = list(
@@ -220,9 +219,9 @@ def _reconciled_message(
             continue
 
         # For a single direct recipient, require the factual target account when
-        # Planets.nu supplied one. Public messages have no recipients, while
-        # multi-recipient private messages can be represented without one target
-        # id, so new-source+body is the strongest safe reconciliation there.
+        # Planets.nu supplied one. Multi-recipient private messages may be
+        # represented without one target id, so body+new source is the strongest
+        # safe reconciliation available there.
         if len(recipient_account_ids) == 1 and concrete_targets:
             target_id = item.get("target_id")
             if isinstance(target_id, int) and target_id not in concrete_targets:
