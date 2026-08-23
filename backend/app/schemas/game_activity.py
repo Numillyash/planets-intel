@@ -41,10 +41,10 @@ class GameActivityResponse(BaseModel):
 
 class SendGameMessageRequest(BaseModel):
     linked_account_id: int = Field(gt=0)
-    # Planets.nu uses an empty `to` field for a public/general message.  Keep
-    # zero recipients as an explicit supported state instead of conflating it
-    # with invalid input.  Non-empty lists still mean private recipients.
-    recipient_player_ids: list[int] = Field(default_factory=list, max_length=31)
+    # This route wraps Planets.nu game/sendmessage and is intentionally a
+    # direct/private-message contract. Public Board posting is a separate
+    # upstream mechanism and must not be guessed by sending an empty `to`.
+    recipient_player_ids: list[int] = Field(min_length=1, max_length=31)
     body: str = Field(min_length=1, max_length=20000)
 
     @field_validator("recipient_player_ids")
@@ -52,7 +52,10 @@ class SendGameMessageRequest(BaseModel):
     def validate_recipients(cls, value: list[int]) -> list[int]:
         if any(isinstance(item, bool) or item <= 0 for item in value):
             raise ValueError("recipient player ids must be positive integers")
-        return list(dict.fromkeys(value))
+        deduplicated = list(dict.fromkeys(value))
+        if not deduplicated:
+            raise ValueError("select at least one recipient")
+        return deduplicated
 
     @field_validator("body")
     @classmethod
