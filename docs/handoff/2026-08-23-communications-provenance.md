@@ -40,9 +40,11 @@ For multi-recipient private messages where Planets.nu does not expose one factua
 
 ### Existing records
 
-The migration conservatively backfills only historical activity-type-1 rows already carrying `scope = 3` as `private_activity`. Other historical rows remain unknown until a normal private refresh observes them again from the factual endpoint.
+The migration does **not** fabricate endpoint provenance for pre-existing rows. Historical records receive `visibility_source = NULL`, because their stored raw shape cannot prove which endpoint originally exposed them.
 
-After deployment, the next private refresh should re-upsert still-visible private activity with its endpoint provenance. The already-sent runtime test message should therefore leave General if it is returned by `account/privateactivity`, without being sent again.
+Legacy `scope == 3` remains a read-side compatibility fallback only; it is not rewritten into factual `private_activity` provenance.
+
+After deployment, the next private refresh should re-upsert still-visible private activity with its actual endpoint provenance. The already-sent runtime test message should therefore leave General if it is returned by `account/privateactivity`, without being sent again.
 
 ## Public Board write remains fail-closed
 
