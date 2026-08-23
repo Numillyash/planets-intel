@@ -206,18 +206,21 @@ export function CombatEventPanel(props: CombatEventPanelProps) {
         onIntel: () => openIntelTab(activeTab),
         onStarmap: showStarmap,
     };
+    const pageSurfaceNavRoot = document.getElementById(
+        "operational-page-surface-nav-root",
+    );
 
     return (
         <>
             <GameSurfaceNav {...navProps} className="operational-map-hud" view="starmap" />
 
-            {pageDashboardOpen && createPortal(
+            {pageDashboardOpen && pageSurfaceNavRoot !== null && createPortal(
                 <GameSurfaceNav
                     {...navProps}
                     className="operational-page-surface-nav"
                     view="dashboard"
                 />,
-                document.body,
+                pageSurfaceNavRoot,
             )}
 
             {vcrPopupOpen && createPortal(
