@@ -157,13 +157,22 @@ def _root_for(
     return current
 
 
-def _is_direct_private_root(row: GameActivityObservation) -> bool:
+def _is_private_message(
+    row: GameActivityObservation,
+    root: GameActivityObservation,
+) -> bool:
+    """Use the factual Planets.nu private scope, not target-field shape.
+
+    Direct messages to one player commonly carry targetid/targettype, but a
+    private message addressed to multiple players can have no single target id.
+    Scope 3 is the durable visibility fact and must keep those messages out of
+    General chat.  Checking the row too also preserves private classification
+    when a reply is loaded without its root because of an activity limit.
+    """
+
     return (
         row.activity_type == 1
-        and row.scope == 3
-        and row.parent_id in (None, 0)
-        and row.target_id not in (None, 0)
-        and row.target_type == 1
+        and (row.scope == 3 or root.scope == 3)
     )
 
 
@@ -173,10 +182,28 @@ def _conversation_partner(
 ) -> tuple[int | None, str | None]:
     if observer_account_id is None:
         return None, None
-    if root.source_id == observer_account_id and root.target_id not in (None, 0):
-        return int(root.target_id), root.target_name
-    if root.target_id == observer_account_id and root.source_id not in (None, 0):
-        return int(root.source_id), root.source_name
+
+    if root.source_id == observer_account_id:
+        partner_id = (
+            int(root.target_id)
+            if root.target_id not in (None, 0)
+            else None
+        )
+        partner_name = root.target_name.strip() if root.target_name else None
+        return partner_id, partner_name or None
+
+    if root.target_id == observer_account_id:
+        partner_id = (
+            int(root.source_id)
+            if root.source_id not in (None, 0)
+            else None
+        )
+        partner_name = root.source_name.strip() if root.source_name else None
+        return partner_id, partner_name or None
+
+    # Multi-recipient private roots may not expose one target account.  The
+    # message remains factually private, but there is no safe single partner to
+    # invent for the UI.
     return None, None
 
 
@@ -209,7 +236,7 @@ def _activity_semantics(
         }
 
     root = _root_for(row, rows_by_id)
-    if _is_direct_private_root(root):
+    if _is_private_message(row, root):
         partner_id, partner_name = _conversation_partner(root, observer_account_id)
         return {
             "kind": "private_message",
