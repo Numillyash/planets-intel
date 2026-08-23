@@ -67,13 +67,15 @@ export type GameActivityKind =
 
 export type GameActivityVisibilitySource =
     | "ingame_activity"
-    | "private_activity";
+    | "private_activity"
+    | "outgoing_private_write";
 
 export interface GameActivityItem {
     activity_id: number;
     activity_type: number | null;
     scope: number | null;
     visibility_source?: GameActivityVisibilitySource | null;
+    outgoing_recipient_player_ids?: number[] | null;
     turn: number | null;
     parent_id: number | null;
     source_id: number | null;
@@ -88,6 +90,7 @@ export interface GameActivityItem {
     thread_root_id: number | null;
     conversation_with_id: number | null;
     conversation_with_name: string | null;
+    conversation_player_ids: number[];
 }
 
 export interface GameActivityResponse {
