@@ -9,6 +9,9 @@ from app.models.game_activity_observation import GameActivityObservation
 from app.models.planets_account import PlanetsAccount
 
 
+_ACTIVITY_VISIBILITY_SOURCES = {"ingame_activity", "private_activity"}
+
+
 def _integer(raw: dict[str, Any], key: str) -> int | None:
     value = raw.get(key)
     if isinstance(value, bool) or not isinstance(value, int):
@@ -52,8 +55,20 @@ def persist_game_activity_observations(
     observer_planets_account_id: int,
     game_id: int,
     activity: list[dict[str, Any]],
+    visibility_source: str | None = None,
 ) -> dict[str, int]:
-    """Upsert observer-visible Planets.nu activity without widening visibility."""
+    """Upsert observer-visible Planets.nu activity with endpoint provenance.
+
+    ``private_activity`` is sticky: once the dedicated private feed has exposed
+    an activity id to this observer, a later copy from the broad in-game feed
+    must never downgrade that factual visibility provenance.
+    """
+
+    if (
+        visibility_source is not None
+        and visibility_source not in _ACTIVITY_VISIBILITY_SOURCES
+    ):
+        raise ValueError(f"unsupported activity visibility source: {visibility_source}")
 
     records = flatten_activity_records(activity)
     if not records:
@@ -64,22 +79,34 @@ def persist_game_activity_observations(
         for raw in records
         if (activity_id := _integer(raw, "id")) is not None
     ]
-    existing_ids = set(
-        session.execute(
-            select(GameActivityObservation.activity_id).where(
-                GameActivityObservation.observer_planets_account_id
-                == observer_planets_account_id,
-                GameActivityObservation.game_id == game_id,
-                GameActivityObservation.activity_id.in_(activity_ids),
-            )
-        ).scalars().all()
-    )
+    existing_rows = session.execute(
+        select(
+            GameActivityObservation.activity_id,
+            GameActivityObservation.visibility_source,
+        ).where(
+            GameActivityObservation.observer_planets_account_id
+            == observer_planets_account_id,
+            GameActivityObservation.game_id == game_id,
+            GameActivityObservation.activity_id.in_(activity_ids),
+        )
+    ).all()
+    existing_sources = {
+        int(activity_id): source
+        for activity_id, source in existing_rows
+    }
+    existing_ids = set(existing_sources)
 
     rows: list[dict[str, Any]] = []
     for raw in records:
         activity_id = _integer(raw, "id")
         if activity_id is None:
             continue
+        previous_source = existing_sources.get(activity_id)
+        effective_source = (
+            "private_activity"
+            if "private_activity" in {previous_source, visibility_source}
+            else visibility_source or previous_source
+        )
         rows.append(
             {
                 "observer_planets_account_id": observer_planets_account_id,
@@ -87,6 +114,7 @@ def persist_game_activity_observations(
                 "activity_id": activity_id,
                 "activity_type": _integer(raw, "activitytype"),
                 "scope": _integer(raw, "scope"),
+                "visibility_source": effective_source,
                 "turn": _integer(raw, "turn"),
                 "parent_id": _integer(raw, "parentid"),
                 "source_id": _integer(raw, "sourceid"),
@@ -111,6 +139,7 @@ def persist_game_activity_observations(
         set_={
             "activity_type": stmt.excluded.activity_type,
             "scope": stmt.excluded.scope,
+            "visibility_source": stmt.excluded.visibility_source,
             "turn": stmt.excluded.turn,
             "parent_id": stmt.excluded.parent_id,
             "source_id": stmt.excluded.source_id,
@@ -161,18 +190,22 @@ def _is_private_message(
     row: GameActivityObservation,
     root: GameActivityObservation,
 ) -> bool:
-    """Use the factual Planets.nu private scope, not target-field shape.
+    """Classify privacy from factual feed provenance before raw shape.
 
-    Direct messages to one player commonly carry targetid/targettype, but a
-    private message addressed to multiple players can have no single target id.
-    Scope 3 is the durable visibility fact and must keep those messages out of
-    General chat.  Checking the row too also preserves private classification
-    when a reply is loaded without its root because of an activity limit.
+    The dedicated ``account/privateactivity`` endpoint is authoritative evidence
+    that the observer received the activity privately. This remains true for
+    multi-recipient messages that do not expose one target id. ``scope == 3``
+    is retained as a compatibility fallback for rows stored before endpoint
+    provenance was persisted.
     """
 
+    if row.activity_type != 1:
+        return False
     return (
-        row.activity_type == 1
-        and (row.scope == 3 or root.scope == 3)
+        row.visibility_source == "private_activity"
+        or root.visibility_source == "private_activity"
+        or row.scope == 3
+        or root.scope == 3
     )
 
 
@@ -201,7 +234,7 @@ def _conversation_partner(
         partner_name = root.source_name.strip() if root.source_name else None
         return partner_id, partner_name or None
 
-    # Multi-recipient private roots may not expose one target account.  The
+    # Multi-recipient private roots may not expose one target account. The
     # message remains factually private, but there is no safe single partner to
     # invent for the UI.
     return None, None
@@ -303,6 +336,7 @@ def get_owned_game_activity(
                     "activity_id": row.activity_id,
                     "activity_type": row.activity_type,
                     "scope": row.scope,
+                    "visibility_source": row.visibility_source,
                     "turn": row.turn,
                     "parent_id": row.parent_id,
                     "source_id": row.source_id,
