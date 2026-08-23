@@ -277,17 +277,25 @@ class PlanetsNuClient:
         recipient_player_ids: list[int],
         body: str,
     ) -> dict[str, Any]:
-        """Send one explicit in-game message without any transport retry."""
+        """Send one public or private in-game message without transport retry.
+
+        Verified official-client wire format:
+        - Public Board: omit ``to`` entirely.
+        - Private message: include ``to=slot[,slot…]``.
+        """
+
+        data: dict[str, Any] = {
+            "gameid": game_id,
+            "playerid": player_id,
+            "apikey": api_key,
+            "body": _encode_nonpublic_text(body),
+        }
+        if recipient_player_ids:
+            data["to"] = ",".join(str(item) for item in recipient_player_ids)
 
         payload = await self.post_form(
             "game/sendmessage",
-            data={
-                "gameid": game_id,
-                "playerid": player_id,
-                "apikey": api_key,
-                "to": ",".join(str(item) for item in recipient_player_ids),
-                "body": _encode_nonpublic_text(body),
-            },
+            data=data,
             headers={
                 "Origin": "https://planets.nu",
                 "Referer": "https://planets.nu/",
