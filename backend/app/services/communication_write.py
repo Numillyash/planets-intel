@@ -13,7 +13,10 @@ from app.planetsnu.client import (
     PlanetsNuClient,
     PlanetsNuError,
 )
-from app.services.game_activity import get_owned_game_activity
+from app.services.game_activity import (
+    get_owned_game_activity,
+    mark_outgoing_private_message,
+)
 from app.services.private_sync import PrivateSyncError, sync_private_game
 
 
@@ -132,11 +135,10 @@ def _validate_recipients(
     requested_player_ids: list[int],
 ) -> tuple[list[int], dict[int, int | None]]:
     recipient_ids = list(dict.fromkeys(requested_player_ids))
+    # Verified official-client behavior: no recipients is Public Board mode and
+    # sends no `to` field. Sender validation still applies unchanged.
     if not recipient_ids:
-        raise CommunicationWriteError(
-            "Select at least one recipient for a private message. "
-            "Public Board posting uses a separate Planets.nu write path."
-        )
+        return [], {}
     if sender_player_id in recipient_ids:
         raise CommunicationWriteError("Cannot send an in-game message to the sender slot")
 
@@ -186,19 +188,20 @@ def _activity_ids(activity: dict[str, object] | None) -> set[int]:
     return result
 
 
-def _reconciled_message(
+def _reconciled_activity_id(
     *,
     activity: dict[str, object] | None,
     previous_activity_ids: set[int],
     sender_planets_account_id: int,
     recipient_account_ids: dict[int, int | None],
     body: str,
-) -> bool:
+    game_id: int,
+) -> int | None:
     if activity is None:
-        return False
+        return None
     items = activity.get("items")
     if not isinstance(items, list):
-        return False
+        return None
 
     expected_body = _message_key(body)
     concrete_targets = {
@@ -218,16 +221,44 @@ def _reconciled_message(
         if _message_key(raw_message if isinstance(raw_message, str) else None) != expected_body:
             continue
 
-        # For a single direct recipient, require the factual target account when
-        # Planets.nu supplied one. Multi-recipient private messages may be
-        # represented without one target id, so body+new source is the strongest
-        # safe reconciliation available there.
+        if not recipient_account_ids:
+            # Runtime capture of an official Public Board post showed this exact
+            # activity shape: target=game, targettype=2, scope=2.
+            if item.get("target_id") != game_id:
+                continue
+            if item.get("target_type") != 2 or item.get("scope") != 2:
+                continue
+            return activity_id
+
+        # For a single private recipient, require the factual target account
+        # when Planets.nu supplies one. Multi-recipient roots can omit one
+        # target id; the explicit successful write supplies recipient provenance.
         if len(recipient_account_ids) == 1 and concrete_targets:
             target_id = item.get("target_id")
             if isinstance(target_id, int) and target_id not in concrete_targets:
                 continue
-        return True
-    return False
+        return activity_id
+    return None
+
+
+def _reconciled_message(
+    *,
+    activity: dict[str, object] | None,
+    previous_activity_ids: set[int],
+    sender_planets_account_id: int,
+    recipient_account_ids: dict[int, int | None],
+    body: str,
+    game_id: int = 0,
+) -> bool:
+    # Compatibility wrapper retained for focused unit tests.
+    return _reconciled_activity_id(
+        activity=activity,
+        previous_activity_ids=previous_activity_ids,
+        sender_planets_account_id=sender_planets_account_id,
+        recipient_account_ids=recipient_account_ids,
+        body=body,
+        game_id=game_id,
+    ) is not None
 
 
 async def send_owned_game_message(
@@ -300,13 +331,22 @@ async def send_owned_game_message(
             game_id=game_id,
             limit=2000,
         )
-        reconciled = _reconciled_message(
+        reconciled_activity_id = _reconciled_activity_id(
             activity=refreshed,
             previous_activity_ids=previous_activity_ids,
             sender_planets_account_id=sender_planets_account_id,
             recipient_account_ids=recipient_account_ids,
             body=message_body,
+            game_id=game_id,
         )
+        reconciled = reconciled_activity_id is not None
+        if reconciled_activity_id is not None and recipients:
+            mark_outgoing_private_message(
+                linked_account_id=linked_account_id,
+                game_id=game_id,
+                activity_id=reconciled_activity_id,
+                recipient_player_ids=recipients,
+            )
         if not reconciled:
             reconciliation_detail = (
                 "Planets.nu accepted the send request, but the new outgoing activity "
