@@ -60,7 +60,9 @@ if [[ "$SELF_ARG" != "--after-update" ]]; then
 
     run_logged git fetch "$REMOTE" "$BRANCH"
 
-    current_branch="$(git branch --show-current)"
+    # `git branch --show-current` was added in Git 2.22. Production currently
+    # runs an older Git, so use the long-supported rev-parse form instead.
+    current_branch="$(git rev-parse --abbrev-ref HEAD)"
     if [[ "$current_branch" != "$BRANCH" ]]; then
         run_logged git checkout "$BRANCH"
     fi
