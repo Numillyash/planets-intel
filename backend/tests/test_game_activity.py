@@ -83,6 +83,49 @@ class GameActivitySemanticTests(unittest.TestCase):
         self.assertEqual(reply_semantics["conversation_with_id"], 90192)
         self.assertEqual(reply_semantics["conversation_with_name"], "other player")
 
+    def test_targetless_scope_three_root_stays_private(self) -> None:
+        root = GameActivityObservation(
+            activity_id=150,
+            activity_type=1,
+            scope=3,
+            parent_id=0,
+            source_id=33734,
+            source_name="observer",
+            target_id=0,
+            target_name=None,
+            target_type=0,
+        )
+        semantics = _activity_semantics(
+            root,
+            rows_by_id={150: root},
+            observer_account_id=33734,
+        )
+
+        self.assertEqual(semantics["kind"], "private_message")
+        self.assertEqual(semantics["thread_root_id"], 150)
+        self.assertIsNone(semantics["conversation_with_id"])
+        self.assertIsNone(semantics["conversation_with_name"])
+
+    def test_orphan_scope_three_reply_stays_private(self) -> None:
+        reply = GameActivityObservation(
+            activity_id=151,
+            activity_type=1,
+            scope=3,
+            parent_id=150,
+            source_id=90192,
+            source_name="other player",
+            target_id=0,
+            target_name=None,
+            target_type=0,
+        )
+        semantics = _activity_semantics(
+            reply,
+            rows_by_id={151: reply},
+            observer_account_id=33734,
+        )
+
+        self.assertEqual(semantics["kind"], "private_message")
+
     def test_unproven_player_visibility_stays_unclassified(self) -> None:
         row = GameActivityObservation(
             activity_id=200,
