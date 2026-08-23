@@ -99,8 +99,15 @@ function LoginScreen({ onLogin }: LoginScreenProps) {
 function AuthenticatedSurface({ children }: { children: React.ReactNode }) {
     return (
         <>
-            <div className="global-time-strip">
-                <DualClock />
+            <div className="global-utility-strip">
+                <div className="global-time-strip">
+                    <DualClock />
+                </div>
+                <div
+                    aria-label="Game surface navigation"
+                    className="global-page-nav-slot"
+                    id="operational-page-surface-nav-root"
+                />
             </div>
             {children}
         </>
