@@ -15,22 +15,13 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # Historical rows predate endpoint provenance persistence. Keep them NULL:
+    # deriving an endpoint name from scope/target shape would turn an inference
+    # into a fabricated fact. Normal refreshes populate provenance only when an
+    # activity is actually observed through the corresponding endpoint.
     op.add_column(
         "game_activity_observations",
         sa.Column("visibility_source", sa.String(length=32), nullable=True),
-    )
-
-    # Existing scope=3 records are the only historical rows for which the
-    # current code already had an explicit private-message interpretation.
-    # Do not invent provenance for every other historical row.
-    op.execute(
-        """
-        UPDATE game_activity_observations
-        SET visibility_source = 'private_activity'
-        WHERE scope = 3
-          AND activity_type = 1
-          AND visibility_source IS NULL
-        """
     )
 
 
