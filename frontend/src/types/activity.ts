@@ -65,10 +65,15 @@ export type GameActivityKind =
     | "player_message"
     | "unclassified";
 
+export type GameActivityVisibilitySource =
+    | "ingame_activity"
+    | "private_activity";
+
 export interface GameActivityItem {
     activity_id: number;
     activity_type: number | null;
     scope: number | null;
+    visibility_source: GameActivityVisibilitySource | null;
     turn: number | null;
     parent_id: number | null;
     source_id: number | null;
