@@ -83,6 +83,94 @@ body.operational-page-dashboard-open .intel-map-panel {
     max-width: 100%;
 }
 
+/* Communications composer */
+.communications-compose-mode {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.communications-compose-mode button {
+    display: flex;
+    min-height: 62px;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 4px;
+    padding: 10px 12px;
+    border: 1px solid #2b3d54;
+    border-radius: 8px;
+    background: #0a131e;
+    color: #dce8f5;
+    text-align: left;
+    font: inherit;
+    cursor: pointer;
+}
+
+.communications-compose-mode button:hover:not(:disabled) {
+    border-color: #4f7095;
+    background: #101e2d;
+}
+
+.communications-compose-mode button.is-active {
+    border-color: #5d91c7;
+    background: #132a40;
+    box-shadow: inset 0 0 0 1px rgba(111, 169, 224, 0.16);
+}
+
+.communications-compose-mode button:disabled {
+    cursor: default;
+    opacity: 0.68;
+}
+
+.communications-compose-mode strong {
+    color: #eef5fd;
+    font-size: 0.82rem;
+}
+
+.communications-compose-mode span,
+.communications-compose-hint {
+    color: #8197b0;
+    font-size: 0.72rem;
+    line-height: 1.4;
+}
+
+.communications-message-textarea {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 126px;
+    margin-top: 8px;
+    padding: 11px 12px;
+    resize: vertical;
+    border: 1px solid #2c4058;
+    border-radius: 8px;
+    outline: none;
+    background: #07101a;
+    color: #e6eef8;
+    caret-color: #9fd0ff;
+    font: inherit;
+    line-height: 1.45;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.28);
+}
+
+.communications-message-textarea::placeholder {
+    color: #61758d;
+}
+
+.communications-message-textarea:focus {
+    border-color: #5e91c5;
+    box-shadow:
+        inset 0 1px 3px rgba(0, 0, 0, 0.28),
+        0 0 0 2px rgba(79, 139, 198, 0.14);
+}
+
+.communications-message-textarea:disabled {
+    color: #8392a4;
+    background: #0a1119;
+    opacity: 0.72;
+}
+
 .operational-vcr-popup-backdrop {
     position: fixed;
     z-index: 3600;
@@ -159,6 +247,10 @@ body.operational-page-dashboard-open .intel-map-panel {
 }
 
 @media (max-width: 760px) {
+    .communications-compose-mode {
+        grid-template-columns: 1fr;
+    }
+
     .operational-vcr-popup-backdrop {
         padding: 8px;
     }
