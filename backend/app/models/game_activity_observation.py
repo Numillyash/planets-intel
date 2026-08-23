@@ -23,9 +23,9 @@ class GameActivityObservation(Base):
 
     The activity feed can contain public discussions, private correspondence,
     diplomacy notices, and game/system events. The raw payload is preserved and
-    ``visibility_source`` records which factual Planets.nu activity endpoint
-    exposed the row, so read-side semantics do not have to infer privacy from
-    target-field shape alone.
+    ``visibility_source`` records which factual Planets.nu activity endpoint or
+    explicit IntelBoard write exposed the row, so read-side semantics do not
+    have to infer privacy from target-field shape alone.
     """
 
     __tablename__ = "game_activity_observations"
@@ -66,6 +66,10 @@ class GameActivityObservation(Base):
     activity_type: Mapped[int | None] = mapped_column(Integer, nullable=True)
     scope: Mapped[int | None] = mapped_column(Integer, nullable=True)
     visibility_source: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    outgoing_recipient_player_ids: Mapped[list[int] | None] = mapped_column(
+        JSON,
+        nullable=True,
+    )
     turn: Mapped[int | None] = mapped_column(Integer, nullable=True)
     parent_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     source_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
