@@ -46,6 +46,7 @@ class GameActivitySemanticTests(unittest.TestCase):
             activity_id=100,
             activity_type=1,
             scope=3,
+            visibility_source="private_activity",
             parent_id=0,
             source_id=33734,
             source_name="observer",
@@ -57,6 +58,7 @@ class GameActivitySemanticTests(unittest.TestCase):
             activity_id=101,
             activity_type=1,
             scope=3,
+            visibility_source="private_activity",
             parent_id=100,
             source_id=90192,
             source_name="other player",
@@ -83,11 +85,65 @@ class GameActivitySemanticTests(unittest.TestCase):
         self.assertEqual(reply_semantics["conversation_with_id"], 90192)
         self.assertEqual(reply_semantics["conversation_with_name"], "other player")
 
-    def test_targetless_scope_three_root_stays_private(self) -> None:
+    def test_private_feed_provenance_beats_targetless_nonprivate_shape(self) -> None:
+        root = GameActivityObservation(
+            activity_id=140,
+            activity_type=1,
+            scope=2,
+            visibility_source="private_activity",
+            parent_id=0,
+            source_id=33734,
+            source_name="observer",
+            target_id=0,
+            target_name=None,
+            target_type=0,
+        )
+        semantics = _activity_semantics(
+            root,
+            rows_by_id={140: root},
+            observer_account_id=33734,
+        )
+
+        self.assertEqual(semantics["kind"], "private_message")
+        self.assertEqual(semantics["thread_root_id"], 140)
+        self.assertIsNone(semantics["conversation_with_id"])
+
+    def test_reply_inherits_private_feed_provenance_from_root(self) -> None:
+        root = GameActivityObservation(
+            activity_id=145,
+            activity_type=1,
+            scope=2,
+            visibility_source="private_activity",
+            parent_id=0,
+            source_id=33734,
+            target_id=0,
+            target_type=0,
+        )
+        reply = GameActivityObservation(
+            activity_id=146,
+            activity_type=1,
+            scope=2,
+            visibility_source="ingame_activity",
+            parent_id=145,
+            source_id=90192,
+            target_id=0,
+            target_type=0,
+        )
+        semantics = _activity_semantics(
+            reply,
+            rows_by_id={145: root, 146: reply},
+            observer_account_id=33734,
+        )
+
+        self.assertEqual(semantics["kind"], "private_message")
+        self.assertEqual(semantics["thread_root_id"], 145)
+
+    def test_targetless_scope_three_root_stays_private_for_legacy_rows(self) -> None:
         root = GameActivityObservation(
             activity_id=150,
             activity_type=1,
             scope=3,
+            visibility_source=None,
             parent_id=0,
             source_id=33734,
             source_name="observer",
@@ -106,11 +162,12 @@ class GameActivitySemanticTests(unittest.TestCase):
         self.assertIsNone(semantics["conversation_with_id"])
         self.assertIsNone(semantics["conversation_with_name"])
 
-    def test_orphan_scope_three_reply_stays_private(self) -> None:
+    def test_orphan_scope_three_reply_stays_private_for_legacy_rows(self) -> None:
         reply = GameActivityObservation(
             activity_id=151,
             activity_type=1,
             scope=3,
+            visibility_source=None,
             parent_id=150,
             source_id=90192,
             source_name="other player",
@@ -126,11 +183,12 @@ class GameActivitySemanticTests(unittest.TestCase):
 
         self.assertEqual(semantics["kind"], "private_message")
 
-    def test_unproven_player_visibility_stays_unclassified(self) -> None:
+    def test_unproven_player_visibility_stays_general(self) -> None:
         row = GameActivityObservation(
             activity_id=200,
             activity_type=1,
             scope=2,
+            visibility_source="ingame_activity",
             parent_id=0,
             source_id=1,
             target_id=0,
