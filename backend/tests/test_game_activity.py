@@ -47,6 +47,7 @@ class GameActivitySemanticTests(unittest.TestCase):
             activity_type=1,
             scope=3,
             visibility_source="private_activity",
+            outgoing_recipient_player_ids=None,
             parent_id=0,
             source_id=33734,
             source_name="observer",
@@ -59,6 +60,7 @@ class GameActivitySemanticTests(unittest.TestCase):
             activity_type=1,
             scope=3,
             visibility_source="private_activity",
+            outgoing_recipient_player_ids=None,
             parent_id=100,
             source_id=90192,
             source_name="other player",
@@ -84,6 +86,63 @@ class GameActivitySemanticTests(unittest.TestCase):
         self.assertEqual(reply_semantics["thread_root_id"], 100)
         self.assertEqual(reply_semantics["conversation_with_id"], 90192)
         self.assertEqual(reply_semantics["conversation_with_name"], "other player")
+        self.assertEqual(reply_semantics["conversation_player_ids"], [])
+
+    def test_outgoing_group_write_is_private_and_preserves_slot_set(self) -> None:
+        root = GameActivityObservation(
+            activity_id=130,
+            activity_type=1,
+            scope=2,
+            visibility_source="outgoing_private_write",
+            outgoing_recipient_player_ids=[7, 2, 7],
+            parent_id=0,
+            source_id=33734,
+            source_name="observer",
+            target_id=683545,
+            target_name="Kaye's World Sector",
+            target_type=2,
+        )
+        semantics = _activity_semantics(
+            root,
+            rows_by_id={130: root},
+            observer_account_id=33734,
+        )
+
+        self.assertEqual(semantics["kind"], "private_message")
+        self.assertEqual(semantics["thread_root_id"], 130)
+        self.assertEqual(semantics["conversation_player_ids"], [2, 7])
+
+    def test_reply_inherits_outgoing_group_slot_set_from_root(self) -> None:
+        root = GameActivityObservation(
+            activity_id=135,
+            activity_type=1,
+            scope=2,
+            visibility_source="outgoing_private_write",
+            outgoing_recipient_player_ids=[2, 7],
+            parent_id=0,
+            source_id=33734,
+            target_id=683545,
+            target_type=2,
+        )
+        reply = GameActivityObservation(
+            activity_id=136,
+            activity_type=1,
+            scope=2,
+            visibility_source="ingame_activity",
+            outgoing_recipient_player_ids=None,
+            parent_id=135,
+            source_id=90192,
+            target_id=0,
+            target_type=0,
+        )
+        semantics = _activity_semantics(
+            reply,
+            rows_by_id={135: root, 136: reply},
+            observer_account_id=33734,
+        )
+
+        self.assertEqual(semantics["kind"], "private_message")
+        self.assertEqual(semantics["conversation_player_ids"], [2, 7])
 
     def test_private_feed_provenance_beats_targetless_nonprivate_shape(self) -> None:
         root = GameActivityObservation(
@@ -91,6 +150,7 @@ class GameActivitySemanticTests(unittest.TestCase):
             activity_type=1,
             scope=2,
             visibility_source="private_activity",
+            outgoing_recipient_player_ids=None,
             parent_id=0,
             source_id=33734,
             source_name="observer",
@@ -114,6 +174,7 @@ class GameActivitySemanticTests(unittest.TestCase):
             activity_type=1,
             scope=2,
             visibility_source="private_activity",
+            outgoing_recipient_player_ids=None,
             parent_id=0,
             source_id=33734,
             target_id=0,
@@ -124,6 +185,7 @@ class GameActivitySemanticTests(unittest.TestCase):
             activity_type=1,
             scope=2,
             visibility_source="ingame_activity",
+            outgoing_recipient_player_ids=None,
             parent_id=145,
             source_id=90192,
             target_id=0,
@@ -144,6 +206,7 @@ class GameActivitySemanticTests(unittest.TestCase):
             activity_type=1,
             scope=3,
             visibility_source=None,
+            outgoing_recipient_player_ids=None,
             parent_id=0,
             source_id=33734,
             source_name="observer",
@@ -168,6 +231,7 @@ class GameActivitySemanticTests(unittest.TestCase):
             activity_type=1,
             scope=3,
             visibility_source=None,
+            outgoing_recipient_player_ids=None,
             parent_id=150,
             source_id=90192,
             source_name="other player",
@@ -189,6 +253,7 @@ class GameActivitySemanticTests(unittest.TestCase):
             activity_type=1,
             scope=2,
             visibility_source="ingame_activity",
+            outgoing_recipient_player_ids=None,
             parent_id=0,
             source_id=1,
             target_id=0,
