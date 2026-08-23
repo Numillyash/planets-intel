@@ -70,10 +70,8 @@ def _strongest_visibility_source(
     previous_source: str | None,
     observed_source: str | None,
 ) -> str | None:
-    # A successful explicit private write proves more than either read endpoint.
     if "outgoing_private_write" in {previous_source, observed_source}:
         return "outgoing_private_write"
-    # The dedicated private activity feed is stronger than the broad feed.
     if "private_activity" in {previous_source, observed_source}:
         return "private_activity"
     return observed_source or previous_source
@@ -343,13 +341,21 @@ def _activity_semantics(
 
     root = _root_for(row, rows_by_id)
     if _is_private_message(row, root):
-        partner_id, partner_name = _conversation_partner(root, observer_account_id)
+        conversation_player_ids = _conversation_player_ids(row, root)
+        if conversation_player_ids:
+            partner_id = None
+            partner_name = None
+        else:
+            partner_id, partner_name = _conversation_partner(
+                root,
+                observer_account_id,
+            )
         return {
             "kind": "private_message",
             "thread_root_id": root.activity_id,
             "conversation_with_id": partner_id,
             "conversation_with_name": partner_name,
-            "conversation_player_ids": _conversation_player_ids(row, root),
+            "conversation_player_ids": conversation_player_ids,
         }
 
     return {
@@ -421,6 +427,7 @@ def get_owned_game_activity(
                     for slot_id in conversation_player_ids
                     if slot_id in slots_by_id
                 ]
+                semantics["conversation_with_id"] = None
                 if len(conversation_slots) == len(conversation_player_ids):
                     semantics["conversation_with_name"] = " + ".join(
                         slot.username for slot in conversation_slots
