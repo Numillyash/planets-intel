@@ -1,22 +1,41 @@
+.global-utility-strip {
+    position: relative;
+    z-index: 40;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: start;
+    width: min(1500px, calc(100% - 40px));
+    min-height: 58px;
+    margin: 0 auto;
+    padding-top: 7px;
+}
+
 .global-time-strip {
-    position: fixed;
-    z-index: 4900;
-    top: 7px;
-    left: 50%;
+    grid-column: 2;
+    grid-row: 1;
     display: flex;
     justify-content: center;
     min-height: 0;
     padding: 0;
     border: 0;
     background: transparent;
-    transform: translateX(-50%);
     pointer-events: none;
 }
 
-/* The starmap and Intelligence surfaces have their own fixed top chrome.
- * Keep the clock as a Dashboard/Home utility instead of creating a second
- * top row that shifts the common navigation vertically. */
-body:has(.intel-map-panel):not(.operational-page-dashboard-open) .global-time-strip {
+.global-page-nav-slot {
+    grid-column: 3;
+    grid-row: 1;
+    display: flex;
+    min-width: 0;
+    justify-content: flex-end;
+    padding-top: 5px;
+    pointer-events: auto;
+}
+
+/* The starmap owns the whole viewport and has its own map HUD. The utility
+ * strip belongs to normal page flow only, so it disappears completely while
+ * the fullscreen starmap is the active surface. */
+body:has(.intel-map-panel):not(.operational-page-dashboard-open) .global-utility-strip {
     display: none;
 }
 
@@ -64,8 +83,23 @@ body:has(.intel-map-panel):not(.operational-page-dashboard-open) .global-time-st
 }
 
 @media (max-width: 1100px) {
-    body.operational-page-dashboard-open:has(.intel-map-panel) .global-time-strip {
-        display: none;
+    .global-utility-strip {
+        grid-template-columns: minmax(0, 1fr);
+        row-gap: 6px;
+        min-height: 0;
+        padding-bottom: 7px;
+    }
+
+    .global-time-strip {
+        grid-column: 1;
+        grid-row: 1;
+    }
+
+    .global-page-nav-slot {
+        grid-column: 1;
+        grid-row: 2;
+        justify-content: center;
+        padding-top: 0;
     }
 }
 
@@ -81,9 +115,13 @@ body:has(.intel-map-panel):not(.operational-page-dashboard-open) .global-time-st
 }
 
 @media (max-width: 620px) {
-    .global-time-strip {
-        top: 6px;
+    .global-utility-strip {
         width: calc(100% - 24px);
+        padding-top: 6px;
+    }
+
+    .global-time-strip {
+        width: 100%;
     }
 
     .dual-clock {
