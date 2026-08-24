@@ -1,4 +1,4 @@
-export type GameSurfaceView = "starmap" | "dashboard" | "intel";
+export type GameSurfaceView = "starmap" | "dashboard";
 
 export interface GameSurfaceRoute {
     view: GameSurfaceView;
@@ -7,32 +7,64 @@ export interface GameSurfaceRoute {
 
 export const GAME_SURFACE_ROUTE_EVENT = "intel-game-surface-route";
 
-function legacyIntelTab(params: URLSearchParams): string | null {
-    const value = params.get("intel");
-    if (value === "host") return "reports";
-    if (value === "combat" || value === "reports" || value === "communications") {
-        return value;
-    }
-    return null;
+
+function legacyIntelTab(value: string | null): string {
+    if (value === "host" || value === "reports") return "reports";
+    if (value === "communications") return "communications";
+    return "vcr";
 }
+
 
 export function readGameSurfaceRoute(): GameSurfaceRoute {
     const params = new URLSearchParams(window.location.search);
     const rawView = params.get("view");
-    if (rawView === "dashboard" || rawView === "intel" || rawView === "starmap") {
+
+    if (rawView === "starmap") {
+        return { view: "starmap", tab: null };
+    }
+    if (rawView === "dashboard") {
+        return { view: "dashboard", tab: params.get("tab") };
+    }
+    if (rawView === "intel") {
         return {
-            view: rawView,
-            tab: params.get("tab"),
+            view: "dashboard",
+            tab: legacyIntelTab(params.get("tab")),
         };
     }
 
-    const legacyTab = legacyIntelTab(params);
-    if (legacyTab !== null) {
-        return { view: "intel", tab: legacyTab };
+    const legacy = params.get("intel");
+    if (legacy !== null) {
+        return {
+            view: "dashboard",
+            tab: legacyIntelTab(legacy),
+        };
     }
 
     return { view: "starmap", tab: null };
 }
+
+
+export function canonicalizeLegacyGameSurfaceLocation(): boolean {
+    const url = new URL(window.location.href);
+    const rawView = url.searchParams.get("view");
+    const legacy = url.searchParams.get("intel");
+    if (rawView !== "intel" && legacy === null) return false;
+
+    const route = readGameSurfaceRoute();
+    url.searchParams.delete("intel");
+    url.searchParams.set("view", route.view);
+    if (route.tab === null || route.tab.trim() === "") {
+        url.searchParams.delete("tab");
+    } else {
+        url.searchParams.set("tab", route.tab);
+    }
+
+    const next = `${url.pathname}${url.search}${url.hash}`;
+    window.history.replaceState(null, "", next);
+    window.dispatchEvent(new Event(GAME_SURFACE_ROUTE_EVENT));
+    return true;
+}
+
 
 export function writeGameSurfaceRoute(
     view: GameSurfaceView,
@@ -59,6 +91,7 @@ export function writeGameSurfaceRoute(
     }
     window.dispatchEvent(new Event(GAME_SURFACE_ROUTE_EVENT));
 }
+
 
 export function subscribeGameSurfaceRoute(listener: () => void): () => void {
     window.addEventListener("popstate", listener);
