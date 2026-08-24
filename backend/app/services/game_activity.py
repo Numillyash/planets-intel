@@ -367,6 +367,19 @@ def _activity_semantics(
     }
 
 
+def _display_name_matches_slot(display_name: str, slot: GamePlayerSlot) -> bool:
+    """Match Planets.nu's `username (Race)` display token to one roster slot."""
+
+    value = display_name.strip().casefold()
+    username = slot.username.strip().casefold()
+    if not value or not username:
+        return False
+    return value == username or (
+        value.startswith(f"{username} (")
+        and value.endswith(")")
+    )
+
+
 def _active_human_slot_for_identity(
     slots: list[GamePlayerSlot],
     *,
@@ -383,15 +396,79 @@ def _active_human_slot_for_identity(
         if len(matches) > 1:
             return None
 
-    normalized_name = username.strip().casefold() if username else ""
+    normalized_name = username.strip() if username else ""
     if not normalized_name:
         return None
     matches = [
         slot
         for slot in eligible
-        if slot.username.strip().casefold() == normalized_name
+        if _display_name_matches_slot(normalized_name, slot)
     ]
     return matches[0] if len(matches) == 1 else None
+
+
+def _private_group_player_ids_from_root(
+    root: GameActivityObservation,
+    *,
+    slots: list[GamePlayerSlot],
+    observer_account_id: int | None,
+) -> list[int]:
+    """Derive a factual group recipient set from Planets.nu targettype=4.
+
+    Runtime-captured private activity uses targettype=4 and a comma-separated
+    targetname containing every recipient display name.  The source is stored
+    separately.  Resolve every participant against the current canonical roster,
+    exclude the authenticated observer, and fail closed if any target token or
+    the source cannot be mapped uniquely.
+    """
+
+    if root.target_type != 4 or not root.target_name:
+        return []
+    if observer_account_id in (None, 0):
+        return []
+
+    eligible = [slot for slot in slots if slot.status == 1 and slot.race_id < 100]
+    source_slot = _active_human_slot_for_identity(
+        eligible,
+        account_id=root.source_id,
+        username=root.source_name,
+    )
+    if source_slot is None:
+        return []
+
+    target_tokens = [token.strip() for token in root.target_name.split(",")]
+    if not target_tokens or any(not token for token in target_tokens):
+        return []
+
+    target_slots: list[GamePlayerSlot] = []
+    for token in target_tokens:
+        matches = [
+            slot
+            for slot in eligible
+            if _display_name_matches_slot(token, slot)
+        ]
+        if len(matches) != 1:
+            return []
+        target_slots.append(matches[0])
+
+    participants: dict[int, GamePlayerSlot] = {source_slot.slot_id: source_slot}
+    for slot in target_slots:
+        participants[slot.slot_id] = slot
+
+    observers = [
+        slot
+        for slot in participants.values()
+        if slot.account_id == observer_account_id
+    ]
+    if len(observers) != 1:
+        return []
+    observer_slot_id = observers[0].slot_id
+
+    return sorted(
+        slot_id
+        for slot_id in participants
+        if slot_id != observer_slot_id
+    )
 
 
 def _legacy_private_partner_from_root(
@@ -498,6 +575,21 @@ def get_owned_game_activity(
             conversation_player_ids = list(
                 semantics.get("conversation_player_ids") or [],
             )
+            if (
+                not conversation_player_ids
+                and semantics.get("kind") == "private_message"
+            ):
+                root = _root_for(row, rows_by_id)
+                conversation_player_ids = _private_group_player_ids_from_root(
+                    root,
+                    slots=slots,
+                    observer_account_id=observer_account_id,
+                )
+                if conversation_player_ids:
+                    semantics["conversation_player_ids"] = conversation_player_ids
+                    semantics["conversation_with_id"] = None
+                    semantics["conversation_with_name"] = None
+
             if conversation_player_ids:
                 conversation_slots = [
                     slots_by_id[slot_id]
