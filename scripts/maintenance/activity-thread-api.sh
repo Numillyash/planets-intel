@@ -11,9 +11,9 @@ fi
 
 ACTIVITY_ID="$1"
 
-ACTIVITY_ID="$ACTIVITY_ID" docker compose exec -T backend python - <<'PY'
+docker compose exec -T backend python - "$ACTIVITY_ID" <<'PY'
 import json
-import os
+import sys
 
 from sqlalchemy import select
 
@@ -22,7 +22,7 @@ from app.models.game_activity_observation import GameActivityObservation
 from app.models.planets_account import PlanetsAccount
 from app.services.game_activity import get_owned_game_activity
 
-activity_id = int(os.environ["ACTIVITY_ID"])
+activity_id = int(sys.argv[1])
 
 with SessionLocal() as session:
     roots = list(
