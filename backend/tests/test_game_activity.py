@@ -5,6 +5,7 @@ from app.models.game_player_slot import GamePlayerSlot
 from app.services.game_activity import (
     _activity_semantics,
     _legacy_private_partner_from_root,
+    _private_group_player_ids_from_root,
     flatten_activity_records,
 )
 
@@ -271,6 +272,121 @@ class GameActivitySemanticTests(unittest.TestCase):
         )
         self.assertEqual(semantics["kind"], "player_message")
         self.assertIsNone(semantics["conversation_with_id"])
+
+
+class PrivateGroupParticipantTests(unittest.TestCase):
+    @staticmethod
+    def _slot(slot_id: int, account_id: int, username: str) -> GamePlayerSlot:
+        return GamePlayerSlot(
+            game_id=683330,
+            slot_id=slot_id,
+            account_id=account_id,
+            username=username,
+            race_id=1,
+            status=1,
+            first_seen_turn=1,
+            last_seen_turn=18,
+        )
+
+    @classmethod
+    def _slots(cls) -> list[GamePlayerSlot]:
+        return [
+            cls._slot(3, 33734, "georgul"),
+            cls._slot(5, 37542, "helping die"),
+            cls._slot(6, 70777, "leno4ka"),
+        ]
+
+    def test_captured_incoming_group_resolves_other_participants_for_helping_die(self) -> None:
+        root = GameActivityObservation(
+            activity_id=7634370,
+            activity_type=1,
+            scope=3,
+            visibility_source="private_activity",
+            parent_id=0,
+            source_id=70777,
+            source_name="leno4ka (The Robots)",
+            target_id=0,
+            target_name="georgul (The Bird Men), helping die (The Evil Empire)",
+            target_type=4,
+        )
+
+        self.assertEqual(
+            _private_group_player_ids_from_root(
+                root,
+                slots=self._slots(),
+                observer_account_id=37542,
+            ),
+            [3, 6],
+        )
+
+    def test_captured_incoming_group_resolves_other_participants_for_georgul(self) -> None:
+        root = GameActivityObservation(
+            activity_id=7634370,
+            activity_type=1,
+            scope=3,
+            visibility_source="private_activity",
+            parent_id=0,
+            source_id=70777,
+            source_name="leno4ka (The Robots)",
+            target_id=0,
+            target_name="georgul (The Bird Men), helping die (The Evil Empire)",
+            target_type=4,
+        )
+
+        self.assertEqual(
+            _private_group_player_ids_from_root(
+                root,
+                slots=self._slots(),
+                observer_account_id=33734,
+            ),
+            [5, 6],
+        )
+
+    def test_captured_outgoing_group_resolves_both_targets(self) -> None:
+        root = GameActivityObservation(
+            activity_id=7634201,
+            activity_type=1,
+            scope=3,
+            visibility_source="private_activity",
+            parent_id=0,
+            source_id=33734,
+            source_name="georgul (The Bird Men)",
+            target_id=0,
+            target_name="helping die (The Evil Empire), leno4ka (The Robots)",
+            target_type=4,
+        )
+
+        self.assertEqual(
+            _private_group_player_ids_from_root(
+                root,
+                slots=self._slots(),
+                observer_account_id=33734,
+            ),
+            [5, 6],
+        )
+
+    def test_group_target_fails_closed_when_any_name_is_unresolved(self) -> None:
+        root = GameActivityObservation(
+            activity_id=7634370,
+            activity_type=1,
+            scope=3,
+            visibility_source="private_activity",
+            parent_id=0,
+            source_id=70777,
+            source_name="leno4ka (The Robots)",
+            target_id=0,
+            target_name="georgul (The Bird Men), unknown player (The Lizards)",
+            target_type=4,
+        )
+
+        self.assertEqual(
+            _private_group_player_ids_from_root(
+                root,
+                slots=self._slots(),
+                observer_account_id=33734,
+            ),
+            [],
+        )
 
 
 class LegacyPrivatePartnerTests(unittest.TestCase):
