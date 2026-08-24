@@ -6,6 +6,14 @@ ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 REQUIREMENTS_FILE="$ROOT_DIR/infra/production/host-requirements.env"
 MODE="${1:---deploy}"
 
+case "$MODE" in
+    --deploy|--network|--all) ;;
+    *)
+        echo "Usage: $0 [--deploy|--network|--all]" >&2
+        exit 2
+        ;;
+esac
+
 if [[ ! -r "$REQUIREMENTS_FILE" ]]; then
     echo "Missing production host requirements: $REQUIREMENTS_FILE" >&2
     exit 2
@@ -93,9 +101,10 @@ if command -v docker >/dev/null 2>&1; then
     fi
 
     compose_version="$(docker compose version --short 2>/dev/null || true)"
+    compose_numeric="${compose_version#v}"
     if [[ -z "$compose_version" ]]; then
         fail_check "docker compose v2 plugin is unavailable"
-    elif [[ "${compose_version%%.*}" == "$HOST_DOCKER_COMPOSE_MAJOR" ]]; then
+    elif [[ "${compose_numeric%%.*}" == "$HOST_DOCKER_COMPOSE_MAJOR" ]]; then
         ok "docker compose $compose_version (major $HOST_DOCKER_COMPOSE_MAJOR)"
     else
         fail_check "docker compose $compose_version; required major $HOST_DOCKER_COMPOSE_MAJOR"
