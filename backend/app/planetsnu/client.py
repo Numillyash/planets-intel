@@ -276,13 +276,23 @@ class PlanetsNuClient:
         api_key: str,
         recipient_player_ids: list[int],
         body: str,
+        parent_id: int | None = None,
     ) -> dict[str, Any]:
-        """Send one public or private in-game message without transport retry.
+        """Send one root message or game-feed reply without transport retry.
 
-        Verified official-client wire format:
-        - Public Board: omit ``to`` entirely.
-        - Private message: include ``to=slot[,slot…]``.
+        Verified against the official Planets.nu 1.24 client on 2026-08-25:
+        - Public Board root: omit ``to`` and ``parentid``.
+        - Private root: include ``to=slot[,slot…]``.
+        - Reply: use the same ``/game/sendmessage`` endpoint and add
+          ``parentid=<thread root activity id>``; private replies retain ``to``.
         """
+
+        if parent_id is not None and (
+            isinstance(parent_id, bool)
+            or not isinstance(parent_id, int)
+            or parent_id <= 0
+        ):
+            raise ValueError("parent_id must be a positive integer")
 
         data: dict[str, Any] = {
             "gameid": game_id,
@@ -292,6 +302,8 @@ class PlanetsNuClient:
         }
         if recipient_player_ids:
             data["to"] = ",".join(str(item) for item in recipient_player_ids)
+        if parent_id is not None:
+            data["parentid"] = parent_id
 
         payload = await self.post_form(
             "game/sendmessage",
