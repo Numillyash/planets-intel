@@ -14,6 +14,16 @@ the ordinary game UI.
 - Deployment: Docker Compose
 - External reverse proxy: existing Apache on host
 
+Application language runtimes are containerized: frontend builds use Node 20
+and the backend runtime uses Python 3.11. The production host dependency
+contract is recorded separately and checked automatically before deployment.
+
+See:
+
+- `docs/operations/PRODUCTION_PREREQUISITES.md`
+- `infra/production/host-requirements.env`
+- `scripts/maintenance/check-host-prerequisites.sh`
+
 ## Architecture
 
 The application separates:
@@ -50,6 +60,15 @@ Planned application entry point:
       -> backend / PostgreSQL Docker network
 
 PostgreSQL must not be exposed publicly.
+
+Production deploy:
+
+```bash
+bash /opt/planets-intel/scripts/deploy/production.sh
+```
+
+The deploy script self-updates and runs the recorded host prerequisite check
+before building the production image.
 
 ## Development stages
 
