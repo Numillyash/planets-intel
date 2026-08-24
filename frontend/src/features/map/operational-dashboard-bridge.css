@@ -235,12 +235,43 @@ body.operational-page-dashboard-open .intel-map-panel {
     flex: 0 0 auto;
 }
 
+/* A factual child activity has parent_id set by Planets.nu. Make that hierarchy
+   unmistakable: this is not another root message in the conversation. */
 .communications-message-card.is-reply {
-    width: calc(100% - 20px);
-    margin-left: 20px;
-    border-left-width: 3px;
-    border-left-color: #80515b;
-    background: #140f13;
+    position: relative;
+    width: calc(100% - 38px);
+    margin-left: 38px;
+    padding-top: 28px;
+    border-color: #3f5169;
+    border-left-width: 4px;
+    border-left-color: #6d9bc8;
+    background: #0d1621;
+    box-shadow: inset 12px 0 24px rgba(35, 86, 132, 0.08);
+}
+
+.communications-message-card.is-reply::before {
+    content: "↳ Reply";
+    position: absolute;
+    top: 8px;
+    left: 12px;
+    color: #78a9d7;
+    font-size: 0.67rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.communications-message-card.is-reply::after {
+    content: "";
+    position: absolute;
+    top: -9px;
+    left: -22px;
+    width: 17px;
+    height: 28px;
+    border-bottom: 2px solid #425f7b;
+    border-left: 2px solid #425f7b;
+    border-bottom-left-radius: 8px;
+    pointer-events: none;
 }
 
 .operational-vcr-popup-backdrop {
@@ -324,8 +355,13 @@ body.operational-page-dashboard-open .intel-map-panel {
     }
 
     .communications-message-card.is-reply {
-        width: calc(100% - 10px);
-        margin-left: 10px;
+        width: calc(100% - 18px);
+        margin-left: 18px;
+    }
+
+    .communications-message-card.is-reply::after {
+        left: -12px;
+        width: 8px;
     }
 
     .communications-message-card > footer {
