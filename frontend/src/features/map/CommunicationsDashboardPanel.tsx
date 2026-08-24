@@ -169,6 +169,17 @@ function replyPreview(item: GameActivityItem): string {
 }
 
 
+function replyThreadRootId(item: GameActivityItem): number {
+    if (item.thread_root_id !== null && item.thread_root_id > 0) {
+        return item.thread_root_id;
+    }
+    if (item.parent_id !== null && item.parent_id > 0) {
+        return item.parent_id;
+    }
+    return item.activity_id;
+}
+
+
 export function CommunicationsDashboardPanel(props: {
     gameId: number;
     linkedAccountId: number;
@@ -390,11 +401,13 @@ export function CommunicationsDashboardPanel(props: {
             .filter((player) => recipients.includes(player.slot_id))
             .map((player) => `${player.username} (slot ${player.slot_id})`);
         const destination = composeMode === "general" ? "the Public Board" : names.join(", ");
+        const replyActivityId = replyTarget?.activity_id ?? null;
+        const replyRootId = replyTarget === null ? null : replyThreadRootId(replyTarget);
         const replyNote = replyTarget === null
             ? ""
-            : `\n\nReply target in IntelBoard: #${replyTarget.activity_id} from ${replyTarget.source_name ?? "unknown sender"}.`;
+            : `\n\nReply to factual message #${replyTarget.activity_id} from ${replyTarget.source_name ?? "unknown sender"}. Planets.nu thread root: #${replyRootId}.`;
         const confirmed = window.confirm(
-            `Send this ${composeMode === "general" ? "public" : "private"} message via Planets.nu to ${destination}?${replyNote}`,
+            `Send this ${composeMode === "general" ? "public" : "private"} ${replyTarget === null ? "message" : "reply"} via Planets.nu to ${destination}?${replyNote}`,
         );
         if (!confirmed) return;
 
@@ -408,13 +421,20 @@ export function CommunicationsDashboardPanel(props: {
                 props.linkedAccountId,
                 recipients,
                 body,
+                replyActivityId,
             );
             if (result.upstream_accepted && result.reconciled) {
-                setSendNotice(
-                    composeMode === "general"
-                        ? "Public Board message sent and observed in the refreshed Planets.nu communications feed."
-                        : "Private message sent and observed in the refreshed Planets.nu communications feed.",
-                );
+                if (result.parent_activity_id !== null) {
+                    setSendNotice(
+                        `Reply sent and observed in Planets.nu thread #${result.parent_activity_id}.`,
+                    );
+                } else {
+                    setSendNotice(
+                        composeMode === "general"
+                            ? "Public Board message sent and observed in the refreshed Planets.nu communications feed."
+                            : "Private message sent and observed in the refreshed Planets.nu communications feed.",
+                    );
+                }
             } else if (result.upstream_accepted) {
                 setSendWarning(
                     result.reconciliation_detail
@@ -438,9 +458,11 @@ export function CommunicationsDashboardPanel(props: {
         || (composeMode === "private" && recipientIds.length === 0);
     const sendLabel = sending
         ? "Sending…"
-        : composeMode === "general"
-            ? "Post to Public Board"
-            : `Send privately to ${recipientIds.length}`;
+        : replyTarget !== null
+            ? `Reply in thread #${replyThreadRootId(replyTarget)}`
+            : composeMode === "general"
+                ? "Post to Public Board"
+                : `Send privately to ${recipientIds.length}`;
 
     return (
         <section className="panel dashboard-embedded-panel">
@@ -449,8 +471,8 @@ export function CommunicationsDashboardPanel(props: {
                     <div className="eyebrow">Observer communications</div>
                     <h2>Communications</h2>
                     <p>
-                        Public Board and direct conversations are separated. Reply actions are
-                        attached to individual factual messages rather than whole conversations.
+                        Public Board and direct conversations are separated. Reply actions preserve
+                        the factual Planets.nu thread root and exact private participant set.
                     </p>
                 </div>
                 <button
@@ -503,8 +525,9 @@ export function CommunicationsDashboardPanel(props: {
                                 {replyPreview(replyTarget)}
                             </div>
                             <div style={{ color: "#738aa3", fontSize: 10, marginTop: 7 }}>
-                                Recipient routing is exact. The upstream Planets.nu reply-parent
-                                request field is not yet verified, so no parent id is fabricated.
+                                Verified Planets.nu game-feed reply: /game/sendmessage with
+                                {` parentid=${replyThreadRootId(replyTarget)}`}. Replying to a child
+                                keeps the same factual thread root.
                             </div>
                         </div>
                     )}
