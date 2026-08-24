@@ -172,20 +172,102 @@ def _validate_recipients(
     return recipient_ids, account_ids
 
 
-def _activity_ids(activity: dict[str, object] | None) -> set[int]:
+def _activity_items(activity: dict[str, object] | None) -> list[dict[str, object]]:
     if activity is None:
-        return set()
+        return []
     items = activity.get("items")
     if not isinstance(items, list):
-        return set()
+        return []
+    return [item for item in items if isinstance(item, dict)]
+
+
+def _activity_ids(activity: dict[str, object] | None) -> set[int]:
     result: set[int] = set()
-    for item in items:
-        if not isinstance(item, dict):
-            continue
+    for item in _activity_items(activity):
         value = item.get("activity_id")
         if isinstance(value, int) and not isinstance(value, bool):
             result.add(value)
     return result
+
+
+def _resolve_reply_parent(
+    *,
+    activity: dict[str, object] | None,
+    reply_to_activity_id: int | None,
+    recipient_player_ids: list[int],
+) -> int | None:
+    """Resolve a clicked factual message to the Planets.nu thread-root parent.
+
+    The official 1.24 game client sends replies through /game/sendmessage with
+    parentid set to the root activity id. IntelBoard accepts the clicked message
+    id, including a child reply, but only emits a parent after validating the
+    stored root semantics and exact recipient set.
+    """
+
+    if reply_to_activity_id is None:
+        return None
+
+    items = _activity_items(activity)
+    by_id = {
+        item["activity_id"]: item
+        for item in items
+        if isinstance(item.get("activity_id"), int)
+        and not isinstance(item.get("activity_id"), bool)
+    }
+    clicked = by_id.get(reply_to_activity_id)
+    if clicked is None:
+        raise CommunicationWriteError(
+            f"Reply target activity {reply_to_activity_id} is not present in the observed communications feed"
+        )
+
+    root_id = _positive_int(clicked.get("thread_root_id"))
+    if root_id is None:
+        root_id = _positive_int(clicked.get("parent_id"))
+    if root_id is None:
+        root_id = reply_to_activity_id
+
+    root = by_id.get(root_id)
+    if root is None:
+        raise CommunicationWriteError(
+            f"Reply thread root activity {root_id} is not present in the observed communications feed"
+        )
+
+    kind = root.get("kind")
+    requested = sorted(set(recipient_player_ids))
+    if kind == "private_message":
+        raw_expected = root.get("conversation_player_ids")
+        if not isinstance(raw_expected, list):
+            raise CommunicationWriteError(
+                "Private reply recipient set is not factually resolved for this thread"
+            )
+        expected = sorted(
+            {
+                value
+                for value in raw_expected
+                if isinstance(value, int)
+                and not isinstance(value, bool)
+                and value > 0
+            }
+        )
+        if not expected:
+            raise CommunicationWriteError(
+                "Private reply recipient set is not factually resolved for this thread"
+            )
+        if requested != expected:
+            raise CommunicationWriteError(
+                "Private reply recipients do not match the factual thread participants"
+            )
+    elif kind == "player_message":
+        if requested:
+            raise CommunicationWriteError(
+                "Public Board replies cannot include private recipients"
+            )
+    else:
+        raise CommunicationWriteError(
+            "Only factual Public Board or private player messages can be replied to"
+        )
+
+    return root_id
 
 
 def _reconciled_activity_id(
@@ -196,11 +278,10 @@ def _reconciled_activity_id(
     recipient_account_ids: dict[int, int | None],
     body: str,
     game_id: int,
+    expected_parent_id: int | None = None,
 ) -> int | None:
-    if activity is None:
-        return None
-    items = activity.get("items")
-    if not isinstance(items, list):
+    items = _activity_items(activity)
+    if not items:
         return None
 
     expected_body = _message_key(body)
@@ -210,8 +291,6 @@ def _reconciled_activity_id(
         if value is not None
     }
     for item in items:
-        if not isinstance(item, dict):
-            continue
         activity_id = item.get("activity_id")
         if not isinstance(activity_id, int) or activity_id in previous_activity_ids:
             continue
@@ -221,8 +300,21 @@ def _reconciled_activity_id(
         if _message_key(raw_message if isinstance(raw_message, str) else None) != expected_body:
             continue
 
+        observed_parent_id = _positive_int(item.get("parent_id"))
+        if expected_parent_id is None:
+            # A new root write must not be reconciled against an unrelated child
+            # reply with identical text.
+            if observed_parent_id is not None:
+                continue
+        elif observed_parent_id != expected_parent_id:
+            continue
+        else:
+            # The factual parent relation is the strongest reconciliation proof
+            # for replies. Child target fields are commonly absent upstream.
+            return activity_id
+
         if not recipient_account_ids:
-            # Runtime capture of an official Public Board post showed this exact
+            # Runtime capture of an official Public Board root showed this exact
             # activity shape: target=game, targettype=2, scope=2.
             if item.get("target_id") != game_id:
                 continue
@@ -230,7 +322,7 @@ def _reconciled_activity_id(
                 continue
             return activity_id
 
-        # For a single private recipient, require the factual target account
+        # For a single private recipient root, require the factual target account
         # when Planets.nu supplies one. Multi-recipient roots can omit one
         # target id; the explicit successful write supplies recipient provenance.
         if len(recipient_account_ids) == 1 and concrete_targets:
@@ -249,6 +341,7 @@ def _reconciled_message(
     recipient_account_ids: dict[int, int | None],
     body: str,
     game_id: int = 0,
+    expected_parent_id: int | None = None,
 ) -> bool:
     # Compatibility wrapper retained for focused unit tests.
     return _reconciled_activity_id(
@@ -258,6 +351,7 @@ def _reconciled_message(
         recipient_account_ids=recipient_account_ids,
         body=body,
         game_id=game_id,
+        expected_parent_id=expected_parent_id,
     ) is not None
 
 
@@ -268,6 +362,7 @@ async def send_owned_game_message(
     game_id: int,
     recipient_player_ids: list[int],
     body: str,
+    reply_to_activity_id: int | None = None,
 ) -> dict[str, object]:
     message_body = body.strip()
     if not message_body:
@@ -302,6 +397,11 @@ async def send_owned_game_message(
             sender_player_id=sender_player_id,
             requested_player_ids=recipient_player_ids,
         )
+        parent_activity_id = _resolve_reply_parent(
+            activity=previous_activity,
+            reply_to_activity_id=reply_to_activity_id,
+            recipient_player_ids=recipients,
+        )
 
         try:
             upstream = await client.send_message(
@@ -310,6 +410,7 @@ async def send_owned_game_message(
                 api_key=api_key,
                 recipient_player_ids=recipients,
                 body=message_body,
+                parent_id=parent_activity_id,
             )
         except PlanetsNuAmbiguousWriteError as exc:
             raise CommunicationWriteAmbiguousError(
@@ -338,6 +439,7 @@ async def send_owned_game_message(
             recipient_account_ids=recipient_account_ids,
             body=message_body,
             game_id=game_id,
+            expected_parent_id=parent_activity_id,
         )
         reconciled = reconciled_activity_id is not None
         if reconciled_activity_id is not None and recipients:
@@ -348,9 +450,14 @@ async def send_owned_game_message(
                 recipient_player_ids=recipients,
             )
         if not reconciled:
+            relation = (
+                f" with parent_id={parent_activity_id}"
+                if parent_activity_id is not None
+                else ""
+            )
             reconciliation_detail = (
-                "Planets.nu accepted the send request, but the new outgoing activity "
-                "was not yet observed in the refreshed communications feed."
+                "Planets.nu accepted the send request, but the new outgoing activity"
+                f"{relation} was not yet observed in the refreshed communications feed."
             )
     except (PrivateSyncError, PlanetsNuError) as exc:
         reconciliation_detail = (
@@ -364,6 +471,7 @@ async def send_owned_game_message(
         "linked_account_id": linked_account_id,
         "sender_player_id": sender_player_id,
         "recipient_player_ids": recipients,
+        "parent_activity_id": parent_activity_id,
         "upstream_accepted": True,
         "reconciled": reconciled,
         "upstream_html": upstream_html if isinstance(upstream_html, str) else None,
