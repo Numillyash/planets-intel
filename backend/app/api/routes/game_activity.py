@@ -58,6 +58,7 @@ async def send_game_message(
             linked_account_id=payload.linked_account_id,
             game_id=game_id,
             recipient_player_ids=payload.recipient_player_ids,
+            reply_to_activity_id=payload.reply_to_activity_id,
             body=payload.body,
         )
     except CommunicationWriteAmbiguousError as exc:
