@@ -1,7 +1,12 @@
 import unittest
 
 from app.models.game_activity_observation import GameActivityObservation
-from app.services.game_activity import _activity_semantics, flatten_activity_records
+from app.models.game_player_slot import GamePlayerSlot
+from app.services.game_activity import (
+    _activity_semantics,
+    _legacy_private_partner_from_root,
+    flatten_activity_records,
+)
 
 
 class GameActivityFlattenTests(unittest.TestCase):
@@ -266,6 +271,107 @@ class GameActivitySemanticTests(unittest.TestCase):
         )
         self.assertEqual(semantics["kind"], "player_message")
         self.assertIsNone(semantics["conversation_with_id"])
+
+
+class LegacyPrivatePartnerTests(unittest.TestCase):
+    @staticmethod
+    def _slot(
+        slot_id: int,
+        account_id: int,
+        username: str,
+    ) -> GamePlayerSlot:
+        return GamePlayerSlot(
+            game_id=683545,
+            slot_id=slot_id,
+            account_id=account_id,
+            username=username,
+            race_id=1,
+            status=1,
+            first_seen_turn=1,
+            last_seen_turn=17,
+        )
+
+    def test_incoming_targetless_private_root_resolves_source_from_roster(self) -> None:
+        root = GameActivityObservation(
+            activity_id=7634370,
+            activity_type=1,
+            scope=3,
+            visibility_source="private_activity",
+            parent_id=0,
+            source_id=90192,
+            source_name="leno4ka",
+            target_id=683545,
+            target_name="Kaye's World Sector",
+            target_type=2,
+        )
+        slots = [
+            self._slot(3, 33734, "georgul"),
+            self._slot(5, 90192, "leno4ka"),
+        ]
+
+        self.assertEqual(
+            _legacy_private_partner_from_root(
+                root,
+                slots=slots,
+                observer_account_id=33734,
+            ),
+            (90192, "leno4ka"),
+        )
+
+    def test_outgoing_private_root_resolves_target_when_source_is_observer(self) -> None:
+        root = GameActivityObservation(
+            activity_id=7634380,
+            activity_type=1,
+            scope=3,
+            visibility_source="private_activity",
+            parent_id=0,
+            source_id=33734,
+            source_name="georgul",
+            target_id=90192,
+            target_name="leno4ka",
+            target_type=1,
+        )
+        slots = [
+            self._slot(3, 33734, "georgul"),
+            self._slot(5, 90192, "leno4ka"),
+        ]
+
+        self.assertEqual(
+            _legacy_private_partner_from_root(
+                root,
+                slots=slots,
+                observer_account_id=33734,
+            ),
+            (90192, "leno4ka"),
+        )
+
+    def test_conflicting_nonobserver_identities_fail_closed(self) -> None:
+        root = GameActivityObservation(
+            activity_id=7634390,
+            activity_type=1,
+            scope=3,
+            visibility_source="private_activity",
+            parent_id=0,
+            source_id=90192,
+            source_name="leno4ka",
+            target_id=81234,
+            target_name="other player",
+            target_type=1,
+        )
+        slots = [
+            self._slot(3, 33734, "georgul"),
+            self._slot(5, 90192, "leno4ka"),
+            self._slot(6, 81234, "other player"),
+        ]
+
+        self.assertEqual(
+            _legacy_private_partner_from_root(
+                root,
+                slots=slots,
+                observer_account_id=33734,
+            ),
+            (None, None),
+        )
 
 
 if __name__ == "__main__":
