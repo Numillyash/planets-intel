@@ -74,6 +74,7 @@ export async function sendGameMessage(
     linkedAccountId: number,
     recipientPlayerIds: number[],
     body: string,
+    replyToActivityId: number | null = null,
 ): Promise<SendGameMessageResponse> {
     const response = await fetch(
         `/api/games/${gameId}/communications/messages`,
@@ -87,6 +88,7 @@ export async function sendGameMessage(
             body: JSON.stringify({
                 linked_account_id: linkedAccountId,
                 recipient_player_ids: recipientPlayerIds,
+                reply_to_activity_id: replyToActivityId,
                 body,
             }),
         },
