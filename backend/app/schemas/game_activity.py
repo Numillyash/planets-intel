@@ -49,10 +49,13 @@ class GameActivityResponse(BaseModel):
 
 class SendGameMessageRequest(BaseModel):
     linked_account_id: int = Field(gt=0)
-    # Verified against the official client wire format on 2026-08-23:
-    # zero recipients means Public Board and omits the `to` form field entirely;
-    # one or more recipients means a private message and sends `to=slot[,slot…]`.
+    # Verified against the official client wire format:
+    # - zero recipients omits `to` and posts to the Public Board;
+    # - one or more recipients sends `to=slot[,slot…]`;
+    # - a game-feed reply uses the same /game/sendmessage endpoint and adds
+    #   `parentid=<thread root activity id>` (captured client 2026-08-25).
     recipient_player_ids: list[int] = Field(default_factory=list, max_length=31)
+    reply_to_activity_id: int | None = Field(default=None, gt=0)
     body: str = Field(min_length=1, max_length=20000)
 
     @field_validator("recipient_player_ids")
@@ -75,6 +78,7 @@ class SendGameMessageResponse(BaseModel):
     linked_account_id: int
     sender_player_id: int
     recipient_player_ids: list[int]
+    parent_activity_id: int | None = None
     upstream_accepted: bool
     reconciled: bool
     upstream_html: str | None = None
