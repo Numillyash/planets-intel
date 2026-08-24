@@ -9,6 +9,8 @@ HEALTH_URL="${DEPLOY_HEALTH_URL:-http://127.0.0.1:18080/api/health}"
 SELF_ARG="${1:-}"
 REMOTE_TRACKING_REF="refs/remotes/$REMOTE/$BRANCH"
 REMOTE_BRANCH_REF="refs/heads/$BRANCH"
+BUILD_ATTEMPTS="${DEPLOY_BUILD_ATTEMPTS:-3}"
+BUILD_RETRY_DELAY="${DEPLOY_BUILD_RETRY_DELAY:-10}"
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
@@ -109,7 +111,25 @@ fi
 printf 'HEAD: %s\n' "$HEAD_SHA"
 
 step "Build production image"
-run_logged docker compose build "$SERVICE"
+build_ok=0
+for attempt in $(seq 1 "$BUILD_ATTEMPTS"); do
+    printf 'Build attempt %d/%d...\n' "$attempt" "$BUILD_ATTEMPTS"
+    printf '\n--- build attempt %d/%d ---\n' "$attempt" "$BUILD_ATTEMPTS" >>"$LOG_FILE"
+    if run_logged docker compose build "$SERVICE"; then
+        build_ok=1
+        break
+    fi
+
+    if [[ "$attempt" -lt "$BUILD_ATTEMPTS" ]]; then
+        printf 'Build attempt %d failed; retrying in %ss...\n' \
+            "$attempt" "$BUILD_RETRY_DELAY"
+        sleep "$BUILD_RETRY_DELAY"
+    fi
+done
+if [[ "$build_ok" -ne 1 ]]; then
+    echo "Production image build failed after $BUILD_ATTEMPTS attempts" >&2
+    false
+fi
 printf 'Build: OK\n'
 
 step "Backend test suite"
