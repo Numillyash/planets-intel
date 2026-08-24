@@ -367,6 +367,92 @@ def _activity_semantics(
     }
 
 
+def _active_human_slot_for_identity(
+    slots: list[GamePlayerSlot],
+    *,
+    account_id: int | None,
+    username: str | None,
+) -> GamePlayerSlot | None:
+    """Resolve one current human slot from exact factual account/name identity."""
+
+    eligible = [slot for slot in slots if slot.status == 1 and slot.race_id < 100]
+    if account_id not in (None, 0):
+        matches = [slot for slot in eligible if slot.account_id == account_id]
+        if len(matches) == 1:
+            return matches[0]
+        if len(matches) > 1:
+            return None
+
+    normalized_name = username.strip().casefold() if username else ""
+    if not normalized_name:
+        return None
+    matches = [
+        slot
+        for slot in eligible
+        if slot.username.strip().casefold() == normalized_name
+    ]
+    return matches[0] if len(matches) == 1 else None
+
+
+def _legacy_private_partner_from_root(
+    root: GameActivityObservation,
+    *,
+    slots: list[GamePlayerSlot],
+    observer_account_id: int | None,
+) -> tuple[int | None, str | None]:
+    """Derive a single legacy private partner only from unambiguous roster facts.
+
+    Older private activity can prove that a message is private without exposing a
+    useful target id.  In that case the root message's source still identifies an
+    incoming correspondent.  This helper never invents a multi-recipient set and
+    fails closed whenever source/target identities disagree or are ambiguous.
+    """
+
+    source_slot = _active_human_slot_for_identity(
+        slots,
+        account_id=root.source_id,
+        username=root.source_name,
+    )
+    target_slot = _active_human_slot_for_identity(
+        slots,
+        account_id=root.target_id,
+        username=root.target_name,
+    )
+
+    def is_observer(slot: GamePlayerSlot | None) -> bool:
+        return (
+            slot is not None
+            and observer_account_id not in (None, 0)
+            and slot.account_id == observer_account_id
+        )
+
+    candidate: GamePlayerSlot | None = None
+    if is_observer(source_slot):
+        if target_slot is not None and not is_observer(target_slot):
+            candidate = target_slot
+    elif is_observer(target_slot):
+        if source_slot is not None and not is_observer(source_slot):
+            candidate = source_slot
+    elif source_slot is not None and target_slot is None:
+        candidate = source_slot
+    elif target_slot is not None and source_slot is None:
+        candidate = target_slot
+    elif (
+        source_slot is not None
+        and target_slot is not None
+        and source_slot.slot_id == target_slot.slot_id
+    ):
+        candidate = source_slot
+
+    if candidate is None or is_observer(candidate):
+        return None, None
+    account_id = candidate.account_id
+    return (
+        account_id if account_id not in (None, 0) else None,
+        candidate.username.strip() or None,
+    )
+
+
 def get_owned_game_activity(
     *,
     user_id: int,
@@ -437,6 +523,19 @@ def get_owned_game_activity(
                         semantics["conversation_with_id"] = (
                             account_id if account_id and account_id > 0 else None
                         )
+            elif (
+                semantics.get("kind") == "private_message"
+                and semantics.get("conversation_with_id") is None
+                and semantics.get("conversation_with_name") is None
+            ):
+                root = _root_for(row, rows_by_id)
+                partner_id, partner_name = _legacy_private_partner_from_root(
+                    root,
+                    slots=slots,
+                    observer_account_id=observer_account_id,
+                )
+                semantics["conversation_with_id"] = partner_id
+                semantics["conversation_with_name"] = partner_name
 
             items.append(
                 {
