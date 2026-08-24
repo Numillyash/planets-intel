@@ -171,6 +171,78 @@ body.operational-page-dashboard-open .intel-map-panel {
     opacity: 0.72;
 }
 
+/* Dashboard communications message cards. The migrated dashboard panel uses
+   its own semantic class rather than dashboard-report-item, so keep the visual
+   thread treatment here explicitly instead of depending on legacy markup. */
+.communications-message-card {
+    box-sizing: border-box;
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 12px;
+    border: 1px solid #50333a;
+    border-radius: 7px;
+    background: #160f14;
+    color: #e8eef6;
+}
+
+.communications-message-card > header {
+    display: flex;
+    min-width: 0;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.communications-message-card > header strong {
+    min-width: 0;
+    overflow: hidden;
+    color: #ffb6b6;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.communications-message-card > header small,
+.communications-message-card > footer small,
+.communications-message-card > small {
+    flex: 0 0 auto;
+    color: #879bb5;
+}
+
+.communications-message-card > div {
+    overflow-wrap: anywhere;
+    color: #eef3f9;
+    line-height: 1.45;
+}
+
+.communications-message-card > footer {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.communications-message-card > footer small {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.communications-message-card > footer .secondary-button {
+    flex: 0 0 auto;
+}
+
+.communications-message-card.is-reply {
+    width: calc(100% - 20px);
+    margin-left: 20px;
+    border-left-width: 3px;
+    border-left-color: #80515b;
+    background: #140f13;
+}
+
 .operational-vcr-popup-backdrop {
     position: fixed;
     z-index: 3600;
@@ -249,6 +321,15 @@ body.operational-page-dashboard-open .intel-map-panel {
 @media (max-width: 760px) {
     .communications-compose-mode {
         grid-template-columns: 1fr;
+    }
+
+    .communications-message-card.is-reply {
+        width: calc(100% - 10px);
+        margin-left: 10px;
+    }
+
+    .communications-message-card > footer {
+        align-items: flex-end;
     }
 
     .operational-vcr-popup-backdrop {
