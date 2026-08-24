@@ -20,6 +20,7 @@ import {
     isCombinedPrivateIntel,
     type PrivateIntelMapResponse,
 } from "../../types/intel";
+import { CommunicationsDashboardPanel } from "../map/CommunicationsDashboardPanel";
 import { HostEventPanel } from "../map/HostEventPanel";
 import { PlayerActivityPanel } from "../map/PlayerActivityPanel";
 import {
@@ -45,6 +46,7 @@ type GameDashboardTab =
     | "vcr"
     | "battle-planner"
     | "reports"
+    | "communications"
     | "planets"
     | "starships"
     | "starbases"
@@ -61,6 +63,7 @@ const TABS: Array<{ id: GameDashboardTab; label: string }> = [
     { id: "vcr", label: "VCR" },
     { id: "battle-planner", label: "Battle Planner" },
     { id: "reports", label: "Reports" },
+    { id: "communications", label: "Communications" },
     { id: "planets", label: "Planets" },
     { id: "starships", label: "Starships" },
     { id: "starbases", label: "Starbases" },
@@ -433,6 +436,20 @@ export function GameDashboard({
                         linkedAccountId={selectedAccount.id}
                         turn={dashboardTurn}
                     />
+                )}
+
+                {activeTab === "communications" && (
+                    historicalMode ? (
+                        <HistoricalUnavailable title="Historical communications view unavailable" turn={dashboardTurn}>
+                            Communications are stored as the current observer feed, not as a
+                            turn-indexed snapshot. Live messages are hidden in historical mode.
+                        </HistoricalUnavailable>
+                    ) : (
+                        <CommunicationsDashboardPanel
+                            gameId={game.game.id}
+                            linkedAccountId={selectedAccount.id}
+                        />
+                    )
                 )}
 
                 {activeTab === "planets" && (
