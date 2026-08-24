@@ -6,14 +6,6 @@ ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 REQUIREMENTS_FILE="$ROOT_DIR/infra/production/host-requirements.env"
 MODE="${1:---deploy}"
 
-case "$MODE" in
-    --deploy|--network|--all) ;;
-    *)
-        echo "Usage: $0 [--deploy|--network|--all]" >&2
-        exit 2
-        ;;
-esac
-
 if [[ ! -r "$REQUIREMENTS_FILE" ]]; then
     echo "Missing production host requirements: $REQUIREMENTS_FILE" >&2
     exit 2
@@ -64,14 +56,41 @@ check_command() {
     fi
 }
 
+check_required_command_list() {
+    local raw_list="$1"
+    local -a commands=()
+    local command_name
+    # The script intentionally uses a global IFS without spaces. Requirement
+    # lists are stored as ordinary space-separated strings, so split them with
+    # a local IFS instead of relying on implicit shell word splitting.
+    IFS=' ' read -r -a commands <<< "$raw_list"
+    for command_name in "${commands[@]}"; do
+        [[ -n "$command_name" ]] && check_command "$command_name"
+    done
+}
+
+check_optional_command_list() {
+    local raw_list="$1"
+    local package_hint="$2"
+    local -a commands=()
+    local command_name
+    IFS=' ' read -r -a commands <<< "$raw_list"
+    for command_name in "${commands[@]}"; do
+        [[ -n "$command_name" ]] || continue
+        if command -v "$command_name" >/dev/null 2>&1; then
+            ok "optional diagnostic $command_name available"
+        else
+            warn "optional diagnostic $command_name missing (CentOS package: $package_hint)"
+        fi
+    done
+}
+
 printf '===== PLANETS INTEL HOST PREREQUISITES =====\n'
 printf 'mode=%s\n' "$MODE"
 printf 'requirements=%s\n' "$REQUIREMENTS_FILE"
 
 printf '\n===== REQUIRED COMMANDS =====\n'
-for command_name in $HOST_REQUIRED_DEPLOY_COMMANDS; do
-    check_command "$command_name"
-done
+check_required_command_list "$HOST_REQUIRED_DEPLOY_COMMANDS"
 
 printf '\n===== VERSIONS =====\n'
 bash_version="${BASH_VERSION%%(*}"
@@ -101,10 +120,10 @@ if command -v docker >/dev/null 2>&1; then
     fi
 
     compose_version="$(docker compose version --short 2>/dev/null || true)"
-    compose_numeric="${compose_version#v}"
+    compose_version="${compose_version#v}"
     if [[ -z "$compose_version" ]]; then
         fail_check "docker compose v2 plugin is unavailable"
-    elif [[ "${compose_numeric%%.*}" == "$HOST_DOCKER_COMPOSE_MAJOR" ]]; then
+    elif [[ "${compose_version%%.*}" == "$HOST_DOCKER_COMPOSE_MAJOR" ]]; then
         ok "docker compose $compose_version (major $HOST_DOCKER_COMPOSE_MAJOR)"
     else
         fail_check "docker compose $compose_version; required major $HOST_DOCKER_COMPOSE_MAJOR"
@@ -128,16 +147,8 @@ printf 'INFO database image: %s\n' "$DATABASE_IMAGE"
 
 if [[ "$MODE" == "--network" || "$MODE" == "--all" ]]; then
     printf '\n===== NETWORK MAINTENANCE COMMANDS =====\n'
-    for command_name in $HOST_REQUIRED_NETWORK_COMMANDS; do
-        check_command "$command_name"
-    done
-    for command_name in $HOST_OPTIONAL_NETWORK_DIAGNOSTICS; do
-        if command -v "$command_name" >/dev/null 2>&1; then
-            ok "optional diagnostic $command_name available"
-        else
-            warn "optional diagnostic $command_name missing (CentOS package: bind-utils)"
-        fi
-    done
+    check_required_command_list "$HOST_REQUIRED_NETWORK_COMMANDS"
+    check_optional_command_list "$HOST_OPTIONAL_NETWORK_DIAGNOSTICS" "bind-utils"
 fi
 
 if [[ "$MODE" == "--deploy" || "$MODE" == "--all" ]]; then
