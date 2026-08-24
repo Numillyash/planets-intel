@@ -291,7 +291,7 @@ class LegacyPrivatePartnerTests(unittest.TestCase):
             last_seen_turn=17,
         )
 
-    def test_incoming_targetless_private_root_resolves_source_from_roster(self) -> None:
+    def test_incoming_game_target_private_root_does_not_collapse_to_sender(self) -> None:
         root = GameActivityObservation(
             activity_id=7634370,
             activity_type=1,
@@ -315,7 +315,7 @@ class LegacyPrivatePartnerTests(unittest.TestCase):
                 slots=slots,
                 observer_account_id=33734,
             ),
-            (90192, "leno4ka"),
+            (None, None),
         )
 
     def test_outgoing_private_root_resolves_target_when_source_is_observer(self) -> None:
