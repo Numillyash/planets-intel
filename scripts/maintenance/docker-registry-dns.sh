@@ -13,13 +13,25 @@ else
     echo "/etc/resolv.conf unavailable"
 fi
 
-if [[ -r /etc/docker/daemon.json ]]; then
+echo
+if command -v nmcli >/dev/null 2>&1; then
+    echo "===== NETWORKMANAGER DNS ====="
+    nmcli -t -f GENERAL.CONNECTION,IP4.DNS,IP6.DNS device show 2>/dev/null || true
     echo
-    echo "===== /etc/docker/daemon.json ====="
-    cat /etc/docker/daemon.json
 fi
 
-echo
+if command -v resolvectl >/dev/null 2>&1; then
+    echo "===== SYSTEMD-RESOLVED DNS ====="
+    resolvectl status 2>/dev/null | sed -n '1,120p' || true
+    echo
+fi
+
+if [[ -r /etc/docker/daemon.json ]]; then
+    echo "===== /etc/docker/daemon.json ====="
+    cat /etc/docker/daemon.json
+    echo
+fi
+
 echo "===== SYSTEM RESOLUTION ====="
 if getent ahostsv4 "$REGISTRY_HOST" >/tmp/planets-intel-registry-getent.$$ 2>&1; then
     head -n 4 /tmp/planets-intel-registry-getent.$$
