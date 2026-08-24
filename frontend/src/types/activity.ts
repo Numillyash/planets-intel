@@ -105,6 +105,7 @@ export interface SendGameMessageResponse {
     linked_account_id: number;
     sender_player_id: number;
     recipient_player_ids: number[];
+    parent_activity_id: number | null;
     upstream_accepted: boolean;
     reconciled: boolean;
     upstream_html: string | null;
