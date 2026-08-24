@@ -12,8 +12,6 @@ WORK_DIR="$LOG_DIR/${STAMP}-planets-reply-client"
 mkdir -p "$WORK_DIR"
 
 python3 - "$BASE_URL" "$WORK_DIR" <<'PY'
-from __future__ import annotations
-
 import gzip
 from html.parser import HTMLParser
 import io
@@ -37,7 +35,7 @@ UA = (
 )
 
 
-def fetch(url: str) -> bytes:
+def fetch(url):
     request = Request(
         url,
         headers={
@@ -54,11 +52,11 @@ def fetch(url: str) -> bytes:
 
 
 class ScriptParser(HTMLParser):
-    def __init__(self) -> None:
-        super().__init__()
-        self.urls: list[str] = []
+    def __init__(self):
+        HTMLParser.__init__(self)
+        self.urls = []
 
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+    def handle_starttag(self, tag, attrs):
         values = {key.lower(): value for key, value in attrs}
         if tag.lower() == "script" and values.get("src"):
             self.urls.append(values["src"] or "")
@@ -69,12 +67,12 @@ class ScriptParser(HTMLParser):
                 self.urls.append(href)
 
 
-print(f"===== FETCH PLANETS.NU CLIENT =====")
-print(f"base={base_url}")
+print("===== FETCH PLANETS.NU CLIENT =====")
+print("base={}".format(base_url))
 try:
     html_bytes = fetch(base_url)
 except (HTTPError, URLError, TimeoutError) as exc:
-    raise SystemExit(f"failed to fetch {base_url}: {exc}")
+    raise SystemExit("failed to fetch {}: {}".format(base_url, exc))
 
 html_text = html_bytes.decode("utf-8", errors="replace")
 (work_dir / "index.html").write_text(html_text, encoding="utf-8")
@@ -83,8 +81,8 @@ parser = ScriptParser()
 parser.feed(html_text)
 
 base_host = urlparse(base_url).netloc
-queue: list[str] = []
-seen_urls: set[str] = set()
+queue = []
+seen_urls = set()
 for value in parser.urls:
     absolute = urljoin(base_url, value)
     if urlparse(absolute).netloc == base_host:
@@ -96,8 +94,8 @@ for match in re.finditer(r"[\"']([^\"']+?\.(?:js|mjs)(?:\?[^\"']*)?)[\"']", html
     if urlparse(absolute).netloc == base_host:
         queue.append(absolute)
 
-manifest: list[dict[str, object]] = []
-texts: list[tuple[str, str]] = [("index.html", html_text)]
+manifest = []
+texts = [("index.html", html_text)]
 max_assets = 120
 
 # Common minified-bundle forms for lazy chunks and dynamic imports.
@@ -115,11 +113,11 @@ while queue and len(seen_urls) < max_assets:
         raw = fetch(url)
         text = raw.decode("utf-8", errors="replace")
     except Exception as exc:  # diagnostic: keep crawling other chunks
-        manifest.append({"url": url, "error": f"{type(exc).__name__}: {exc}"})
+        manifest.append({"url": url, "error": "{}: {}".format(type(exc).__name__, exc)})
         continue
 
     index = len(texts)
-    name = f"asset-{index:03d}.js"
+    name = "asset-{:03d}.js".format(index)
     (assets_dir / name).write_text(text, encoding="utf-8")
     texts.append((name, text))
     manifest.append({"url": url, "file": name, "bytes": len(raw)})
@@ -142,8 +140,8 @@ while queue and len(seen_urls) < max_assets:
     encoding="utf-8",
 )
 
-print(f"downloaded_assets={len(texts) - 1}")
-print(f"saved={work_dir}")
+print("downloaded_assets={}".format(len(texts) - 1))
+print("saved={}".format(work_dir))
 
 patterns = [
     ("account/post", re.compile(r"account/post", re.I)),
@@ -159,13 +157,13 @@ patterns = [
 ]
 
 results_file = work_dir / "matches.txt"
-printed: set[tuple[str, int, str]] = set()
-result_lines: list[str] = []
+printed = set()
+result_lines = []
 max_matches_per_pattern = 20
 context_chars = 700
 
 for label, pattern in patterns:
-    result_lines.append(f"\n===== {label} =====")
+    result_lines.append("\n===== {} =====".format(label))
     count = 0
     for filename, text in texts:
         for match in pattern.finditer(text):
@@ -180,7 +178,7 @@ for label, pattern in patterns:
                 continue
             printed.add(key)
             count += 1
-            result_lines.append(f"[{filename} offset={match.start()}]")
+            result_lines.append("[{} offset={}]".format(filename, match.start()))
             result_lines.append(snippet)
         if count >= max_matches_per_pattern:
             break
@@ -191,7 +189,7 @@ results = "\n".join(result_lines) + "\n"
 results_file.write_text(results, encoding="utf-8")
 print(results)
 print("===== SUMMARY =====")
-print(f"full_matches={results_file}")
-print(f"manifest={work_dir / 'manifest.json'}")
+print("full_matches={}".format(results_file))
+print("manifest={}".format(work_dir / "manifest.json"))
 print("No authentication or API key is used by this inspector.")
 PY
