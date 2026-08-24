@@ -7,6 +7,8 @@ REMOTE="${DEPLOY_REMOTE:-origin}"
 SERVICE="${DEPLOY_SERVICE:-backend}"
 HEALTH_URL="${DEPLOY_HEALTH_URL:-http://127.0.0.1:18080/api/health}"
 SELF_ARG="${1:-}"
+REMOTE_TRACKING_REF="refs/remotes/$REMOTE/$BRANCH"
+REMOTE_BRANCH_REF="refs/heads/$BRANCH"
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
@@ -58,7 +60,11 @@ if [[ "$SELF_ARG" != "--after-update" ]]; then
         exit 3
     fi
 
-    run_logged git fetch "$REMOTE" "$BRANCH"
+    # Some older Git versions update FETCH_HEAD but not refs/remotes/origin/*
+    # for `git fetch origin <branch>`. Use an explicit refspec so the
+    # remote-tracking branch is authoritative on every supported server.
+    run_logged git fetch "$REMOTE" \
+        "$REMOTE_BRANCH_REF:$REMOTE_TRACKING_REF"
 
     # `git branch --show-current` was added in Git 2.22. Production currently
     # runs an older Git, so use the long-supported rev-parse form instead.
@@ -67,10 +73,10 @@ if [[ "$SELF_ARG" != "--after-update" ]]; then
         run_logged git checkout "$BRANCH"
     fi
 
-    run_logged git pull --ff-only "$REMOTE" "$BRANCH"
+    run_logged git merge --ff-only "$REMOTE_TRACKING_REF"
 
     local_head="$(git rev-parse HEAD)"
-    remote_head="$(git rev-parse "$REMOTE/$BRANCH")"
+    remote_head="$(git rev-parse "$REMOTE_TRACKING_REF")"
     if [[ "$local_head" != "$remote_head" ]]; then
         echo "Refusing deploy: local HEAD does not match $REMOTE/$BRANCH" >&2
         echo "local:  $local_head" >&2
@@ -93,9 +99,11 @@ if [[ -n "$tracked_dirty" ]]; then
 fi
 
 HEAD_SHA="$(git rev-parse HEAD)"
-ORIGIN_SHA="$(git rev-parse "$REMOTE/$BRANCH")"
+ORIGIN_SHA="$(git rev-parse "$REMOTE_TRACKING_REF")"
 if [[ "$HEAD_SHA" != "$ORIGIN_SHA" ]]; then
     echo "Refusing deploy: HEAD diverged after update" >&2
+    echo "local:  $HEAD_SHA" >&2
+    echo "remote: $ORIGIN_SHA" >&2
     exit 6
 fi
 printf 'HEAD: %s\n' "$HEAD_SHA"
