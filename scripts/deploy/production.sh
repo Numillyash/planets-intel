@@ -92,6 +92,10 @@ if [[ "$SELF_ARG" != "--after-update" ]]; then
         bash "$ROOT_DIR/scripts/deploy/production.sh" --after-update
 fi
 
+step "Host prerequisites"
+run_logged bash "$ROOT_DIR/scripts/maintenance/check-host-prerequisites.sh" --deploy
+printf 'Host prerequisites: OK\n'
+
 step "Git verification"
 tracked_dirty="$(git status --porcelain --untracked-files=no)"
 if [[ -n "$tracked_dirty" ]]; then
