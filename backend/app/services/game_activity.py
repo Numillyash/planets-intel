@@ -400,12 +400,13 @@ def _legacy_private_partner_from_root(
     slots: list[GamePlayerSlot],
     observer_account_id: int | None,
 ) -> tuple[int | None, str | None]:
-    """Derive a single legacy private partner only from unambiguous roster facts.
+    """Derive a direct legacy partner only when the observer is explicit.
 
-    Older private activity can prove that a message is private without exposing a
-    useful target id.  In that case the root message's source still identifies an
-    incoming correspondent.  This helper never invents a multi-recipient set and
-    fails closed whenever source/target identities disagree or are ambiguous.
+    A private-activity root can target the game even when the rendered Planets.nu
+    conversation contains multiple recipients.  Source-only identity therefore
+    does not prove a one-to-one thread.  Resolve a single partner only when the
+    root explicitly identifies the observer as source or target; otherwise fail
+    closed until a factual recipient set is available.
     """
 
     source_slot = _active_human_slot_for_identity(
@@ -433,16 +434,6 @@ def _legacy_private_partner_from_root(
     elif is_observer(target_slot):
         if source_slot is not None and not is_observer(source_slot):
             candidate = source_slot
-    elif source_slot is not None and target_slot is None:
-        candidate = source_slot
-    elif target_slot is not None and source_slot is None:
-        candidate = target_slot
-    elif (
-        source_slot is not None
-        and target_slot is not None
-        and source_slot.slot_id == target_slot.slot_id
-    ):
-        candidate = source_slot
 
     if candidate is None or is_observer(candidate):
         return None, None
