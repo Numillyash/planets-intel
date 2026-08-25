@@ -15,6 +15,7 @@ import type { GameRuleCatalogResponse } from "../../api/ruleCatalog";
 import type { GameDetailsResponse } from "../../types/api";
 import type { PrivateIntelMapResponse } from "../../types/intel";
 import { CombatReplayPlayer } from "./CombatReplayPlayer";
+import { BattleSimulatorAddPicker } from "./BattleSimulatorAddPicker";
 import { CombatantEditor, NumberInput } from "./BattleSimulatorEditor";
 import {
     candidateLabel,
@@ -356,15 +357,8 @@ export function BattleSimulatorWorkbench({
         invalidateResults();
     }
 
-    function addCombatant(side: SideName) {
-        const key = side === "left"
-            ? leftAddKey ?? shipKeys[0] ?? hullKeys[0] ?? null
-            : rightAddKey ?? shipKeys[0] ?? planetKeys[0] ?? hullKeys[0] ?? null;
-        if (key === null) return;
-        const next = materializeCandidate(key, game, intel, catalog);
-        if (next === null) return;
+    function appendCombatant(side: SideName, next: MaterializedCombatant) {
         if (side === "left" && next.setup.kind === "planet") return;
-
         if (side === "left") {
             setLeftQueue((queue) => [...queue, next]);
             setSelectedLeft(leftQueue.length);
@@ -374,6 +368,16 @@ export function BattleSimulatorWorkbench({
         }
         setSelectedSide(side);
         invalidateResults();
+    }
+
+    function addCombatant(side: SideName) {
+        const key = side === "left"
+            ? leftAddKey ?? shipKeys[0] ?? hullKeys[0] ?? null
+            : rightAddKey ?? shipKeys[0] ?? planetKeys[0] ?? hullKeys[0] ?? null;
+        if (key === null) return;
+        const next = materializeCandidate(key, game, intel, catalog);
+        if (next === null) return;
+        appendCombatant(side, next);
     }
 
     function moveCombatant(side: SideName, index: number, delta: number) {
@@ -494,9 +498,9 @@ export function BattleSimulatorWorkbench({
                         <span className="eyebrow">BATTLE ORDER · T{turn}</span>
                         <h3>Combat queues</h3>
                         <p>
-                            Add known ships, VCR-observed ships or manual hulls of any race.
-                            For planetary waves, keep one fixed planet/starbase on RIGHT and
-                            queue the attacking ships on LEFT.
+                            Add from separate Known ships, Known planets, or Generic ship / planet sources.
+                            Known ships are grouped by owner race; low-armament support hulls are hidden by default.
+                            For planetary waves, keep one fixed planet/starbase on RIGHT and queue attackers on LEFT.
                         </p>
                     </div>
                     <button
@@ -513,27 +517,19 @@ export function BattleSimulatorWorkbench({
                 </header>
 
                 <div className="battle-sim-add-grid">
-                    <AddCombatantRow
+                    <BattleSimulatorAddPicker
                         catalog={catalog}
-                        hullKeys={hullKeys}
+                        game={game}
                         intel={intel}
-                        onAdd={() => addCombatant("left")}
-                        onChange={setLeftAddKey}
-                        planetKeys={[]}
-                        shipKeys={shipKeys}
+                        onAdd={(next) => appendCombatant("left", next)}
                         side="left"
-                        value={leftAddKey}
                     />
-                    <AddCombatantRow
+                    <BattleSimulatorAddPicker
                         catalog={catalog}
-                        hullKeys={hullKeys}
+                        game={game}
                         intel={intel}
-                        onAdd={() => addCombatant("right")}
-                        onChange={setRightAddKey}
-                        planetKeys={planetKeys}
-                        shipKeys={shipKeys}
+                        onAdd={(next) => appendCombatant("right", next)}
                         side="right"
-                        value={rightAddKey}
                     />
                 </div>
 
