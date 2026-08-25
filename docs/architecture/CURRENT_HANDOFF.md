@@ -16,14 +16,14 @@ GitHub is the source of truth. Active development remains on `feature/operationa
 Last explicitly runtime-confirmed deploy with full deploy output:
 
 ```text
-HEAD:       db1fec23715f4bda111d619daaa678cce9048cad
+HEAD:       84aa60c26b2bc8db4644c379481bebba0a5fcafe
 BUILD:      OK
-TESTS:      OK — 214
+TESTS:      OK — 223
 MIGRATIONS: 0017_outgoing_msg_recipients (head)
 HEALTH:     OK
 ```
 
-Later GitHub commits exist. The compact corpus summary was also run successfully from the production backend after it was added, but the user did not include a fresh deploy/HEAD block with that specific run, so do not invent the exact server HEAD for it.
+Later GitHub commits exist for Lizard regression baselines and Federation evidence diagnostics. Do not invent a server HEAD for those until a fresh deploy output is supplied.
 
 ## Hard invariants
 
@@ -37,7 +37,7 @@ hull capacity != factual installed weapons
 
 Battle Planner loadout edits are simulation assumptions only. Deterministic replay is derived evidence, never a factual observation.
 
-## Battle Planner UX checkpoint — closed
+## Battle Planner UX / intel checkpoint — closed
 
 The 2026-08-25 picker/editor/UI work is browser-validated and should not be reopened as pending work.
 
@@ -53,6 +53,32 @@ Confirmed in deployed UI:
 - deterministic and normal odds paths work;
 - VCR validation-lab spacing and compact starbase layout were accepted;
 - legacy combined-picker state/helper code was removed.
+
+Two intel-boundary regressions were also fixed and browser-accepted:
+
+1. non-owner private tactical zero placeholders no longer override factual shared owner configuration;
+2. existing current known ships can now receive missing immutable equipment from accessible VCR evidence, and latest-Host post-combat mutable state can be used as a simulator default without mutating canonical current intel.
+
+Relevant commits:
+
+```text
+43ee7067925bfe6c9c82d24b454794539a48ba55  fix: reject hidden enemy loadout zero placeholders
+09dc97e6f5207cb40e651aed6f0c7f423d49d678  test: cover enemy tactical zero sanitizing
+3cc575086004610c31090c46d8b3549c33ea4a6e  fix: merge VCR evidence into known battle ships
+84aa60c26b2bc8db4644c379481bebba0a5fcafe  fix: carry latest host combat state into planner
+```
+
+The VCR/current-state precedence remains:
+
+```text
+current factual/private/shared state
+  > analyst-confirmed post-VCR state
+  > deterministic replay post-VCR state
+  > same-turn factual combat-start fallback
+  > simulation assumption
+```
+
+For a VCR from the immediately preceding Host turn, only post-combat state is eligible; combat-start ammunition does not cross the Host boundary.
 
 ## Deferred observation — sequence odds 502
 
@@ -74,7 +100,7 @@ Read-only diagnostic:
 backend/app/scripts/combat_regression_dump.py
 ```
 
-Validated corpus result:
+Validated corpus result at that checkpoint:
 
 ```text
 unique_vcrs:               145
@@ -88,7 +114,7 @@ analyst_mismatches:          0
 analyst_not_comparable:      0
 ```
 
-All observed game catalogs use Classic combat RNG (`combatrng = 0`). `145/145 supported` proves current stored inputs are accepted by the deterministic engine; it does not prove every Host special mechanic has independent factual confirmation.
+All observed game catalogs use Classic combat RNG (`combatrng = 0`). `145/145 supported` proves that stored checkpoint was accepted by the deterministic engine; it does not prove every Host special mechanic has independent factual confirmation. The store had grown to `147` unique VCRs by the later Lizard sensitivity run; the full general regression dump has not yet been rerun on those two additional VCRs.
 
 ## Real multi-VCR ship carryover — validated
 
@@ -121,7 +147,7 @@ c79795cf103fcc265a4397db0928c3fb3244816f  fix: count combat chain regression sta
 0f36cf4883c2b25919770525eb25012d3052b926  test: lock combat chain summary counters
 ```
 
-Federation shield recovery between fights remains unvalidated by real repeated Federation VCRs because `federation_race_transitions = 0`.
+Federation shield recovery between fights remains unvalidated by real repeated Federation VCRs because `federation_race_transitions = 0` at this checkpoint.
 
 ## Real planet / starbase multi-wave carryover — checked
 
@@ -180,7 +206,7 @@ backend/app/scripts/combat_corpus_summary.py
 
 The compact projection reuses the same classifier; it adds no second combat-classification logic.
 
-Latest runtime counts:
+Runtime checkpoint counts:
 
 ```text
 stored_observations:             365
@@ -222,68 +248,130 @@ Race ship-side appearances:
 
 These are factual input coverage counts only. They do not prove a special rule fired.
 
-## Current development focus — Lizard rule sensitivity
+## Lizard 150% endurance — branch exercised and regression anchored
 
-The next autonomous target is Lizard 150% in-combat endurance because the corpus contains 37 factual Lizard ship battles and this branch can be tested without inventing hidden cargo/mass state.
-
-Production Battle Simulator uses the authoritative builder in:
-
-```text
-backend/app/services/battle_simulator_runtime.py
-```
-
-It deliberately preserves race-2 identity in ship and planet combat. The exact classic engine uses race 2 for the 150% in-combat damage limit; planet-result handling still applies the Nu tidal-force post-combat destruction semantics.
-
-New read-only differential diagnostic:
+Read-only differential diagnostic:
 
 ```text
 backend/app/scripts/combat_lizard_rule_sensitivity.py
 ```
 
+Latest runtime result:
+
+```text
+stored_observations:              376
+unique_vcrs:                      147
+lizard_vcrs:                       37
+lizard_ship_side_appearances:      37
+ship_vs_ship_lizard_vcrs:          30
+ship_vs_planet_lizard_vcrs:         7
+comparable:                         37
+sensitive:                          15
+insensitive:                        22
+outcome_changed:                     0
+terminal_only_changed:              15
+ship_vs_ship_sensitive:             14
+ship_vs_planet_sensitive:            1
+```
+
+Interpretation:
+
+- the Lizard endurance branch is materially exercised by real factual inputs;
+- in this corpus it changes terminal combat state in 15/37 comparable fights but does not change the winner in any of those 15;
+- this is branch-exercise evidence, not by itself independent proof that every internal Host step is reproduced correctly.
+
+Strong anchored case:
+
+```text
+game 680933 · turn 42 · VCR 201
+T-REX CLASS BATTLESHIP vs VIRGO CLASS BATTLESTAR
+
+factual race-2 replay survivor Virgo:
+shield=0 damage=12 crew=1724 fighters=39
+
+neutralized-Lizard counterfactual survivor Virgo:
+shield=0 damage=9 crew=1732 fighters=42
+```
+
+The factual survivor state above is independently anchored by VCR `202`, whose factual start state exactly matches the VCR `201` terminal values.
+
+A second keyed baseline uses game `680933`, turn `43`, VCR `216`, where the Lizard T-Rex is on RIGHT, so regression coverage is not left-side-only.
+
+Targeted runtime regression:
+
+```text
+backend/app/scripts/combat_lizard_regression.py
+```
+
 Commits:
 
 ```text
-53dbfa56e1db8d72c56a4eec8d02a28b75091921  feat: add Lizard combat rule sensitivity diagnostic
-492bb2d1478f8796c2bdf7e2caf20fcffe8dda40  test: cover Lizard rule sensitivity helpers
+a35efb843fbe1b918b9f25d6ac9883b7f9ec17a7  test: add factual Lizard runtime regression baselines
+ef208e0de5e4ce80b1c1da24c9e0b9e8eb5965e0  test: cover Lizard runtime regression helpers
 ```
 
-Diagnostic semantics:
+These keyed baselines are derived regression expectations over factual stored VCR inputs. They do not turn deterministic or counterfactual output into new factual observations.
 
-- select factual VCRs containing race-2 ships;
-- replay each factual payload unchanged;
-- replay a counterfactual copy with only Lizard ship `raceid` neutralized to `0`;
-- same factual seed, weapons, mass, damage, ammo, opponents and persisted rule catalog;
-- report whether result labels and/or terminal state change;
-- a `sensitive` case means the Lizard endurance branch materially affects deterministic output for that factual combat input;
-- this is branch-exercise evidence, not an independent factual proof of Host correctness;
-- no observations are modified.
+## Current development focus — Federation directly observable combat evidence
 
-Right-side carrier balance is intentionally not the first differential target: simple `VCR mass - hull mass` would be confounded by changing ship load/ammunition, so do not claim +360 factual validation from hull mass alone.
+The next roadmap target is Federation combat behavior. The current Battle Planner sequence model has three relevant Fed branches:
+
+- damaged ships retain full effective weapon availability;
+- carriers receive +3 effective fighter bays;
+- surviving Fed ships recover 25% of missing shield between sequential fights, capped by damage.
+
+The last rule still requires a repeated same-turn Federation combat chain and must remain explicitly unvalidated if none exists.
+
+New read-only evidence audit:
+
+```text
+backend/app/scripts/combat_federation_rule_evidence.py
+```
+
+It deliberately does not infer hidden installed weapons. It reports:
+
+- factual damaged-start Federation VCRs;
+- a direct damaged-weapon signal only when factual effective beam/launcher count exceeds the normal non-Fed damage limit;
+- direct `hull fighter bays + 3` comparison for the factual Fed carrier case;
+- repeated same-turn/same-location Federation transitions, if any, for later shield-recovery validation.
+
+Commits:
+
+```text
+cff2045ab6e78ea7f35967272ac2126ef3edcaa5  feat: add Federation combat rule evidence diagnostic
+c2f4f9884106c36f2f6092a375cb71e7d50d99f3  test: cover Federation evidence diagnostic helpers
+```
+
+Right-side carrier balance remains intentionally later: simple `VCR mass - hull mass` is confounded by ship load/ammunition, so do not claim +360 factual validation from hull mass alone.
 
 ## Immediate next action
 
-Deploy latest branch and run:
+Deploy latest branch and run both compact checks in one server interaction:
 
 ```bash
 cd /opt/planets-intel
 bash scripts/deploy/production.sh
 
 echo
-echo "===== LIZARD RULE SENSITIVITY ====="
+echo "===== LIZARD REGRESSION ====="
 docker compose exec -T backend \
-  python -m app.scripts.combat_lizard_rule_sensitivity
+  python -m app.scripts.combat_lizard_regression
+
+echo
+echo "===== FEDERATION RULE EVIDENCE ====="
+docker compose exec -T backend \
+  python -m app.scripts.combat_federation_rule_evidence
 ```
 
 Paste the complete output back to the development chat.
 
 After that:
 
-1. if real Lizard-sensitive cases exist, promote stable sample references into targeted regression fixtures/checks where appropriate;
-2. if none exist, record Lizard race coverage as present but special endurance branch unexercised by the current corpus;
-3. then evaluate Federation combat-start transformations that are directly observable without assuming full optional weapon loadout;
-4. investigate right-balance only with evidence that isolates combat mass from changing load, not `hull mass + 360` guessing;
-5. preserve Federation between-fight recovery, no-starbase multi-wave carry and starbase hidden-state gaps as explicitly unvalidated/fail-closed;
-6. once combat validation is materially closed, continue movement fuel model, then Tow before Move Most/Intercept.
+1. if keyed Lizard regressions match, treat Lizard branch regression anchoring as closed;
+2. classify directly observable Federation evidence and keep non-comparable branches explicit;
+3. investigate right-balance only with evidence that isolates combat mass from changing load, not `hull mass + 360` guessing;
+4. preserve Federation between-fight recovery, no-starbase multi-wave carry and starbase hidden-state gaps as explicitly unvalidated/fail-closed unless new evidence appears;
+5. once combat validation is materially closed, continue movement fuel model, then Tow before Move Most/Intercept.
 
 ## Communications status
 
