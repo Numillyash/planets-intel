@@ -1,266 +1,146 @@
-# Battle Planner handoff — 2026-08-25
-
-This file is the exact handoff for the Battle Planner work started at the end of the previous development chat.
+# Battle Planner handoff — 2026-08-25 / updated 2026-08-26
 
 GitHub is the source of truth. Continue on `Numillyash/planets-intel`, branch `feature/operational-ui`.
 
-## Code checkpoint before this handoff
+This handoff originally described the Battle Planner picker/editor checkpoint before runtime validation. That validation is now complete. Do **not** follow older instructions that treated Virgo/editor/picker checks or legacy-picker cleanup as pending. The exact latest runtime and diagnostic state is in `docs/architecture/CURRENT_HANDOFF.md`.
 
-The Battle Planner implementation checkpoint is:
+## Completed picker/editor work
 
-```text
-414e0bdb4a56e9235e0197f1aaa81c20b0231a20
-feat: separate battle planner combatant pickers
-```
-
-The handoff/documentation commits written after it will advance branch HEAD. Do not confuse the documentation HEAD with the last functional Battle Planner code commit.
-
-Relevant implementation commits, in order:
+Key implementation history:
 
 ```text
 e30bfb170b82e6df78d21daf2fd98283f01bdfb3  fix: edit weapons by hull capacity
 9b2dda5b8561c882bf4225be9e9438facba8d5c7  feat: split battle planner combatant sources
 414e0bdb4a56e9235e0197f1aaa81c20b0231a20  feat: separate battle planner combatant pickers
+7238dc409a22c4e06fe6958dea24a9e2abc58044  fix: keep battle picker sources horizontal
+a5c34fd994a0833bb96c4f7d1c167eaf89d48830  refactor: remove legacy battle picker state
 ```
 
-## User-reported Battle Planner problems
+Runtime/browser validation confirmed:
 
-The previous deployed/browser UI had one huge combatant dropdown containing known ships and generic hulls together. In a real game this was dominated by freighters and made combat ships hard to find.
+- LEFT/RIGHT use separate `Known ships`, `Known planets`, `Generic ship / planet` sources;
+- known ships are grouped by race;
+- low-armament support ships are hidden by default and available through `Show support ships`;
+- generic hulls are grouped using rule-catalog race hull membership;
+- generic hull labels no longer contain the redundant `Manual ·` prefix;
+- known ships with factual zero installed weapons can still expose simulation controls up to factual hull capacity;
+- `VIRGO CLASS BATTLESTAR #19` was explicitly checked, plus a second affected hull;
+- generic planet/starbase on RIGHT works and opens in the editor;
+- multiple queued LEFT/RIGHT combatants, reorder and side swap work;
+- deterministic and normal odds paths work;
+- VCR validation-lab spacing and compact starbase layout were visually accepted;
+- the legacy combined-picker state/helper code was removed without changing default queue initialization.
 
-The requested UX is three explicit sources:
+The support-ship filter remains presentation-only:
 
 ```text
-Known ships
-Known planets
-Generic ship / planet
+launchers > 0 OR fighter bays > 0 OR beams >= 4
 ```
 
-Additional requirements from the live screenshots / browser validation:
-
-1. Known ships must be separated/grouped by race.
-2. The default known-ship picker should not be flooded with freighters, tankers, probes and other obvious support ships.
-3. Support ships must not be deleted from factual intel; they should merely be hidden from the default picker and remain accessible on demand.
-4. A known ship can have an observed setup with no disclosed/installed beams even when the hull itself has beam capacity. The editor must still allow the analyst to configure an explicit simulated loadout.
-5. Concrete live example: `VIRGO CLASS BATTLESTAR #19` displayed `0B · 0T · 8 bays`; the old editor did not expose beam/laser controls. The user noted Virgo is not the only affected hull.
-
-## Implemented in `e30bfb1` — weapon editor by hull capacity
-
-File:
-
-```text
-frontend/src/features/dashboard/BattleSimulatorEditor.tsx
-```
-
-The ship editor now derives physical weapon capacity from the hull rule catalog rather than deciding whether an editor control exists only from the current observed/materialized setup.
-
-For beams, launchers and fighter bays it computes:
-
-```text
-capacity = max(current setup physical count, catalog hull capacity)
-```
-
-Consequences:
-
-- If the hull supports beams but the current setup contains `0`, the `Installed beams` control is still shown.
-- Same principle for torpedo launchers and fighter bays.
-- Input maxima are constrained to the actual hull capacity instead of hard-coded 10/30 values.
-- The UI shows both effective weapons and hull capacity.
-- A zero currently installed count on a capable hull produces an explicit simulation warning rather than silently removing the control.
-
-This is intentionally a simulation editor capability. It must not reinterpret unknown equipment as factual equipment.
+It must never become factual combat inference.
 
 Hard invariant:
 
 ```text
 known zero != unknown
 fact != inference != simulation
+hull capacity != factual installed weapons
 ```
 
-Changing `Installed beams`, technology, launchers, torpedoes, bays or fighters in Battle Planner changes only the simulated combatant.
+## Deferred single 502 observation
 
-## Implemented in `9b2dda5` — separate add sources
-
-New file:
-
-```text
-frontend/src/features/dashboard/BattleSimulatorAddPicker.tsx
-```
-
-The picker contains three top-level source buttons:
-
-```text
-Known ships
-Known planets
-Generic ship / planet
-```
-
-### Known ships
-
-Known ships come from `intel.ships` and are rendered in `<optgroup>` groups by the current canonical owner race from `game.players`.
-
-The group label is the race label from the rule catalog. If owner/race cannot be resolved, the ship is placed under:
-
-```text
-Unknown owner / race
-```
-
-Within each race group ships are sorted by ship id.
-
-### Support-ship filtering
-
-A picker-only heuristic hides low-armament support hulls by default:
-
-```text
-primary combat hull if:
-launchers > 0
-OR fighter bays > 0
-OR beams >= 4
-```
-
-The UI exposes:
-
-```text
-Show support ships (freighters, tankers, probes and other low-armament hulls)
-```
-
-Important: this is UI filtering only. It does not alter factual intel, observations, rule data or simulation mechanics.
-
-This heuristic needs live review. It is deliberately conservative in implementation scope, but it can still hide specialty combat-capable hulls with fewer than four beams and no launchers/bays. If real games expose such useful ships, improve the picker classification using factual hull/rule metadata or a better explicit role rule. Do not turn this picker heuristic into combat inference.
-
-### Known planets
-
-Known planets come from `intel.planets`.
-
-The current sequential-wave model keeps planets/starbases as fixed defenders on RIGHT, therefore `Known planets` is disabled on LEFT.
-
-### Generic ship / planet
-
-Generic ship mode selects any hull from the rule catalog and materializes a manual simulation combatant.
-
-Generic planet/starbase creates a blank assumption-driven planet setup and is currently RIGHT-only for the same fixed-defender reason.
-
-Generic planet defaults are simulation assumptions and carry an explicit warning.
-
-## Implemented in `414e0bd` — Workbench integration
-
-File:
-
-```text
-frontend/src/features/dashboard/BattleSimulatorWorkbench.tsx
-```
-
-Both LEFT and RIGHT add rows now use `BattleSimulatorAddPicker` and append a fully materialized combatant via `appendCombatant()`.
-
-The explanatory text now explicitly says that combatants are added from separate Known ships / Known planets / Generic sources and that low-armament support ships are hidden by default.
-
-## Known cleanup / review point
-
-`BattleSimulatorWorkbench.tsx` still contains legacy add-picker state and helper code from the old combined selector:
-
-```text
-shipKeys
-leftAddKey
-rightAddKey
-addCombatant(...)
-```
-
-The new UI no longer calls `addCombatant()` and the old add-key state is no longer needed for the picker itself. The current TypeScript config does not enable `noUnusedLocals`, so this does not necessarily break the build, but the next chat should remove dead legacy state after confirming that no initialization behavior depends on it.
-
-Do this as cleanup only; do not change default queue initialization semantics accidentally.
-
-## Runtime validation still required
-
-The three Battle Planner commits above were written at the end of the previous chat and have not yet been confirmed by the user in the new picker/editor UI.
-
-After syncing/deploying the branch, validate in the browser:
-
-1. The old giant combined dropdown is gone.
-2. LEFT and RIGHT each show the three source buttons (with planet modes disabled on LEFT as designed).
-3. `Known ships` are grouped by race.
-4. Freighters/support ships are hidden by default.
-5. Enabling `Show support ships` restores them.
-6. A known `VIRGO CLASS BATTLESTAR #19` can expose and edit installed beam count up to its hull capacity even if its materialized setup starts with `0` beams.
-7. Repeat item 6 with at least one other affected hull.
-8. Editing the loadout changes only the simulation combatant; factual intel must remain unchanged.
-9. Generic ship and generic planet/starbase still materialize and can be edited.
-10. Sequential LEFT/RIGHT queue behavior and existing VCR deterministic engine results remain unchanged.
-
-## Deferred observation — Battle sequence odds 502
-
-During browser validation on 2026-08-25, one screenshot showed:
+One validation screenshot showed:
 
 ```text
 Battle sequence odds failed: 502 Proxy Error
 ```
 
-At the time the Battle Planner `BATTLES` field was set to `10000` and the scenario used queued/multi-combatant simulation. This is only a single observed failure. It has **not** been established that `10000` battles are the cause, that the failure is reproducible, or that the threshold is specifically related to battle count.
+The UI happened to contain `10000` battles. This is a single observation only; it is not established that 10,000 battles are the cause or that a reproducible threshold exists.
 
-Subsequent user validation confirmed that the queue logic itself works for the 118-seed series and for a single deterministic run. Therefore do **not** treat this as a confirmed `10k simulations` bug.
+The user explicitly deferred investigation. Later work must reproduce deliberately and inspect backend/proxy timings before changing timeouts.
 
-Deferred future work, only when explicitly picked up again:
+## Deterministic real-VCR checkpoint
 
-- reproduce the 502 deliberately;
-- identify whether it originates in reverse-proxy timeout, backend request duration, resource exhaustion, or another path;
-- measure request duration and backend/proxy logs before changing limits or timeouts;
-- do not mask the issue by blindly increasing proxy timeout.
+Read-only diagnostic `backend/app/scripts/combat_regression_dump.py` has been run against production data.
 
-The user explicitly deferred investigation for now.
+Confirmed result:
 
-## Communications checkpoint from the same session
+```text
+unique VCRs:          145
+replay supported:     145
+replay unsupported:     0
+payload conflicts:      0
+analyst checks:          2
+analyst matches:         2
+analyst mismatches:      0
+```
 
-Immediately before Battle Planner work, true Planets.nu threaded replies were implemented for Communications using the verified official game client contract:
+This is strong regression coverage for the deterministic engine, but it is not proof that every Host special mechanic is represented in the corpus.
+
+## Real ship-chain carryover checkpoint
+
+`backend/app/scripts/combat_chain_regression.py` compares deterministic terminal state of one VCR with factual start state of the same surviving ship in the next VCR of the same game/turn/location.
+
+Production data contained 42 such transitions. All observed transitions matched for:
+
+```text
+damage
+crew
+torpedoes
+fighters
+shield (all observed transitions were non-Federation)
+```
+
+The first diagnostic version had a reporting-only bug where `status=match` did not increment the public `matches` key. The actual records and shield counters were correct. Fixed in:
+
+```text
+c79795cf103fcc265a4397db0928c3fb3244816f  fix: count combat chain regression statuses
+0f36cf4883c2b25919770525eb25012d3052b926  test: lock combat chain summary counters
+```
+
+No repeated Federation ship chain was present, so Federation between-fight shield recovery remains unvalidated by real chain evidence.
+
+## Current Battle Planner validation focus
+
+The next real-data checkpoint is planet/starbase multi-wave carryover.
+
+Current exact model in `backend/app/services/battle_simulator_planet.py`:
+
+- carries drained shield;
+- applies exact planet-defense loss for combat damage;
+- consumes starbase fighters before generated planet fighters;
+- converts lost generated planet fighters into additional planet-defense loss;
+- re-derives beams, bays, fighters and mass;
+- fails closed when a surviving starbase takes hull damage because exact post-combat base defense/tech/base-damage split is not available.
+
+New read-only diagnostic:
+
+```text
+backend/app/scripts/combat_planet_chain_regression.py
+```
+
+It compares repeated factual planet VCRs. Exact prediction is attempted only for explicitly non-starbase worlds and only after an inferred starting planet state reproduces the factual first VCR. Starbase hidden state is not guessed.
+
+See `CURRENT_HANDOFF.md` for the exact commit, CI and server command.
+
+## Communications
+
+True Planets.nu threaded replies remain validated using:
 
 ```text
 POST /game/sendmessage
-parentid=<thread root activity id>
+parentid=<factual thread root activity id>
 ```
 
-Replying to a child normalizes to the factual `thread_root_id`; private recipient sets are preserved and reconciliation requires the newly observed activity to have the expected factual `parent_id`.
+Do not reopen Communications without new upstream evidence. See `COMMUNICATIONS_REPLY_CONTRACT.md`.
 
-The user has now explicitly reported that this Communications reply path works in the deployed UI.
+## Fresh-chat rule
 
-Do not reopen the old hypothesis about a separate `/account/post` game-message reply endpoint unless new upstream evidence contradicts the captured official-client behavior.
+A fresh chat must read, in order:
 
-See:
+1. `docs/architecture/NEW_CHAT_START.md`
+2. `docs/architecture/PROJECT_STATE.md`
+3. `docs/architecture/CURRENT_HANDOFF.md`
+4. this file
 
-```text
-docs/architecture/COMMUNICATIONS_REPLY_CONTRACT.md
-```
-
-## Immediate next actions for a new chat
-
-1. Read:
-   - `docs/architecture/NEW_CHAT_START.md`
-   - `docs/architecture/PROJECT_STATE.md`
-   - `docs/architecture/CURRENT_HANDOFF.md`
-   - this file.
-2. Inspect actual GitHub HEAD of `feature/operational-ui`.
-3. Inspect `/opt/planets-intel` branch, HEAD, dirty state and divergence before deploying.
-4. Deploy current branch with the repository production deploy script if the server is clean/behind.
-5. Browser-validate the three Battle Planner changes listed above, beginning with Virgo #19.
-6. Fix any actual runtime/UI regressions found during that validation.
-7. Remove legacy combined-picker state only after functional behavior is confirmed.
-8. Add focused frontend/unit coverage for picker grouping/filtering and hull-capacity editor visibility if the existing frontend test setup supports it cleanly.
-
-## Server commands
-
-```bash
-cd /opt/planets-intel
-
-git fetch origin
-printf 'BRANCH: '; git symbolic-ref --quiet --short HEAD || true
-printf 'HEAD:   '; git log -1 --oneline
-printf 'DIVERGENCE HEAD...origin: '; git rev-list --left-right --count HEAD...origin/feature/operational-ui
-git status --short
-
-docker compose ps
-curl -fsS http://127.0.0.1:18080/api/health && echo
-```
-
-If clean and behind:
-
-```bash
-bash /opt/planets-intel/scripts/deploy/production.sh
-```
-
-Do not claim runtime validation until the user pastes the deploy/browser result.
+Then inspect actual GitHub HEAD and `/opt/planets-intel` divergence before any deploy or code change.
