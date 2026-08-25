@@ -16,9 +16,9 @@ GitHub is the source of truth. Active development remains on `feature/operationa
 Last explicitly runtime-confirmed deploy in this handoff:
 
 ```text
-HEAD:       41430e66960c73d1bfd740d73f1b696ada8d048d
+HEAD:       db1fec23715f4bda111d619daaa678cce9048cad
 BUILD:      OK
-TESTS:      OK — 210
+TESTS:      OK — 214
 MIGRATIONS: 0017_outgoing_msg_recipients (head)
 HEALTH:     OK
 ```
@@ -104,7 +104,7 @@ Interpretation constraint: `145/145 supported` proves current stored inputs are 
 
 ## Factual combat corpus coverage
 
-Read-only diagnostic:
+Read-only detailed diagnostic:
 
 ```text
 backend/app/scripts/combat_corpus_coverage.py
@@ -114,6 +114,14 @@ It classifies factual VCR input shapes without asserting that a Host special rul
 
 Observed corpus includes substantial carrier combat and multiple relevant hull families, including Virgo, Rush, Gorbie, Golem, Lizard Cruiser, Firecloud, Biocide, Kittyhawk and others. Coverage hits are evidence that those inputs occurred, not proof of their special mechanics.
 
+Because the full report is too large for routine chat handoff, a compact projection was later added:
+
+```text
+backend/app/scripts/combat_corpus_summary.py
+```
+
+It reuses the exact same classifier and only removes samples/hull detail from the output. It introduces no second combat classification path.
+
 ## Real multi-VCR ship carryover — runtime validated
 
 Read-only diagnostic:
@@ -122,19 +130,19 @@ Read-only diagnostic:
 backend/app/scripts/combat_chain_regression.py
 ```
 
-Runtime on server HEAD `41430e66960c73d1bfd740d73f1b696ada8d048d` found:
+Runtime found:
 
 ```text
-unique_vcrs:                        145
-replay_supported:                   145
-ship_appearances:                   206
-candidate_same_turn_ship_chains:     23
-same_location_transitions:           42
-skipped_location_change:              0
-reappearance_after_defeat:            0
-federation_race_transitions:          0
-non_federation_shield_rule_matches:  42
-non_federation_shield_rule_mismatches: 0
+unique_vcrs:                          145
+replay_supported:                     145
+ship_appearances:                     206
+candidate_same_turn_ship_chains:       23
+same_location_transitions:             42
+skipped_location_change:                0
+reappearance_after_defeat:              0
+federation_race_transitions:            0
+non_federation_shield_rule_matches:    42
+non_federation_shield_rule_mismatches:  0
 ```
 
 The actual transition records showed all 42 same-location transitions as `status = match`. For each comparable transition, deterministic terminal values became the factual next-VCR start values exactly for:
@@ -149,25 +157,7 @@ shield (non-Federation cases in this corpus)
 
 A particularly useful real example is game `680933`, turn `42`, Virgo ship `#10`: after VCR `201`, replay terminal `damage=12`, `crew=1724`, `fighters=39`, `shield=0` is exactly the factual start state of VCR `202`, even though the ship changes combat side.
 
-### Diagnostic reporting bug discovered and fixed
-
-The first runtime JSON incorrectly printed:
-
-```text
-matches: 0
-mismatches: 0
-```
-
-while `match_samples` contained successful records and the shield counter showed 42 matches. The comparison logic was correct; only summary aggregation was wrong because statuses `match` / `mismatch` were compared directly with public keys `matches` / `mismatches`.
-
-Fixed after the validated server HEAD:
-
-```text
-c79795cf103fcc265a4397db0928c3fb3244816f  fix: count combat chain regression statuses
-0f36cf4883c2b25919770525eb25012d3052b926  test: lock combat chain summary counters
-```
-
-Do not reinterpret the original `matches: 0` as a combat-model failure.
+The first runtime JSON incorrectly printed public `matches: 0` / `mismatches: 0` because summary aggregation compared statuses `match` / `mismatch` directly with public keys `matches` / `mismatches`. The comparison logic itself was correct. This diagnostic-only bug was fixed and regression-tested.
 
 ### Federation boundary
 
@@ -179,66 +169,95 @@ federation_race_transitions: 0
 
 Therefore the Battle Planner Federation shield-recovery-between-fights rule is **not yet empirically validated by a real repeated Federation VCR chain**. Keep it as a documented/modelled rule, not a claimed corpus validation.
 
-## Current development focus — real planet / starbase multi-wave carryover
+## Real planet / starbase multi-wave carryover — runtime checked
 
-The next sequence-model layer is planetary defender carryover.
-
-Current Battle Planner exact model in `battle_simulator_planet.py` carries/rebuilds:
-
-- drained shield;
-- planet defense-post damage;
-- generated planetary fighter losses;
-- starbase fighters before planetary fighters;
-- re-derived beams, bays, fighters and mass.
-
-It intentionally fails closed when a surviving starbase takes hull damage because the VCR/docs do not expose enough state to derive exact post-combat starbase defense, tech and accumulated base damage.
-
-New read-only diagnostic added after the last confirmed server deploy:
+Read-only diagnostic:
 
 ```text
 backend/app/scripts/combat_planet_chain_regression.py
 ```
 
-Implementation commits:
+Production runtime on server HEAD `db1fec23715f4bda111d619daaa678cce9048cad` found:
 
 ```text
-f07dc9ad03bd84fe063a87e376b6a9671588d0b3  feat: add real planet chain regression diagnostic
-c75ab12902f8d80a12475feab0362bbe8f6aff4a  test: cover real planet chain diagnostic helpers
+unique_vcrs:                          145
+replay_supported:                     145
+planet_appearances:                    84
+candidate_same_turn_planet_chains:      1
+same_location_transitions:              1
+matches:                                1
+mismatches:                             0
+shield_matches:                         1
+shield_mismatches:                      0
+no_starbase_exact_matches:              0
+no_starbase_exact_mismatches:           0
+no_starbase_exact_not_comparable:       0
+starbase_or_unknown_transitions:         1
 ```
 
-Diagnostic policy:
+The only repeated factual planetary defender is:
 
-- repeated planet/starbase VCRs are grouped only within one game, turn, factual planet id and position;
-- factual shield carry is checked directly for every surviving repeated planetary defender;
-- exact full carry prediction is attempted only if `hasstarbase` is explicitly false;
-- for a non-starbase planet, factual combat mass gives the candidate starting DP as `mass - 100`;
-- that inferred state must first reproduce the factual first VCR combat setup before it is trusted;
-- only then is `apply_planet_carryover()` used and compared with the next factual VCR start;
-- starbase hidden state is never guessed.
+```text
+game 682909
+turn 9
+planet #75 — Launa Planet
+VCR 9 -> VCR 10
+has_starbase = true
+terminal shield 0 -> next factual start shield 0
+```
+
+Interpretation:
+
+- direct planetary shield carry is confirmed for this single starbase transition;
+- there are **no real repeated no-starbase planet chains** in the current corpus, so exact DP/fighter/beams/bays/mass carry has not been empirically validated from real VCR chains;
+- persistent starbase defense/fighters/tech/accumulated-damage state remains intentionally fail-closed because VCR data does not uniquely expose those values;
+- do not weaken that boundary or invent starbase state from the one observed transition.
+
+Current Battle Planner exact planet model in `battle_simulator_planet.py` remains unchanged: it carries/rebuilds drained shield, planet defense-post damage, generated planetary fighter losses, starbase fighters before planetary fighters, and re-derived combat properties only where the required state is factual or exactly derivable.
+
+## Current development focus — compact special-combat coverage triage
+
+The next step is to use the stored VCR corpus to decide which special combat branches can be validated with real examples before changing any combat mechanics.
+
+Latest compact diagnostic commits:
+
+```text
+1d86dec886525377babb8bef1a8966f2c8638814  feat: add compact combat corpus summary
+c08db2afca9dc7756bffaa7720adb02855a571d5  test: cover compact combat corpus summary
+```
+
+The compact report contains only:
+
+- corpus summary;
+- battle shape counts;
+- special-mechanic input counts;
+- compact per-race counts.
+
+It deliberately omits hull/sample detail already available from the full coverage report.
 
 ## Immediate next action
 
-Deploy the latest branch and run the planet-chain diagnostic:
+Deploy the latest branch and run the compact corpus summary:
 
 ```bash
 cd /opt/planets-intel
 bash scripts/deploy/production.sh
 
 echo
-echo "===== REAL PLANET COMBAT CHAINS ====="
+echo "===== COMBAT CORPUS SUMMARY ====="
 docker compose exec -T backend \
-  python -m app.scripts.combat_planet_chain_regression
+  python -m app.scripts.combat_corpus_summary
 ```
 
 Paste the complete output back to the development chat.
 
-After that result:
+Use that output to select the next autonomous real-data regression target. Preserve these already-established evidence gaps:
 
-1. fix any real no-starbase carry mismatch rather than synthetic assumptions;
-2. classify starbase transitions separately and preserve fail-closed boundaries;
-3. keep Federation between-fight recovery marked unvalidated until a factual repeated Federation chain exists;
-4. continue targeted special-combat validation only where corpus/rule evidence exists;
-5. once the combat checkpoint is materially closed, return to movement fuel model, then Tow resolution ahead of Move Most / Intercept.
+- Federation between-fight recovery: no real repeated Federation chain;
+- exact no-starbase planet multi-wave carry: no real repeated no-starbase chain;
+- starbase persistent post-damage state: not uniquely derivable from VCR, fail closed.
+
+Only after the combat checkpoint is materially closed should development return to movement fuel model, then Tow resolution ahead of Move Most / Intercept.
 
 ## Communications status
 
