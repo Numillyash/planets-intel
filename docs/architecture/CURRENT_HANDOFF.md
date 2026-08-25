@@ -11,9 +11,9 @@ GitHub is the source of truth. Active development remains on `feature/operationa
 - Server checkout: `/opt/planets-intel`
 - Health endpoint: `http://127.0.0.1:18080/api/health`
 - Production backend image embeds the React/Vite frontend.
-- Do not infer server HEAD from chat history; inspect it before every deploy.
+- Never infer server HEAD from chat history; inspect it before every deploy.
 
-Last explicitly runtime-confirmed deploy in this handoff:
+Last explicitly runtime-confirmed deploy with full deploy output:
 
 ```text
 HEAD:       db1fec23715f4bda111d619daaa678cce9048cad
@@ -23,27 +23,9 @@ MIGRATIONS: 0017_outgoing_msg_recipients (head)
 HEALTH:     OK
 ```
 
-Later GitHub commits exist after that server HEAD; inspect the actual branch before the next deploy.
+Later GitHub commits exist. The compact corpus summary was also run successfully from the production backend after it was added, but the user did not include a fresh deploy/HEAD block with that specific run, so do not invent the exact server HEAD for it.
 
-## Battle Planner UX checkpoint — runtime validated
-
-The 2026-08-25 picker/editor/UI work is browser-validated and should not be reopened as pending work.
-
-Confirmed in deployed UI:
-
-- separate `Known ships`, `Known planets`, `Generic ship / planet` sources;
-- known ships grouped by race;
-- support ships hidden by default and restored by `Show support ships`;
-- zero-installed / positive-capacity hulls, including `VIRGO CLASS BATTLESTAR #19`, expose simulation weapon controls up to hull capacity;
-- generic ships are grouped using factual race-catalog hull membership and no longer show the redundant `Manual ·` prefix;
-- generic planets/starbases work on RIGHT and open in the editor;
-- multiple LEFT/RIGHT combatants work;
-- queue reorder and side swap work;
-- deterministic and normal odds paths work;
-- VCR-derived validation-lab spacing and compact starbase layout were visually accepted;
-- legacy combined-picker state/helper code was removed without changing default queue initialization.
-
-Hard invariants:
+## Hard invariants
 
 ```text
 known zero != unknown
@@ -53,9 +35,26 @@ missing data != zero
 hull capacity != factual installed weapons
 ```
 
-Battle Planner loadout edits remain simulation assumptions only.
+Battle Planner loadout edits are simulation assumptions only. Deterministic replay is derived evidence, never a factual observation.
 
-## Deferred observation — Battle sequence odds 502
+## Battle Planner UX checkpoint — closed
+
+The 2026-08-25 picker/editor/UI work is browser-validated and should not be reopened as pending work.
+
+Confirmed in deployed UI:
+
+- separate `Known ships`, `Known planets`, `Generic ship / planet` sources;
+- known ships grouped by race;
+- support ships hidden by default and restored by `Show support ships`;
+- zero-installed / positive-capacity hulls, including `VIRGO CLASS BATTLESTAR #19`, expose simulation weapon controls up to hull capacity;
+- generic ships use factual race-catalog hull membership;
+- generic planets/starbases work on RIGHT;
+- multiple LEFT/RIGHT combatants, queue reorder and side swap work;
+- deterministic and normal odds paths work;
+- VCR validation-lab spacing and compact starbase layout were accepted;
+- legacy combined-picker state/helper code was removed.
+
+## Deferred observation — sequence odds 502
 
 One browser screenshot showed:
 
@@ -63,20 +62,11 @@ One browser screenshot showed:
 Battle sequence odds failed: 502 Proxy Error
 ```
 
-The UI happened to contain `10000` battles, but this was one observation only. It is **not established** that 10,000 battles are the cause or that a reproducible threshold bug exists.
+The UI happened to contain `10000` battles, but this is one observation only. It is not established that 10,000 battles caused it or that there is a reproducible threshold bug. Queue logic was later confirmed with the classic 118-seed series and a single deterministic run.
 
-Queue logic was subsequently confirmed with the classic 118-seed series and a single deterministic run.
+This investigation is explicitly deferred. If reopened later: reproduce deliberately, measure backend/proxy timings and logs, and do not blindly raise timeouts.
 
-This investigation is explicitly deferred. When picked up later:
-
-- reproduce deliberately;
-- measure backend and reverse-proxy timings/logs;
-- distinguish timeout, resource pressure and other failures;
-- do not blindly raise proxy timeouts.
-
-Do not spend time on this unless the user explicitly returns to it.
-
-## Real VCR deterministic replay — runtime validated
+## Real VCR deterministic replay — validated
 
 Read-only diagnostic:
 
@@ -84,7 +74,7 @@ Read-only diagnostic:
 backend/app/scripts/combat_regression_dump.py
 ```
 
-Validated production result:
+Validated corpus result:
 
 ```text
 unique_vcrs:               145
@@ -98,31 +88,9 @@ analyst_mismatches:          0
 analyst_not_comparable:      0
 ```
 
-Per-game deterministic replay support was complete for every stored unique VCR. All observed game catalogs used Classic combat RNG (`combatrng = 0`).
+All observed game catalogs use Classic combat RNG (`combatrng = 0`). `145/145 supported` proves current stored inputs are accepted by the deterministic engine; it does not prove every Host special mechanic has independent factual confirmation.
 
-Interpretation constraint: `145/145 supported` proves current stored inputs are accepted by the deterministic replay engine. It does **not** prove every Host special mechanic exists in the corpus or that every terminal state has an independent factual confirmation.
-
-## Factual combat corpus coverage
-
-Read-only detailed diagnostic:
-
-```text
-backend/app/scripts/combat_corpus_coverage.py
-```
-
-It classifies factual VCR input shapes without asserting that a Host special rule fired. The implementation preserves `unknown != zero` and reports race/hull/sample coverage.
-
-Observed corpus includes substantial carrier combat and multiple relevant hull families, including Virgo, Rush, Gorbie, Golem, Lizard Cruiser, Firecloud, Biocide, Kittyhawk and others. Coverage hits are evidence that those inputs occurred, not proof of their special mechanics.
-
-Because the full report is too large for routine chat handoff, a compact projection was later added:
-
-```text
-backend/app/scripts/combat_corpus_summary.py
-```
-
-It reuses the exact same classifier and only removes samples/hull detail from the output. It introduces no second combat classification path.
-
-## Real multi-VCR ship carryover — runtime validated
+## Real multi-VCR ship carryover — validated
 
 Read-only diagnostic:
 
@@ -133,43 +101,29 @@ backend/app/scripts/combat_chain_regression.py
 Runtime found:
 
 ```text
-unique_vcrs:                          145
-replay_supported:                     145
 ship_appearances:                     206
 candidate_same_turn_ship_chains:       23
 same_location_transitions:             42
-skipped_location_change:                0
 reappearance_after_defeat:              0
 federation_race_transitions:            0
 non_federation_shield_rule_matches:    42
 non_federation_shield_rule_mismatches:  0
 ```
 
-The actual transition records showed all 42 same-location transitions as `status = match`. For each comparable transition, deterministic terminal values became the factual next-VCR start values exactly for:
+All 42 same-location transitions matched deterministic terminal -> factual next-VCR start for comparable `damage`, `crew`, `torpedoes`, `fighters`, and non-Federation shield.
+
+Useful real example: game `680933`, turn `42`, Virgo `#10`, VCR `201 -> 202`: terminal `damage=12`, `crew=1724`, `fighters=39`, `shield=0` exactly becomes the next factual combat start even though the ship changes combat side.
+
+The first report printed `matches: 0` due a diagnostic-only aggregation typo (`match` vs public key `matches`). Comparison records were correct. Fixed in:
 
 ```text
-damage
-crew
-torpedoes
-fighters
-shield (non-Federation cases in this corpus)
+c79795cf103fcc265a4397db0928c3fb3244816f  fix: count combat chain regression statuses
+0f36cf4883c2b25919770525eb25012d3052b926  test: lock combat chain summary counters
 ```
 
-A particularly useful real example is game `680933`, turn `42`, Virgo ship `#10`: after VCR `201`, replay terminal `damage=12`, `crew=1724`, `fighters=39`, `shield=0` is exactly the factual start state of VCR `202`, even though the ship changes combat side.
+Federation shield recovery between fights remains unvalidated by real repeated Federation VCRs because `federation_race_transitions = 0`.
 
-The first runtime JSON incorrectly printed public `matches: 0` / `mismatches: 0` because summary aggregation compared statuses `match` / `mismatch` directly with public keys `matches` / `mismatches`. The comparison logic itself was correct. This diagnostic-only bug was fixed and regression-tested.
-
-### Federation boundary
-
-The real chain corpus currently contains:
-
-```text
-federation_race_transitions: 0
-```
-
-Therefore the Battle Planner Federation shield-recovery-between-fights rule is **not yet empirically validated by a real repeated Federation VCR chain**. Keep it as a documented/modelled rule, not a claimed corpus validation.
-
-## Real planet / starbase multi-wave carryover — runtime checked
+## Real planet / starbase multi-wave carryover — checked
 
 Read-only diagnostic:
 
@@ -177,11 +131,9 @@ Read-only diagnostic:
 backend/app/scripts/combat_planet_chain_regression.py
 ```
 
-Production runtime on server HEAD `db1fec23715f4bda111d619daaa678cce9048cad` found:
+Runtime result:
 
 ```text
-unique_vcrs:                          145
-replay_supported:                     145
 planet_appearances:                    84
 candidate_same_turn_planet_chains:      1
 same_location_transitions:              1
@@ -190,12 +142,10 @@ mismatches:                             0
 shield_matches:                         1
 shield_mismatches:                      0
 no_starbase_exact_matches:              0
-no_starbase_exact_mismatches:           0
-no_starbase_exact_not_comparable:       0
 starbase_or_unknown_transitions:         1
 ```
 
-The only repeated factual planetary defender is:
+Only repeated factual planetary defender:
 
 ```text
 game 682909
@@ -208,56 +158,132 @@ terminal shield 0 -> next factual start shield 0
 
 Interpretation:
 
-- direct planetary shield carry is confirmed for this single starbase transition;
-- there are **no real repeated no-starbase planet chains** in the current corpus, so exact DP/fighter/beams/bays/mass carry has not been empirically validated from real VCR chains;
-- persistent starbase defense/fighters/tech/accumulated-damage state remains intentionally fail-closed because VCR data does not uniquely expose those values;
-- do not weaken that boundary or invent starbase state from the one observed transition.
+- shield carry is confirmed for this one starbase transition;
+- no repeated no-starbase planet chain exists in the current corpus, so exact DP/fighter/beams/bays/mass carry lacks real chain validation;
+- starbase persistent post-damage defense/fighters/tech/damage remains fail-closed because VCR does not uniquely expose it.
 
-Current Battle Planner exact planet model in `battle_simulator_planet.py` remains unchanged: it carries/rebuilds drained shield, planet defense-post damage, generated planetary fighter losses, starbase fighters before planetary fighters, and re-derived combat properties only where the required state is factual or exactly derivable.
+Do not weaken that boundary.
 
-## Current development focus — compact special-combat coverage triage
+## Compact factual combat coverage — runtime checked
 
-The next step is to use the stored VCR corpus to decide which special combat branches can be validated with real examples before changing any combat mechanics.
-
-Latest compact diagnostic commits:
+Detailed audit:
 
 ```text
-1d86dec886525377babb8bef1a8966f2c8638814  feat: add compact combat corpus summary
-c08db2afca9dc7756bffaa7720adb02855a571d5  test: cover compact combat corpus summary
+backend/app/scripts/combat_corpus_coverage.py
 ```
 
-The compact report contains only:
+Compact projection:
 
-- corpus summary;
-- battle shape counts;
-- special-mechanic input counts;
-- compact per-race counts.
+```text
+backend/app/scripts/combat_corpus_summary.py
+```
 
-It deliberately omits hull/sample detail already available from the full coverage report.
+The compact projection reuses the same classifier; it adds no second combat-classification logic.
+
+Latest runtime counts:
+
+```text
+stored_observations:             365
+unique_vcrs:                     145
+games:                             6
+race_ids_with_ship_combat:         9
+unique_game_hulls_in_combat:      66
+
+ship_vs_planet:                   84
+ship_vs_ship:                     61
+starbase_battle:                   7
+carrier_battle:                   77
+carrier_vs_carrier:                4
+carrier_and_torpedo_ship:         18
+torpedo_ship_battle:              78
+damaged_start:                    22
+sub_full_shield_start:            89
+unarmed_ship_present:             20
+federation_ship_battle:            9
+lizard_ship_battle:               37
+federation_ship_vs_planet:         4
+lizard_ship_vs_planet:             7
+right_balance_candidate_shape:     9
+```
+
+Race ship-side appearances:
+
+```text
+1:  9   (carrier 1)
+2: 37   (carrier 0)
+3: 24
+4: 21
+6: 14   (carrier 1)
+8: 15   (carrier 10)
+9: 19   (carrier 16)
+10: 28  (carrier 24)
+11: 39  (carrier 29)
+```
+
+These are factual input coverage counts only. They do not prove a special rule fired.
+
+## Current development focus — Lizard rule sensitivity
+
+The next autonomous target is Lizard 150% in-combat endurance because the corpus contains 37 factual Lizard ship battles and this branch can be tested without inventing hidden cargo/mass state.
+
+Production Battle Simulator uses the authoritative builder in:
+
+```text
+backend/app/services/battle_simulator_runtime.py
+```
+
+It deliberately preserves race-2 identity in ship and planet combat. The exact classic engine uses race 2 for the 150% in-combat damage limit; planet-result handling still applies the Nu tidal-force post-combat destruction semantics.
+
+New read-only differential diagnostic:
+
+```text
+backend/app/scripts/combat_lizard_rule_sensitivity.py
+```
+
+Commits:
+
+```text
+53dbfa56e1db8d72c56a4eec8d02a28b75091921  feat: add Lizard combat rule sensitivity diagnostic
+492bb2d1478f8796c2bdf7e2caf20fcffe8dda40  test: cover Lizard rule sensitivity helpers
+```
+
+Diagnostic semantics:
+
+- select factual VCRs containing race-2 ships;
+- replay each factual payload unchanged;
+- replay a counterfactual copy with only Lizard ship `raceid` neutralized to `0`;
+- same factual seed, weapons, mass, damage, ammo, opponents and persisted rule catalog;
+- report whether result labels and/or terminal state change;
+- a `sensitive` case means the Lizard endurance branch materially affects deterministic output for that factual combat input;
+- this is branch-exercise evidence, not an independent factual proof of Host correctness;
+- no observations are modified.
+
+Right-side carrier balance is intentionally not the first differential target: simple `VCR mass - hull mass` would be confounded by changing ship load/ammunition, so do not claim +360 factual validation from hull mass alone.
 
 ## Immediate next action
 
-Deploy the latest branch and run the compact corpus summary:
+Deploy latest branch and run:
 
 ```bash
 cd /opt/planets-intel
 bash scripts/deploy/production.sh
 
 echo
-echo "===== COMBAT CORPUS SUMMARY ====="
+echo "===== LIZARD RULE SENSITIVITY ====="
 docker compose exec -T backend \
-  python -m app.scripts.combat_corpus_summary
+  python -m app.scripts.combat_lizard_rule_sensitivity
 ```
 
 Paste the complete output back to the development chat.
 
-Use that output to select the next autonomous real-data regression target. Preserve these already-established evidence gaps:
+After that:
 
-- Federation between-fight recovery: no real repeated Federation chain;
-- exact no-starbase planet multi-wave carry: no real repeated no-starbase chain;
-- starbase persistent post-damage state: not uniquely derivable from VCR, fail closed.
-
-Only after the combat checkpoint is materially closed should development return to movement fuel model, then Tow resolution ahead of Move Most / Intercept.
+1. if real Lizard-sensitive cases exist, promote stable sample references into targeted regression fixtures/checks where appropriate;
+2. if none exist, record Lizard race coverage as present but special endurance branch unexercised by the current corpus;
+3. then evaluate Federation combat-start transformations that are directly observable without assuming full optional weapon loadout;
+4. investigate right-balance only with evidence that isolates combat mass from changing load, not `hull mass + 360` guessing;
+5. preserve Federation between-fight recovery, no-starbase multi-wave carry and starbase hidden-state gaps as explicitly unvalidated/fail-closed;
+6. once combat validation is materially closed, continue movement fuel model, then Tow before Move Most/Intercept.
 
 ## Communications status
 
@@ -268,13 +294,9 @@ POST /game/sendmessage
 parentid=<factual thread root activity id>
 ```
 
-Do not reopen Communications without new evidence. See:
+Do not reopen Communications without new evidence. See `docs/architecture/COMMUNICATIONS_REPLY_CONTRACT.md`.
 
-```text
-docs/architecture/COMMUNICATIONS_REPLY_CONTRACT.md
-```
-
-## Server preflight for future chats
+## Server preflight
 
 ```bash
 cd /opt/planets-intel
