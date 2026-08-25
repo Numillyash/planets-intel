@@ -12,6 +12,7 @@ import {
     observerRaceId,
     raceLabel,
     rebuildPlanet,
+    textValue,
     type CandidateKey,
     type MaterializedCombatant,
     type PlanetSetup,
@@ -65,6 +66,18 @@ function raceHullIds(race: Record<string, unknown>): number[] {
     return configured.length > 0
         ? configured
         : integerIdList(race.basehulls);
+}
+
+
+function genericHullLabel(
+    key: CandidateKey,
+    catalog: GameRuleCatalogResponse,
+): string {
+    const hullId = Number(key.split(":")[1]);
+    const hull = hullRecord(catalog, Number.isSafeInteger(hullId) ? hullId : null);
+    return hull === null
+        ? `Hull #${hullId}`
+        : textValue(hull, "name") ?? `Hull #${hullId}`;
 }
 
 
@@ -432,7 +445,7 @@ export function BattleSimulatorAddPicker({
                                 <optgroup key={group.raceId ?? "unassigned"} label={group.label}>
                                     {group.choices.map((choice) => (
                                         <option key={choice.value} value={choice.value}>
-                                            {candidateLabel(choice.key, intel, catalog)}
+                                            {genericHullLabel(choice.key, catalog)}
                                         </option>
                                     ))}
                                 </optgroup>
