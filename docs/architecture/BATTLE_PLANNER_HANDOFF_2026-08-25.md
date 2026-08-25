@@ -185,6 +185,27 @@ After syncing/deploying the branch, validate in the browser:
 9. Generic ship and generic planet/starbase still materialize and can be edited.
 10. Sequential LEFT/RIGHT queue behavior and existing VCR deterministic engine results remain unchanged.
 
+## Deferred observation — Battle sequence odds 502
+
+During browser validation on 2026-08-25, one screenshot showed:
+
+```text
+Battle sequence odds failed: 502 Proxy Error
+```
+
+At the time the Battle Planner `BATTLES` field was set to `10000` and the scenario used queued/multi-combatant simulation. This is only a single observed failure. It has **not** been established that `10000` battles are the cause, that the failure is reproducible, or that the threshold is specifically related to battle count.
+
+Subsequent user validation confirmed that the queue logic itself works for the 118-seed series and for a single deterministic run. Therefore do **not** treat this as a confirmed `10k simulations` bug.
+
+Deferred future work, only when explicitly picked up again:
+
+- reproduce the 502 deliberately;
+- identify whether it originates in reverse-proxy timeout, backend request duration, resource exhaustion, or another path;
+- measure request duration and backend/proxy logs before changing limits or timeouts;
+- do not mask the issue by blindly increasing proxy timeout.
+
+The user explicitly deferred investigation for now.
+
 ## Communications checkpoint from the same session
 
 Immediately before Battle Planner work, true Planets.nu threaded replies were implemented for Communications using the verified official game client contract:
