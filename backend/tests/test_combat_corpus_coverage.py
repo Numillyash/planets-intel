@@ -23,6 +23,7 @@ class CombatCorpusCoverageTests(unittest.TestCase):
 
         self.assertEqual(profile["kind"], "ship")
         self.assertEqual(profile["beam_count"], 0)
+        self.assertIs(profile["has_starbase"], False)
         self.assertTrue(profile["carrier"])
         self.assertFalse(profile["torpedo_ship"])
         self.assertFalse(profile["unarmed_ship"])
@@ -122,6 +123,35 @@ class CombatCorpusCoverageTests(unittest.TestCase):
             }
         )
         self.assertTrue(profile["unarmed_ship"])
+
+    def test_missing_weapon_counts_do_not_become_unarmed_zeroes(self) -> None:
+        profile = _side_profile(
+            {
+                "hullid": 5,
+                "raceid": 6,
+                "mass": 80,
+            }
+        )
+
+        self.assertEqual(profile["kind"], "ship")
+        self.assertIsNone(profile["beam_count"])
+        self.assertIsNone(profile["launcher_count"])
+        self.assertIsNone(profile["bay_count"])
+        self.assertFalse(profile["unarmed_ship"])
+        self.assertIsNone(profile["has_starbase"])
+
+    def test_missing_hull_id_remains_unknown_not_ship(self) -> None:
+        profile = _side_profile(
+            {
+                "objectid": 5,
+                "beamcount": 0,
+                "launchercount": 0,
+                "baycount": 0,
+            }
+        )
+
+        self.assertEqual(profile["kind"], "unknown")
+        self.assertFalse(profile["unarmed_ship"])
 
 
 if __name__ == "__main__":
