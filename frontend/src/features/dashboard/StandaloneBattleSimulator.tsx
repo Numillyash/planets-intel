@@ -211,12 +211,15 @@ function mergeCurrentShipWithVcrEvidence<T extends ShipObservationResponse>(
         payload.simulatorvcrequipmentbasis = "vcr_combat_observation";
     }
 
-    // Mutable battle state is only eligible as a simulator default when the
-    // latest VCR is from the planner turn. Current private/shared factual values
-    // always win. Analyst-confirmed post state wins over deterministic replay;
-    // if neither post state exists, combat-start ammunition is a last factual
-    // fallback and is explicitly marked as historical combat-start evidence.
-    if (candidate.turn === plannerTurn) {
+    // A newly generated Planets.nu turn can contain VCRs whose raw battle turn
+    // is the immediately preceding orders turn. That post-combat state is the
+    // Host result feeding the current snapshot. Current private/shared factual
+    // values still win. For an immediately preceding VCR we accept post-combat
+    // state only; combat-start ammunition is never carried across the Host
+    // boundary because the fight may have consumed it.
+    const samePlannerTurn = candidate.turn === plannerTurn;
+    const latestHostTurn = candidate.turn === plannerTurn - 1;
+    if (samePlannerTurn || latestHostTurn) {
         const currentFacts = shipFacts(ship);
         const postSource = typeof equipment.post_combat_source === "string"
             ? equipment.post_combat_source
@@ -234,7 +237,7 @@ function mergeCurrentShipWithVcrEvidence<T extends ShipObservationResponse>(
             ) {
                 payload.fighters = postFighters;
                 postFilled = true;
-            } else {
+            } else if (samePlannerTurn) {
                 const startFighters = evidenceNumber(equipment, "combat_start_fighters")
                     ?? evidenceNumber(equipment, "fighters");
                 if (startFighters !== null) {
@@ -253,7 +256,7 @@ function mergeCurrentShipWithVcrEvidence<T extends ShipObservationResponse>(
             ) {
                 payload.torpedoes = postTorpedoes;
                 postFilled = true;
-            } else {
+            } else if (samePlannerTurn) {
                 const startTorpedoes = evidenceNumber(equipment, "combat_start_torpedoes")
                     ?? evidenceNumber(equipment, "torpedoes");
                 if (startTorpedoes !== null) {
@@ -291,6 +294,9 @@ function mergeCurrentShipWithVcrEvidence<T extends ShipObservationResponse>(
             payload.simulatorvcrpostturn = candidate.turn;
             payload.simulatorvcrpostvcrid = candidate.vcrId;
             payload.simulatorvcrpostbasis = postSource ?? "deterministic_vcr_replay";
+            payload.simulatorvcrpostrelation = latestHostTurn
+                ? "latest_host_result"
+                : "same_turn_combat";
         }
         if (combatStartFilled) {
             payload.simulatorvcrstartfallbackturn = candidate.turn;
