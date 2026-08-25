@@ -242,15 +242,8 @@ export function BattlePlannerDashboardPanel({
                         simulator above remains available from known intel.
                     </div>
                 ) : (
-                    <div
-                        style={{
-                            display: "grid",
-                            gridTemplateColumns: "minmax(220px, 300px) minmax(0, 1fr)",
-                            gap: 16,
-                            alignItems: "start",
-                        }}
-                    >
-                        <aside style={{ display: "grid", gap: 7 }}>
+                    <div className="battle-planner-vcr-layout">
+                        <aside className="battle-planner-vcr-baselines">
                             <div className="eyebrow">FACTUAL VCR BASELINES</div>
                             {events.map((event) => (
                                 <button
@@ -279,9 +272,9 @@ export function BattlePlannerDashboardPanel({
                             ))}
                         </aside>
 
-                        <div style={{ minWidth: 0 }}>
+                        <div className="battle-planner-vcr-detail">
                             {selected !== null && (
-                                <div style={{ marginBottom: 12 }}>
+                                <div className="battle-planner-vcr-source">
                                     <div className="eyebrow">SOURCE VCR #{selected.vcr_id}</div>
                                     <h3 style={{ margin: "4px 0" }}>{eventTitle(selected)}</h3>
                                     <p style={{ margin: 0, color: "#91a9c8" }}>
