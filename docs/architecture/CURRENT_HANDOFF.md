@@ -1,6 +1,6 @@
 # Planets Intel — Current Handoff
 
-Updated: 2026-08-25 20:35 +03:00
+Updated: 2026-08-25 22:25 +03:00
 
 GitHub is the source of truth. Active development remains on `feature/operational-ui`. A fresh chat must read this file together with `NEW_CHAT_START.md`, `PROJECT_STATE.md` and `BATTLE_PLANNER_HANDOFF_2026-08-25.md`, then inspect the actual branch HEAD and `/opt/planets-intel` before deploying.
 
@@ -96,63 +96,115 @@ This investigation is explicitly deferred. When it is picked up later:
 
 Do not spend time on this now unless the user explicitly returns to it.
 
-## Current development focus — real VCR combat regression coverage
+## Real VCR replay regression checkpoint — runtime validated
 
-The next active task is no longer picker UI work. It is systematic combat-model validation against stored real VCR evidence before moving back to movement/fuel/Tow.
-
-New read-only diagnostic:
+Read-only diagnostic:
 
 ```text
 backend/app/scripts/combat_regression_dump.py
 ```
 
-Implementation commits before this documentation update:
+Implementation commits:
 
 ```text
 35cbd5df745e601e0d0fdad68544bc04c319134e  feat: add combat replay regression diagnostic
 1755db24dedcfa89f9b73a90841b5429ec11b6ed  test: cover combat regression diagnostic helpers
 ```
 
-The diagnostic:
+The diagnostic scans persisted factual `CombatObservation` rows, deduplicates observer copies, detects raw-payload conflicts, replays selected factual payloads through the persisted `GameRuleCatalog`, reports exact `ReplayUnsupported` reasons, and compares replay terminal ammunition with any analyst-confirmed `CombatStateObservation` values. It performs no writes.
 
-- scans persisted factual `CombatObservation` rows;
-- deduplicates one VCR observed through multiple linked accounts;
-- reports raw-payload conflicts between observers instead of reconciling them silently;
-- replays each selected factual payload through the current persisted `GameRuleCatalog`;
-- reports exact `ReplayUnsupported` reasons rather than skipping them silently;
-- reports deterministic terminal state for supported VCRs;
-- compares replay post-combat torpedo/fighter values with any stored `CombatStateObservation` analyst confirmations;
-- treats missing analyst confirmation as absence of validation, not failure;
-- performs no writes.
+Production runtime result on 2026-08-25, server HEAD `84bcff2726c5b295d7843039bbb66dc113c40c9e`:
 
-The existing production `combat_replay_state` path continues to fail closed and is not changed by this diagnostic.
+```text
+stored_observations:       347
+unique_vcrs:               145
+payload_conflicts:           0
+catalog_missing:             0
+replay_supported:          145
+replay_unsupported:          0
+analyst_checks:              2
+analyst_matches:             2
+analyst_mismatches:          0
+analyst_not_comparable:      0
+```
+
+Per-game replay support was also complete for every stored VCR:
+
+```text
+680933  40 / 40
+682909  40 / 40
+682932  19 / 19
+683230  22 / 22
+683330  23 / 23
+683335   1 / 1
+```
+
+All six catalogs reported Classic combat RNG (`combatrng = 0`).
+
+Interpretation constraints:
+
+- `145/145 replay_supported` means all currently stored factual VCR inputs are accepted by the current deterministic engine;
+- it does **not** prove every Host special mechanic is represented in the corpus;
+- the two analyst matches are genuine validation points, but two checks are not enough to claim universal terminal-state correctness;
+- missing analyst confirmation is absence of independent validation, not failure;
+- deterministic replay remains derived evidence, never a factual observation.
+
+## Current development focus — factual combat corpus coverage
+
+The next task is to determine what the 145 real VCRs actually exercise before changing combat mechanics blindly.
+
+New read-only diagnostic:
+
+```text
+backend/app/scripts/combat_corpus_coverage.py
+```
+
+Current implementation commits after the validated server HEAD:
+
+```text
+7feb0f044ad356755505a0d7701a1c0e08c6f379  feat: add factual combat corpus coverage diagnostic
+dd63791cd7cc164f919ae2a5a0df5f3433ecfe65  test: cover combat corpus classification
+```
+
+The coverage report classifies factual input shapes only. It reports:
+
+- ship-vs-ship / ship-vs-planet shapes;
+- starbase battles;
+- carrier and carrier-vs-carrier cases;
+- torpedo-ship cases;
+- damaged/sub-full-shield combat starts;
+- unarmed ships in combat;
+- Federation and Lizard ship cases, including ship-vs-planet subsets;
+- the factual input shape matching the current simulator right-balance eligibility predicate;
+- race IDs seen in ship combat;
+- hull IDs/names actually exercised;
+- stable sample `(game, turn, vcr)` references for targeted follow-up.
+
+A coverage hit means only that such an input occurred. It must not be interpreted as proof that the corresponding Host special rule was modeled correctly.
 
 ## Immediate next action
 
-After CI is green, sync/deploy the latest branch and run the read-only diagnostic inside the production backend container.
-
-Server block:
+After CI for the latest branch HEAD is green, deploy and run the coverage audit:
 
 ```bash
 cd /opt/planets-intel
-
 bash scripts/deploy/production.sh
 
 echo
-echo "===== COMBAT REGRESSION ====="
+echo "===== COMBAT CORPUS COVERAGE ====="
 docker compose exec -T backend \
-  python -m app.scripts.combat_regression_dump
+  python -m app.scripts.combat_corpus_coverage
 ```
 
-Paste the complete JSON output back to the development chat. The default output includes all summary statistics but only details for interesting cases (`unsupported`, payload conflicts, analyst mismatches/not-comparable). Use `--all` only when a later investigation needs every supported replay.
+Paste the complete JSON output back to the development chat.
 
-The next implementation pass should then:
+The next implementation pass should use that output to:
 
-1. classify all unsupported reasons from real persisted VCRs;
-2. separate genuinely unsupported Host modes from missing/incorrect adapter data;
-3. turn confirmed real regression cases into stable fixtures where practical;
-4. fix only mechanics supported by rule/catalog or factual evidence;
-5. preserve fail-closed behavior for unknown Host mechanics;
+1. identify special combat branches actually represented by real VCRs;
+2. choose real sample VCRs for targeted regression validation;
+3. distinguish unexercised mechanics from exercised-but-unverified mechanics;
+4. add stable fixtures/checks where factual evidence is sufficient;
+5. preserve fail-closed behavior where Host mechanics remain unknown;
 6. only after the combat checkpoint is materially closed, continue to movement fuel model, then Tow resolution ahead of Move Most / Intercept.
 
 ## Communications status
