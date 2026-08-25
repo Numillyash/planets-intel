@@ -1,5 +1,6 @@
 import type { GameRuleCatalogResponse } from "../../api/ruleCatalog";
 import {
+    hullRecord,
     intValue,
     isGalacticPowerEligible,
     normalizeShipForRace,
@@ -117,6 +118,19 @@ function ShipEditor({
     if (value.setup.kind !== "ship") return null;
     const setup: ShipSetup = value.setup;
     const c = value.combatant;
+    const hull = hullRecord(catalog, c.hull_id);
+    const hullBeamCapacity = Math.max(
+        setup.physicalBeams,
+        hull === null ? 0 : intValue(hull, "beams", "beamcount") ?? 0,
+    );
+    const hullLauncherCapacity = Math.max(
+        setup.physicalLaunchers,
+        hull === null ? 0 : intValue(hull, "launchers", "torpedotubes", "tubes") ?? 0,
+    );
+    const hullBayCapacity = Math.max(
+        setup.physicalBays,
+        hull === null ? 0 : intValue(hull, "fighterbays", "bays") ?? 0,
+    );
     const galacticPowerEligible = isGalacticPowerEligible(
         catalog,
         c.hull_id,
@@ -176,6 +190,10 @@ function ShipEditor({
                     Effective weapons
                     <strong> {c.beam_count}B / {c.launcher_count}T / {c.bay_count} bays</strong>
                 </span>
+                <span>
+                    Hull capacity
+                    <strong> {hullBeamCapacity}B / {hullLauncherCapacity}T / {hullBayCapacity} bays</strong>
+                </span>
                 <span>Race <strong>{raceLabel(catalog, c.race_id)}</strong></span>
                 {c.federation_crew_bonus && <span><strong>Fed Crew Bonus · required</strong></span>}
                 {c.lizard_crew_bonus && <span><strong>Lizard Crew Bonus · required</strong></span>}
@@ -229,11 +247,11 @@ function ShipEditor({
                 </div>
             )}
 
-            {setup.physicalBeams > 0 && (
+            {hullBeamCapacity > 0 && (
                 <div className="battle-sim-weapon-row">
                     <NumberInput
                         label="Installed beams"
-                        max={10}
+                        max={hullBeamCapacity}
                         onChange={(physicalBeams) => normalizedWith({ physicalBeams })}
                         value={setup.physicalBeams}
                     />
@@ -262,14 +280,20 @@ function ShipEditor({
                             })}
                         </select>
                     </label>
+                    {setup.physicalBeams === 0 && (
+                        <div className="battle-sim-warning">
+                            This hull supports beams, but the selected setup currently has 0 installed.
+                            Set an installed count and beam technology explicitly for this simulation.
+                        </div>
+                    )}
                 </div>
             )}
 
-            {setup.physicalLaunchers > 0 && (
+            {hullLauncherCapacity > 0 && (
                 <div className="battle-sim-weapon-row">
                     <NumberInput
                         label="Installed launchers"
-                        max={10}
+                        max={hullLauncherCapacity}
                         onChange={(physicalLaunchers) => normalizedWith({ physicalLaunchers })}
                         value={setup.physicalLaunchers}
                     />
@@ -307,14 +331,20 @@ function ShipEditor({
                         })}
                         value={c.torpedoes}
                     />
+                    {setup.physicalLaunchers === 0 && (
+                        <div className="battle-sim-warning">
+                            This hull supports torpedo launchers, but the selected setup currently has 0 installed.
+                            Set the launcher count, torpedo technology and ammunition explicitly.
+                        </div>
+                    )}
                 </div>
             )}
 
-            {setup.physicalBays > 0 && (
+            {hullBayCapacity > 0 && (
                 <div className="battle-sim-weapon-row">
                     <NumberInput
                         label="Hull fighter bays"
-                        max={30}
+                        max={hullBayCapacity}
                         onChange={(physicalBays) => normalizedWith({ physicalBays })}
                         value={setup.physicalBays}
                     />
