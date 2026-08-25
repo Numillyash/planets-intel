@@ -2,6 +2,21 @@
     display: flex;
 }
 
+.game-dashboard-stack > .panel > .panel-header + .battle-sim-mean-grid {
+    margin: 16px 22px;
+}
+
+.game-dashboard-stack > .panel > .panel-header + .battle-sim-mean-grid ~ .battle-sim-warning,
+.game-dashboard-stack > .panel > .panel-header + .battle-sim-mean-grid ~ .error-card {
+    margin-right: 22px;
+    margin-left: 22px;
+}
+
+.game-dashboard-stack > .panel > .panel-header + .battle-sim-mean-grid ~ .battle-sim-warning:last-child,
+.game-dashboard-stack > .panel > .panel-header + .battle-sim-mean-grid ~ .error-card:last-child {
+    margin-bottom: 16px;
+}
+
 .battle-sim-queue-card {
     grid-template-columns: minmax(0, 1fr) auto;
     padding: 0;
