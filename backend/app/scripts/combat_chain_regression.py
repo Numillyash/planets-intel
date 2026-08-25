@@ -23,6 +23,12 @@ CARRY_FIELDS = (
     ("fighters", "fighters"),
 )
 SAMPLE_LIMIT = 8
+STATUS_SUMMARY_KEYS = {
+    "match": "matches",
+    "mismatch": "mismatches",
+    "not_comparable": "not_comparable",
+    "reappearance_after_defeat": "reappearance_after_defeat",
+}
 
 
 def parse_args() -> argparse.Namespace:
@@ -181,6 +187,10 @@ def _transition_comparison(
             "federation_race_rule_candidate": race_id == 1,
         },
     }
+
+
+def _summary_key_for_status(status: str) -> str | None:
+    return STATUS_SUMMARY_KEYS.get(status)
 
 
 def _same_location(previous: dict[str, Any], current: dict[str, Any]) -> bool:
@@ -378,8 +388,9 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     for transition in transitions:
         comparison = transition["comparison"]
         status = comparison["status"]
-        if status in summary:
-            summary[status] += 1
+        summary_key = _summary_key_for_status(status)
+        if summary_key is not None:
+            summary[summary_key] += 1
         if status in {"mismatch", "reappearance_after_defeat"}:
             mismatch_details.append(transition)
         elif status == "match" and len(match_samples) < SAMPLE_LIMIT:
