@@ -2,6 +2,7 @@ import unittest
 
 from app.scripts.combat_chain_regression import (
     _expected_next_shield,
+    _summary_key_for_status,
     _transition_comparison,
 )
 
@@ -106,6 +107,19 @@ class CombatChainRegressionTests(unittest.TestCase):
         )
 
         self.assertEqual(comparison["status"], "reappearance_after_defeat")
+
+    def test_summary_status_mapping_matches_public_counter_names(self) -> None:
+        self.assertEqual(_summary_key_for_status("match"), "matches")
+        self.assertEqual(_summary_key_for_status("mismatch"), "mismatches")
+        self.assertEqual(
+            _summary_key_for_status("not_comparable"),
+            "not_comparable",
+        )
+        self.assertEqual(
+            _summary_key_for_status("reappearance_after_defeat"),
+            "reappearance_after_defeat",
+        )
+        self.assertIsNone(_summary_key_for_status("unknown"))
 
 
 if __name__ == "__main__":
