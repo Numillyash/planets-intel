@@ -65,13 +65,23 @@ def _side_profile(record: dict[str, Any] | None) -> dict[str, Any]:
         return {"present": False, "kind": "missing"}
 
     hull_id = _integer(record, "hullid")
-    kind = "planet" if hull_id is not None and hull_id <= 0 else "ship"
+    if hull_id is None:
+        kind = "unknown"
+    elif hull_id <= 0:
+        kind = "planet"
+    else:
+        kind = "ship"
+
     beam_count = _integer(record, "beamcount")
     launcher_count = _integer(record, "launchercount")
     bay_count = _integer(record, "baycount")
     mass = _integer(record, "mass")
     damage = _integer(record, "damage")
     shield = _integer(record, "shield")
+    weapon_counts_known = all(
+        isinstance(value, int)
+        for value in (beam_count, launcher_count, bay_count)
+    )
 
     return {
         "present": True,
@@ -80,7 +90,7 @@ def _side_profile(record: dict[str, Any] | None) -> dict[str, Any]:
         "name": _text(record, "name"),
         "hull_id": hull_id,
         "race_id": _integer(record, "raceid"),
-        "has_starbase": bool(_boolean(record, "hasstarbase")),
+        "has_starbase": _boolean(record, "hasstarbase"),
         "beam_count": beam_count,
         "launcher_count": launcher_count,
         "bay_count": bay_count,
@@ -96,9 +106,10 @@ def _side_profile(record: dict[str, Any] | None) -> dict[str, Any]:
         "beam_armed": kind == "ship" and beam_count is not None and beam_count > 0,
         "unarmed_ship": (
             kind == "ship"
-            and (beam_count or 0) <= 0
-            and (launcher_count or 0) <= 0
-            and (bay_count or 0) <= 0
+            and weapon_counts_known
+            and beam_count == 0
+            and launcher_count == 0
+            and bay_count == 0
         ),
         "damaged_start": damage is not None and damage > 0,
         "sub_full_shield_start": shield is not None and shield < 100,
@@ -129,7 +140,9 @@ def _case_profile(payload: dict[str, Any]) -> dict[str, Any]:
         "left": left,
         "right": right,
         "ship_vs_planet": len(ship_sides) == 1 and len(planet_sides) == 1,
-        "starbase_battle": any(side["has_starbase"] for side in planet_sides),
+        "starbase_battle": any(
+            side.get("has_starbase") is True for side in planet_sides
+        ),
         "carrier_battle": bool(carriers),
         "carrier_vs_carrier": len(carriers) == 2,
         "carrier_and_torpedo_ship": bool(carriers) and bool(torpedo_ships),
@@ -296,16 +309,18 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
                 race_stats[race_id]["samples"].append(_sample(case))
 
     hull_rows: list[dict[str, Any]] = []
+    name_maps = {
+        game_id: _catalog_name_map(list(catalog.hulls))
+        for game_id, catalog in catalogs.items()
+    }
     for (game_id, hull_id), appearances in sorted(
         hull_stats.items(), key=lambda item: (-item[1], item[0][0], item[0][1])
     ):
-        catalog = catalogs.get(game_id)
-        names = _catalog_name_map(list(catalog.hulls)) if catalog is not None else {}
         hull_rows.append(
             {
                 "game_id": game_id,
                 "hull_id": hull_id,
-                "name": names.get(hull_id),
+                "name": name_maps.get(game_id, {}).get(hull_id),
                 "ship_side_appearances": appearances,
             }
         )
@@ -330,6 +345,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "hulls": hull_rows,
         "notes": [
             "This report classifies factual VCR inputs; it does not assert that a Host special rule fired.",
+            "Unknown hull/starbase/weapon fields remain unknown and are not collapsed to ship/false/zero classifications.",
             "right_balance_candidate_shape mirrors only the current simulator eligibility shape: LEFT carrier vs RIGHT ship with mass >= 140.",
             "Race and hull coverage shows exercised inputs, not proof of exact special-race mechanics.",
             "Samples are stable references for targeted follow-up regression checks.",
