@@ -8,6 +8,7 @@ import {
     hullRecord,
     intValue,
     materializeCandidate,
+    normalizeShipForRace,
     observerRaceId,
     raceLabel,
     rebuildPlanet,
@@ -25,6 +26,45 @@ interface ShipGroup {
     raceId: number | null;
     label: string;
     keys: CandidateKey[];
+}
+
+interface HullChoice {
+    key: CandidateKey;
+    raceId: number | null;
+    value: string;
+}
+
+interface HullGroup {
+    raceId: number | null;
+    label: string;
+    choices: HullChoice[];
+}
+
+
+function integerIdList(value: unknown): number[] {
+    const raw = Array.isArray(value)
+        ? value
+        : typeof value === "string"
+            ? value.split(",")
+            : [];
+    const result: number[] = [];
+    for (const item of raw) {
+        const numeric = typeof item === "number"
+            ? item
+            : typeof item === "string" && item.trim() !== ""
+                ? Number(item)
+                : Number.NaN;
+        if (Number.isSafeInteger(numeric) && numeric > 0) result.push(numeric);
+    }
+    return [...new Set(result)];
+}
+
+
+function raceHullIds(race: Record<string, unknown>): number[] {
+    const configured = integerIdList(race.hulls);
+    return configured.length > 0
+        ? configured
+        : integerIdList(race.basehulls);
 }
 
 
@@ -136,15 +176,61 @@ export function BattleSimulatorAddPicker({
     const [showSupport, setShowSupport] = useState(false);
     const [shipKey, setShipKey] = useState<CandidateKey | null>(null);
     const [planetKey, setPlanetKey] = useState<CandidateKey | null>(null);
-    const [hullKey, setHullKey] = useState<CandidateKey | null>(null);
+    const [hullChoiceValue, setHullChoiceValue] = useState<string | null>(null);
     const [genericKind, setGenericKind] = useState<GenericKind>("ship");
 
-    const hullKeys = useMemo<CandidateKey[]>(
+    const hullIds = useMemo<number[]>(
         () => catalog.hulls
             .map((hull) => intValue(hull, "id"))
-            .filter((id): id is number => id !== null && id > 0)
-            .map((id) => `hull:${id}` as CandidateKey),
+            .filter((id): id is number => id !== null && id > 0),
         [catalog.hulls],
+    );
+    const hullGroups = useMemo<HullGroup[]>(() => {
+        const available = new Set(hullIds);
+        const assigned = new Set<number>();
+        const groups: HullGroup[] = [];
+
+        for (const race of [...catalog.races].sort(
+            (left, right) => (intValue(left, "id") ?? 10_000) - (intValue(right, "id") ?? 10_000),
+        )) {
+            const raceId = intValue(race, "id");
+            if (raceId === null || raceId <= 0) continue;
+            const raceHulls = raceHullIds(race)
+                .filter((hullId) => available.has(hullId));
+            if (raceHulls.length === 0) continue;
+            for (const hullId of raceHulls) assigned.add(hullId);
+            groups.push({
+                raceId,
+                label: raceLabel(catalog, raceId),
+                choices: raceHulls.map((hullId) => ({
+                    key: `hull:${hullId}` as CandidateKey,
+                    raceId,
+                    value: `${raceId}:hull:${hullId}`,
+                })),
+            });
+        }
+
+        const unassigned = hullIds.filter((hullId) => !assigned.has(hullId));
+        if (unassigned.length > 0) {
+            groups.push({
+                raceId: null,
+                label: groups.length === 0 ? "All hulls" : "Other / unassigned",
+                choices: unassigned.map((hullId) => ({
+                    key: `hull:${hullId}` as CandidateKey,
+                    raceId: null,
+                    value: `unknown:hull:${hullId}`,
+                })),
+            });
+        }
+        return groups;
+    }, [catalog, hullIds]);
+    const hullChoices = useMemo(
+        () => hullGroups.flatMap((group) => group.choices),
+        [hullGroups],
+    );
+    const selectedHullChoice = useMemo(
+        () => hullChoices.find((choice) => choice.value === hullChoiceValue) ?? null,
+        [hullChoiceValue, hullChoices],
     );
     const planetKeys = useMemo<CandidateKey[]>(
         () => intel.planets.map((planet) => `planet:${planet.planet_id}` as CandidateKey),
@@ -200,10 +286,13 @@ export function BattleSimulatorAddPicker({
         }
     }, [planetKey, planetKeys]);
     useEffect(() => {
-        if (hullKey === null || !hullKeys.includes(hullKey)) {
-            setHullKey(hullKeys[0] ?? null);
+        if (
+            hullChoiceValue === null
+            || !hullChoices.some((choice) => choice.value === hullChoiceValue)
+        ) {
+            setHullChoiceValue(hullChoices[0]?.value ?? null);
         }
-    }, [hullKey, hullKeys]);
+    }, [hullChoiceValue, hullChoices]);
     useEffect(() => {
         if (side === "left" && source === "known_planet") setSource("known_ship");
         if (side === "left" && genericKind === "planet") setGenericKind("ship");
@@ -216,8 +305,11 @@ export function BattleSimulatorAddPicker({
         } else if (source === "known_planet" && side === "right" && planetKey !== null) {
             next = materializeCandidate(planetKey, game, intel, catalog);
         } else if (source === "generic") {
-            if (genericKind === "ship" && hullKey !== null) {
-                next = materializeCandidate(hullKey, game, intel, catalog);
+            if (genericKind === "ship" && selectedHullChoice !== null) {
+                next = materializeCandidate(selectedHullChoice.key, game, intel, catalog);
+                if (next !== null && selectedHullChoice.raceId !== null) {
+                    next = normalizeShipForRace(next, selectedHullChoice.raceId);
+                }
             } else if (genericKind === "planet" && side === "right") {
                 next = materializeGenericPlanet(game, intel);
             }
@@ -230,7 +322,7 @@ export function BattleSimulatorAddPicker({
         : source === "known_planet"
             ? side === "right" && planetKey !== null
             : genericKind === "ship"
-                ? hullKey !== null
+                ? selectedHullChoice !== null
                 : side === "right";
 
     return (
@@ -332,14 +424,18 @@ export function BattleSimulatorAddPicker({
                     {genericKind === "ship" ? (
                         <select
                             className="battle-sim-select"
-                            disabled={hullKey === null}
-                            onChange={(event) => setHullKey(event.target.value as CandidateKey)}
-                            value={hullKey ?? ""}
+                            disabled={selectedHullChoice === null}
+                            onChange={(event) => setHullChoiceValue(event.target.value)}
+                            value={hullChoiceValue ?? ""}
                         >
-                            {hullKeys.map((key) => (
-                                <option key={key} value={key}>
-                                    {candidateLabel(key, intel, catalog)}
-                                </option>
+                            {hullGroups.map((group) => (
+                                <optgroup key={group.raceId ?? "unassigned"} label={group.label}>
+                                    {group.choices.map((choice) => (
+                                        <option key={choice.value} value={choice.value}>
+                                            {candidateLabel(choice.key, intel, catalog)}
+                                        </option>
+                                    ))}
+                                </optgroup>
                             ))}
                         </select>
                     ) : (
