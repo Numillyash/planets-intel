@@ -2,6 +2,12 @@
     display: flex;
 }
 
+/* Toggle controls sit beside two-line label/input fields. Keep them at input
+   height instead of stretching to the full grid-row height. */
+.battle-sim-fields > .battle-sim-toggle-field {
+    align-self: end;
+}
+
 .game-dashboard-stack > .panel > .panel-header + .battle-sim-mean-grid {
     margin: 16px 22px;
 }
@@ -15,6 +21,33 @@
 .game-dashboard-stack > .panel > .panel-header + .battle-sim-mean-grid ~ .battle-sim-warning:last-child,
 .game-dashboard-stack > .panel > .panel-header + .battle-sim-mean-grid ~ .error-card:last-child {
     margin-bottom: 16px;
+}
+
+.battle-planner-vcr-layout {
+    display: grid;
+    grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
+    gap: 16px;
+    align-items: start;
+    padding: 16px 22px 22px;
+}
+
+.battle-planner-vcr-baselines {
+    display: grid;
+    gap: 7px;
+}
+
+.battle-planner-vcr-detail {
+    min-width: 0;
+}
+
+.battle-planner-vcr-source {
+    margin-bottom: 12px;
+}
+
+/* Scenario panels already live in a stack with an explicit gap. The global
+   .panel top margin would otherwise add a second, asymmetric spacer. */
+.battle-planner-vcr-detail > .game-dashboard-stack > .panel:first-child {
+    margin-top: 0;
 }
 
 .battle-sim-queue-card {
@@ -48,4 +81,10 @@
 
 .battle-sim-result-panel .vcr-battlefield {
     min-height: 220px;
+}
+
+@media (max-width: 760px) {
+    .battle-planner-vcr-layout {
+        grid-template-columns: 1fr;
+    }
 }
