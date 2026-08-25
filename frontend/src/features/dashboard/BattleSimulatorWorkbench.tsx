@@ -18,7 +18,6 @@ import { CombatReplayPlayer } from "./CombatReplayPlayer";
 import { BattleSimulatorAddPicker } from "./BattleSimulatorAddPicker";
 import { CombatantEditor, NumberInput } from "./BattleSimulatorEditor";
 import {
-    candidateLabel,
     intValue,
     materializeCandidate,
     type CandidateKey,
@@ -145,76 +144,6 @@ function MeanSideCard({
     );
 }
 
-function AddCombatantRow({
-    side,
-    value,
-    shipKeys,
-    planetKeys,
-    hullKeys,
-    intel,
-    catalog,
-    onChange,
-    onAdd,
-}: {
-    side: SideName;
-    value: CandidateKey | null;
-    shipKeys: CandidateKey[];
-    planetKeys: CandidateKey[];
-    hullKeys: CandidateKey[];
-    intel: PrivateIntelMapResponse;
-    catalog: GameRuleCatalogResponse;
-    onChange: (key: CandidateKey) => void;
-    onAdd: () => void;
-}) {
-    const options = side === "left"
-        ? [...shipKeys, ...hullKeys]
-        : [...shipKeys, ...planetKeys, ...hullKeys];
-    const current = value ?? options[0] ?? null;
-
-    return (
-        <div className="battle-sim-add-row">
-            <select
-                className="battle-sim-select"
-                disabled={current === null}
-                onChange={(event) => onChange(event.target.value as CandidateKey)}
-                value={current ?? ""}
-            >
-                <optgroup label="Known ships">
-                    {shipKeys.map((key) => (
-                        <option key={key} value={key}>
-                            {candidateLabel(key, intel, catalog)}
-                        </option>
-                    ))}
-                </optgroup>
-                {side === "right" && (
-                    <optgroup label="Known planets / starbases">
-                        {planetKeys.map((key) => (
-                            <option key={key} value={key}>
-                                {candidateLabel(key, intel, catalog)}
-                            </option>
-                        ))}
-                    </optgroup>
-                )}
-                <optgroup label="Manual hulls">
-                    {hullKeys.map((key) => (
-                        <option key={key} value={key}>
-                            {candidateLabel(key, intel, catalog)}
-                        </option>
-                    ))}
-                </optgroup>
-            </select>
-            <button
-                className="secondary-button"
-                disabled={current === null}
-                onClick={onAdd}
-                type="button"
-            >
-                + {side === "left" ? "Left" : "Right"}
-            </button>
-        </div>
-    );
-}
-
 function queueValidation(
     leftQueue: MaterializedCombatant[],
     rightQueue: MaterializedCombatant[],
@@ -260,10 +189,6 @@ export function BattleSimulatorWorkbench({
     catalog: GameRuleCatalogResponse;
     turn: number;
 }) {
-    const shipKeys = useMemo<CandidateKey[]>(
-        () => intel.ships.map((ship) => `ship:${ship.ship_id}` as CandidateKey),
-        [intel.ships],
-    );
     const planetKeys = useMemo<CandidateKey[]>(
         () => intel.planets.map((planet) => `planet:${planet.planet_id}` as CandidateKey),
         [intel.planets],
@@ -281,8 +206,6 @@ export function BattleSimulatorWorkbench({
     const [selectedSide, setSelectedSide] = useState<SideName>("left");
     const [selectedLeft, setSelectedLeft] = useState(0);
     const [selectedRight, setSelectedRight] = useState(0);
-    const [leftAddKey, setLeftAddKey] = useState<CandidateKey | null>(null);
-    const [rightAddKey, setRightAddKey] = useState<CandidateKey | null>(null);
     const [seed, setSeed] = useState(1);
     const [battles, setBattles] = useState(10_000);
     const [rightBalanceMode, setRightBalanceMode] = useState<RightBalanceMode>("auto");
@@ -333,10 +256,8 @@ export function BattleSimulatorWorkbench({
         setSelectedSide("left");
         setSelectedLeft(0);
         setSelectedRight(0);
-        setLeftAddKey(shipKeys[0] ?? hullKeys[0] ?? null);
-        setRightAddKey(shipKeys[0] ?? planetKeys[0] ?? hullKeys[0] ?? null);
         invalidateResults();
-    }, [catalog, game, hullKeys, intel, planetKeys, shipKeys]);
+    }, [catalog, game, hullKeys, intel, planetKeys]);
 
     const selected = selectedSide === "left"
         ? leftQueue[selectedLeft] ?? null
@@ -368,16 +289,6 @@ export function BattleSimulatorWorkbench({
         }
         setSelectedSide(side);
         invalidateResults();
-    }
-
-    function addCombatant(side: SideName) {
-        const key = side === "left"
-            ? leftAddKey ?? shipKeys[0] ?? hullKeys[0] ?? null
-            : rightAddKey ?? shipKeys[0] ?? planetKeys[0] ?? hullKeys[0] ?? null;
-        if (key === null) return;
-        const next = materializeCandidate(key, game, intel, catalog);
-        if (next === null) return;
-        appendCombatant(side, next);
     }
 
     function moveCombatant(side: SideName, index: number, delta: number) {
