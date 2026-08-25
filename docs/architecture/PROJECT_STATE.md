@@ -8,6 +8,7 @@ This is the durable architectural handoff for `Numillyash/planets-intel`. Git hi
 - Product direction: private Planets.nu operational client with factual intel, read-time inference, historical analysis, order drafting, simulation and eventually explicit reviewed upstream turn submission.
 - UI direction: Planets-style fullscreen starmap + operational dashboard; map-first workflow, not the old card-heavy UI.
 - Source of truth across chats: GitHub repository + these handoff docs. Do not reconstruct current implementation from chat memory.
+- Current implementation focus: Battle Planner combatant selection/loadout UX and runtime validation on top of the deterministic combat engine.
 
 ## Stable baseline
 
@@ -23,6 +24,8 @@ This is the durable architectural handoff for `Numillyash/planets-intel`. Git hi
 - Planet warp-well movement substep, including post-intercept warp wells.
 - Planet navigation-link rounding compatible with displayed Planets navigation distance.
 - War-state diagnostic: `backend/app/scripts/war_state_dump.py`.
+- Communications UI with public/private channels and verified true Planets.nu threaded replies using `/game/sendmessage` + factual `parentid`.
+- Battle Planner with queue simulation, known/manual combatants, sequential waves, race/advantage handling and current separated add-source/loadout editor work.
 
 ## Availability / offline-read architecture
 
@@ -52,8 +55,7 @@ known zero != unknown
 - Combined/shared intel decides disclosure using provenance of the contributing observation.
 - VCR equipment is a separate factual evidence layer at combat time; it does not automatically become current ship state.
 - UI must visibly distinguish known `0` from `UNKNOWN`/unavailable.
-
-This behavior is verified for own Super Star Destroyers and enemy Rush data in live game `682909`; exact examples are in `CURRENT_HANDOFF.md`.
+- Battle Planner can expose controls up to factual hull capacity, but an analyst-entered simulated loadout is not promoted to factual current equipment.
 
 ## Military-score delta attribution
 
@@ -82,8 +84,6 @@ Rules:
 - A VCR start -> post fighter delta may enter factual turn attribution only when the post state is analyst-confirmed and the same ship does not already have a directly comparable previous/current fighter snapshot covering the change.
 - Deterministic VCR replay remains a derived layer and never enters `Confirmed factual Δ`.
 
-Current GitHub code implements this conservative VCR reconciliation. The newest runtime/build validation status is in `CURRENT_HANDOFF.md`.
-
 ## Combat / VCR evidence
 
 Raw accessible VCR observations can expose immutable combat-start equipment such as:
@@ -96,14 +96,70 @@ Raw accessible VCR observations can expose immutable combat-start equipment such
 
 This evidence is attached read-time to normalized combat events with explicit evidence basis and does not mutate canonical observations. Replay-derived post-combat state remains a separate derived layer. Analyst-reviewed post-combat state is separately stored and can support time-compatible factual attribution without converting combat-time evidence into current state.
 
-Longer-term goal: build a Battle Planner on top of the deterministic VCR engine, including sequential-wave combat and explicit scenario assumptions for unknown enemy equipment.
+## Battle Planner
+
+Battle Planner is no longer only a future goal; it is an active frontend/backend feature built on the deterministic combat engine.
+
+Current capabilities include:
+
+- LEFT/RIGHT combat queues;
+- ship-vs-ship and fixed RIGHT planet/starbase scenarios;
+- sequential-wave combat;
+- deterministic visual battle replay and multi-battle odds runs;
+- race/crew/advantage-sensitive simulation controls;
+- known ships and known planets materialized from factual/intel data;
+- generic/manual combatants for scenario assumptions;
+- editable simulation loadout without mutating factual intel.
+
+Current UX work from 2026-08-25:
+
+- add-combatant source split into `Known ships`, `Known planets`, `Generic ship / planet`;
+- known ships grouped by owner race;
+- low-armament support ships hidden from the default picker with an explicit `Show support ships` toggle;
+- ship editor renders weapon controls using hull capacity even if the selected/observed setup currently has zero installed weapons;
+- concrete validation target: `VIRGO CLASS BATTLESTAR #19`, which previously showed `0B · 0T · 8 bays` and exposed no beam editor despite a beam-capable hull.
+
+The support-ship classifier is a picker heuristic only:
+
+```text
+launchers > 0 OR fighter bays > 0 OR beams >= 4
+```
+
+It must never become factual combat inference. It needs live review for specialty combat hulls with low armament.
+
+Exact implementation/runtime validation instructions are in:
+
+```text
+docs/architecture/BATTLE_PLANNER_HANDOFF_2026-08-25.md
+```
+
+## Communications write semantics
+
+The current game-message write path preserves the verified Planets.nu contract.
+
+Root/public/private message:
+
+```text
+POST /game/sendmessage
+```
+
+Threaded reply:
+
+```text
+POST /game/sendmessage
+parentid=<factual thread root activity id>
+```
+
+Replying to a reply stays attached to the same factual root. Private participant sets are validated and reconciliation requires the new observed activity to have the expected parent relation.
+
+The user has runtime-validated this reply path as working. Contract details are in `docs/architecture/COMMUNICATIONS_REPLY_CONTRACT.md`.
 
 ## Artwork cache
 
 - Current preferred hull portrait source is Planets.nu `hulls3d/<id>_p.png`, with classic hull artwork as fallback.
 - Artwork fetching must not make the API proxy a hard dependency: current code tries direct public artwork routes and then configured proxy routes.
 - Missing artwork attempts are concurrency-limited so one hull cannot saturate the proxy/downloader.
-- Exact last runtime validation (including hull #69 success and hull #94 failure before the latest resilience change) is in `CURRENT_HANDOFF.md`.
+- Exact latest runtime validation is in `CURRENT_HANDOFF.md` / Git history when relevant.
 
 ## Movement state
 
@@ -135,20 +191,24 @@ Still pending:
 - Historical displacement above `warp²` can be legitimate because of planetary warp-well pull.
 - A historical/combat-time fact is not automatically a current fact.
 - `0` must never be used as a placeholder for unknown tactical information.
+- Hull capacity means capability, not factual installed loadout.
+- UI picker filtering must never delete or reinterpret stored intel.
 
 ## Next priorities
 
-The exact first actions for the next chat are in `CURRENT_HANDOFF.md`. After syncing/deploying the actual branch HEAD, priorities are:
+The exact first actions for the next chat are in `CURRENT_HANDOFF.md`. Current order:
 
-1. Build and runtime-validate the VCR fighter classification/reconciliation changes against live T11 -> T12 `tusilat` data.
-2. Re-test Rush hull #94 artwork using the current resilient downloader.
-3. Verify that review-confirmed combat deltas are counted only when they do not overlap directly comparable turn snapshots, while replay-only evidence stays derived.
-4. Build Combat/Battle Planner on top of the deterministic VCR engine.
-5. Add movement fuel model.
-6. Add Tow resolution ahead of Move Most/Intercept.
-7. Consolidate movement phases into a unified prediction/turn-review model.
-8. Expand draftable missions/cargo/planet/starbase orders.
-9. Implement explicit reviewed Planets.nu write adapter, turn submission and post-host reconciliation.
+1. Sync/deploy the actual `feature/operational-ui` HEAD if the server checkout is clean and behind.
+2. Runtime/browser-validate the new Battle Planner source picker and hull-capacity weapon editor, starting with Virgo #19 and at least one second affected hull.
+3. Fix actual picker/editor regressions; verify support-ship filtering does not hide important specialty combat hulls without an accessible fallback.
+4. Remove dead legacy combined-picker state after the new path is confirmed.
+5. Add focused coverage for picker grouping/filtering and editor visibility where practical.
+6. Continue Battle Planner combat-model validation and remaining Host mechanics.
+7. Add movement fuel model.
+8. Add Tow resolution ahead of Move Most/Intercept.
+9. Consolidate movement phases into a unified prediction/turn-review model.
+10. Expand draftable missions/cargo/planet/starbase orders.
+11. Continue explicit reviewed Planets.nu write adapters with post-write reconciliation.
 
 ## New-chat bootstrap
 
@@ -157,13 +217,14 @@ A completely fresh chat should start by reading:
 1. `docs/architecture/NEW_CHAT_START.md`
 2. `docs/architecture/PROJECT_STATE.md`
 3. `docs/architecture/CURRENT_HANDOFF.md`
+4. `docs/architecture/BATTLE_PLANNER_HANDOFF_2026-08-25.md`
 
 Then inspect `feature/operational-ui` HEAD and server divergence before making any code change.
 
 Suggested opening request:
 
 ```text
-Работаем с Numillyash/planets-intel. Открой branch feature/operational-ui, сначала прочитай docs/architecture/NEW_CHAT_START.md, docs/architecture/PROJECT_STATE.md и docs/architecture/CURRENT_HANDOFF.md, затем проверь текущий HEAD репозитория. Считай GitHub источником истины и продолжай с Immediate next actions из CURRENT_HANDOFF.md. Старый чат не используй как источник состояния проекта.
+Работаем с Numillyash/planets-intel. GitHub — source of truth. Открой feature/operational-ui и сначала прочитай docs/architecture/NEW_CHAT_START.md, docs/architecture/PROJECT_STATE.md, docs/architecture/CURRENT_HANDOFF.md и docs/architecture/BATTLE_PLANNER_HANDOFF_2026-08-25.md. Затем проверь актуальный HEAD репозитория и состояние /opt/planets-intel. Продолжай с Immediate next actions из CURRENT_HANDOFF.md: сначала runtime/browser validation новых Battle Planner picker/editor изменений. Старый чат не используй как источник текущего состояния.
 ```
 
 ## Validation protocol
