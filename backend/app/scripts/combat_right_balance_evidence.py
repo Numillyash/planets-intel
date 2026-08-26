@@ -122,8 +122,8 @@ def _matching_ship_observations(
     ship_id: int,
     owner_id: int | None,
     hull_id: int,
-    x: int | None,
-    y: int | None,
+    x: int,
+    y: int,
 ) -> list[tuple[ShipObservation, PrivateObservationBatch, int]]:
     result: list[tuple[ShipObservation, PrivateObservationBatch, int]] = []
     for ship, batch in rows:
@@ -135,9 +135,9 @@ def _matching_ship_observations(
             continue
         if owner_id is not None and ship.owner_id is not None and int(ship.owner_id) != owner_id:
             continue
-        if x is not None and ship.x is not None and int(ship.x) != x:
+        if ship.x is None or ship.y is None:
             continue
-        if y is not None and ship.y is not None and int(ship.y) != y:
+        if int(ship.x) != x or int(ship.y) != y:
             continue
         payload = dict(ship.payload) if isinstance(ship.payload, dict) else {}
         observed_mass = _positive_integer(payload, "mass")
@@ -188,6 +188,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         "supporting_other_delta": 0,
         "excluded_federation_right_mass_bonus": 0,
         "excluded_below_physical_mass_threshold": 0,
+        "excluded_missing_battle_position": 0,
     }
     cases: list[dict[str, Any]] = []
 
@@ -207,11 +208,13 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         if right_race == 1:
             summary["excluded_federation_right_mass_bonus"] += 1
             continue
+        if combat.x is None or combat.y is None:
+            summary["excluded_missing_battle_position"] += 1
+            continue
 
         ship_id = _positive_integer(right, "objectid")
         hull_id = _positive_integer(right, "hullid")
         vcr_mass = _positive_integer(right, "mass")
-        owner_id = _integer(right, "raceid")  # placeholder overwritten below
         owner_id = _integer(payload, "rightownerid")
         if ship_id is None or hull_id is None or vcr_mass is None:
             continue
@@ -223,8 +226,8 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             ship_id=ship_id,
             owner_id=owner_id,
             hull_id=hull_id,
-            x=combat.x,
-            y=combat.y,
+            x=int(combat.x),
+            y=int(combat.y),
         )
         if not matches:
             continue
@@ -301,6 +304,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             "The +360 rule is never inferred from hull mass alone.",
             "Exact evidence requires a next-turn same-position owner-observed ship mass and a RIGHT ship with zero launchers and zero fighter bays, so combat ammunition consumption cannot explain the mass delta.",
             "RIGHT Federation ships are excluded because their separate +50 combat-mass advantage would confound the comparison.",
+            "The next-turn observed physical mass must itself satisfy the >=140 eligibility threshold; a VCR mass already containing a bonus is never used to manufacture eligibility.",
             "A +360 delta is evidence that the balance bonus was present in the factual VCR combat mass; a zero delta is evidence that it was not applied for that battle.",
             "Non-owner ship observations are reported as supporting evidence only and are not promoted to exact validation.",
             "No factual observations are modified.",
