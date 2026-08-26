@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from app.api.dependencies.auth import require_user
 from app.models.user import AppUser
 from app.schemas.movement_prediction import DraftMovementPredictionResponse
-from app.services.movement_prediction import (
+from app.services.movement_prediction_runtime import (
     MovementPredictionAccessError,
     MovementPredictionNotFound,
     get_draft_movement_prediction,
