@@ -32,6 +32,15 @@ export interface ShipMovementPrediction {
     displacement_distance: number | null;
     warp: number | null;
     speed_multiplier: number;
+    fuel_status: string;
+    movement_mass: number | null;
+    fuel_available: number | null;
+    fuel_factor: number | null;
+    fuel_required: number | null;
+    fuel_used: number | null;
+    fuel_limited: boolean | null;
+    fuel_basis: string;
+    fuel_reason: string;
     reason: string;
     warnings: string[];
 }
