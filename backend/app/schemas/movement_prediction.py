@@ -37,6 +37,15 @@ class ShipMovementPrediction(BaseModel):
     displacement_distance: float | None
     warp: int | None
     speed_multiplier: float
+    fuel_status: str = "not_evaluated"
+    movement_mass: int | None = None
+    fuel_available: int | None = None
+    fuel_factor: int | None = None
+    fuel_required: int | None = None
+    fuel_used: int | None = None
+    fuel_limited: bool | None = None
+    fuel_basis: str = "not_evaluated"
+    fuel_reason: str = "Fuel evaluation was not available for this movement item."
     reason: str
     warnings: list[str]
 
