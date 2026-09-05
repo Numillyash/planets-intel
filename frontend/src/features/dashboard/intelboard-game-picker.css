@@ -367,6 +367,7 @@
 }
 
 .intelboard-turn-cell {
+    position: relative;
     display: inline-grid;
     width: 24px;
     height: 24px;
@@ -405,7 +406,11 @@
 .intelboard-managed-account-marker.is-viewed { color: #e7a450; }
 .intelboard-managed-account-marker.is-unopened { color: #c7d2df; }
 .intelboard-managed-account-marker.is-unknown { color: #8192a5; }
-.intelboard-managed-account-marker.is-inactive { color: #697582; }
+.intelboard-managed-account-marker.is-inactive {
+    color: #697582;
+    text-decoration: line-through;
+    text-decoration-thickness: 1px;
+}
 .intelboard-managed-account-marker.is-computer { color: #9aa8e7; }
 
 .intelboard-turn-rail.is-dense .intelboard-turn-cell {
@@ -463,9 +468,20 @@
 }
 
 .intelboard-turn-cell.is-inactive {
-    border-color: #424b56;
-    background: #242c35;
-    color: #7f8995;
+    border-color: #3b434d;
+    background: #20262e;
+    color: #697582;
+}
+
+.intelboard-turn-cell.is-inactive::after {
+    content: "";
+    position: absolute;
+    width: 78%;
+    height: 1px;
+    border-radius: 999px;
+    background: #8c97a3;
+    transform: rotate(-35deg);
+    pointer-events: none;
 }
 
 .intelboard-turn-cell.is-computer {
