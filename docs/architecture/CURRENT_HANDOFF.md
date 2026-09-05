@@ -1,6 +1,6 @@
 # Planets Intel — Current Handoff
 
-Updated: 2026-08-26
+Updated: 2026-09-05
 
 GitHub is the source of truth. Active development remains on `feature/operational-ui`. A fresh chat must read this file together with `NEW_CHAT_START.md`, `PROJECT_STATE.md` and `BATTLE_PLANNER_HANDOFF_2026-08-25.md`, then inspect the actual branch HEAD and `/opt/planets-intel` before deploying.
 
@@ -16,14 +16,14 @@ GitHub is the source of truth. Active development remains on `feature/operationa
 Last explicitly runtime-confirmed deploy with full output:
 
 ```text
-HEAD:       1f9516f33fd4f898a7ee685de125b89e8350e299
+HEAD:       31fd3db554d5c7f77e19afa83214138fdb764579
 BUILD:      OK
-TESTS:      OK — 231
+TESTS:      OK — 257
 MIGRATIONS: 0017_outgoing_msg_recipients (head)
 HEALTH:     OK
 ```
 
-Later GitHub commits implement movement fuel. Do not claim those runtime-validated until a fresh deploy/output is supplied.
+Later GitHub commits may exist. Do not claim those runtime-validated until a fresh deploy/output is supplied.
 
 ## Hard invariants
 
@@ -41,7 +41,7 @@ Deterministic replay is derived evidence, never a factual observation. Local ord
 
 Battle Planner picker/editor UX and loadout-source fixes are browser-accepted. Do not reopen them without new evidence.
 
-Important current intel precedence for simulator defaults:
+Simulator default precedence:
 
 ```text
 current factual/private/shared state
@@ -53,104 +53,31 @@ current factual/private/shared state
 
 For a VCR from the immediately preceding Host turn, only post-combat mutable state may cross the Host boundary; combat-start ammunition does not.
 
-### Deterministic VCR replay
+Material combat validation checkpoint:
 
-Earlier full audit: `145/145` unique VCRs supported, `0` payload conflicts, `2/2` analyst-confirmed state checks matched. Corpus later grew to `148` unique VCRs.
+- deterministic VCR replay: earlier `145/145` supported, `0` payload conflicts, `2/2` analyst checks; corpus later grew to 148 VCRs;
+- ship sequence carry: 42 same-turn/same-location transitions matched comparable terminal -> next factual start state;
+- strong ship-sequence anchor: game `680933`, T42, Virgo `#10`, VCR `201 -> 202`, `shield=0 damage=12 crew=1724 fighters=39`;
+- planet/starbase carry: only Launa Planet `#75`, game `682909`, T9, VCR `9 -> 10`, starbase present, shield `0 -> 0`; no repeated no-starbase planet chain;
+- Lizard 150% endurance: 37 comparable, 15 sensitive, 15 terminal-state-only changes, 0 winner changes; keyed runtime regression `2/2` matched;
+- Federation +3 carrier bays: Kittyhawk game `683230`, T15, VCR 20, hull 6 bays -> factual VCR 9 bays; keyed runtime regression `1/1` matched;
+- Federation damaged-start weapon continuity and between-fight 25% shield recovery remain unvalidated because no isolating factual cases exist;
+- right-side carrier +360 balance remains unvalidated: 12 candidate shapes, only 1 ammo-isolating shape, 0 usable next-turn same-position mass observations. Never substitute `VCR mass - hull mass` for evidence.
 
-### Ship sequence carry
+One old screenshot showed `Battle sequence odds failed: 502 Proxy Error` with the UI set to 10,000 battles. It has not been reproduced or tied causally to 10,000 trials. Investigation remains deferred.
 
-`combat_chain_regression.py` found 42 same-turn/same-location ship transitions. Comparable `damage`, `crew`, `torpedoes`, `fighters`, and non-Federation shield all matched deterministic terminal -> next factual VCR start.
+## Game chooser checkpoint
 
-Strong anchor: game `680933`, turn `42`, Virgo `#10`, VCR `201 -> 202`:
+The chooser is game-centric rather than account-centric:
 
-```text
-shield=0 damage=12 crew=1724 fighters=39
-```
+- one card per game;
+- observer selection through compact `Open as ...` controls;
+- local linked accounts plus active/approved Intel Share peers are labelled under their turn-status slot with `↑ nickname`;
+- inactive/dead slots are visibly struck through, including an associated local/peer label.
 
-The VCR 201 deterministic terminal state exactly becomes VCR 202 factual start state.
+Browser runtime accepted the deduplicated chooser. The dead-slot strike commit was subsequently deployed successfully as part of the 253-test checkpoint. Do not reopen this UI without new evidence.
 
-### Planet/starbase sequence carry
-
-Only one repeated planetary defender exists: game `682909`, turn `9`, Launa Planet `#75`, VCR `9 -> 10`, starbase present. Shield carry `0 -> 0` matches. No repeated no-starbase planet chain exists; hidden persistent starbase state remains fail-closed.
-
-### Lizard 150% endurance — closed/anchored
-
-Runtime sensitivity audit over 37 factual Lizard VCRs:
-
-```text
-comparable:               37
-sensitive:                15
-insensitive:              22
-outcome_changed:           0
-terminal_only_changed:    15
-ship_vs_ship_sensitive:   14
-ship_vs_planet_sensitive:  1
-```
-
-Keyed runtime regression:
-
-```text
-backend/app/scripts/combat_lizard_regression.py
-baselines: 2
-matched:   2
-failed:    0
-```
-
-VCR 201 is additionally anchored by the next factual VCR; VCR 216 protects a sensitive case with the Lizard ship on RIGHT.
-
-### Federation — direct evidence anchored, gaps explicit
-
-Direct factual carrier evidence:
-
-```text
-game 683230 · T15 · VCR 20
-KITTYHAWK CLASS CARRIER
-hull bays = 6
-VCR bays  = 9
-delta     = +3
-```
-
-Keyed runtime regression `combat_federation_regression.py`: `1/1` matched.
-
-Current corpus has:
-
-```text
-damaged Federation combat starts:                 0
-same-turn same-location Federation transitions:   0
-```
-
-Therefore damaged-start full-weapon continuity and 25% between-fight shield recovery remain explicitly unvalidated by real corpus evidence.
-
-### Right-side carrier balance — unvalidated, stop here
-
-Strict factual audit `combat_right_balance_evidence.py` at the current runtime checkpoint:
-
-```text
-unique_vcrs:                          148
-candidate_shapes:                      12
-ammo_mass_isolating_shapes:             1
-next_turn_same_position_mass_observed:  0
-owner_observed_exact_cases:             0
-foreign_observed_supporting_cases:       0
-```
-
-No +360 conclusion is justified from the current corpus. Do not fall back to `VCR mass - hull mass`; load/ammunition confound that comparison. Reopen only if new factual mass evidence creates an isolating case.
-
-### Deferred one-off 502
-
-One old screenshot showed `Battle sequence odds failed: 502 Proxy Error` while the UI contained `10000` battles. It has not been reproduced or tied causally to 10,000 trials. Investigation remains deferred.
-
-## Current development focus — movement fuel
-
-Combat validation is materially closed as far as the current corpus permits. Roadmap now resumes:
-
-```text
-movement fuel
--> Tow resolution before Move Most/Intercept
--> unified movement prediction / turn review
-```
-
-### Evidence source
+## Movement fuel — implementation complete for the verified subset
 
 Fuel mechanics were transferred from the already researched `Numillyash/planets-lab` rule layer, not reconstructed from memory.
 
@@ -184,34 +111,17 @@ hull mass (engine mass already included)
 + molybdenum
 ```
 
-Do not use raw Planets.nu `ship.mass` as movement mass. Do not substitute hull weapon capacity for factual installed weapon count. Ambiguous generic `ammo` stays unresolved.
+Do not use raw Planets.nu `ship.mass` as Host movement mass. Do not substitute hull weapon capacity for factual installed weapon count. Ambiguous generic `ammo` stays unresolved.
 
-### Verified insufficient-fuel subset
-
-`planets-lab` has documented + corpus-observed + tested + differential-verified positive-fuel proration cases:
+Verified positive insufficient-fuel rule:
 
 ```text
 actual distance = waypoint distance * fuel available / fuel required
 ```
 
-The resulting continuous distance uses Host major/minor-axis integer projection.
+The continuous distance is converted to coordinates with the Host major/minor-axis integer projection.
 
-Production intentionally applies proration only to the verified subset:
-
-- positive fuel;
-- normal-speed ship;
-- waypoint reachable within the ordinary one-turn movement allowance.
-
-Remain fail-closed for now:
-
-- zero-fuel movement;
-- insufficient-fuel Gravitonic movement;
-- insufficient fuel when the waypoint is already farther than the one-turn range;
-- pre-movement Crystal web drain / transfers / other fuel-state mutation;
-- Tow mass and Tow ordering;
-- finite-fuel Intercept until Tow is resolved first.
-
-### New production modules
+Production modules:
 
 ```text
 backend/app/services/movement_fuel.py
@@ -220,9 +130,7 @@ backend/app/services/movement_prediction_runtime.py
 backend/app/scripts/movement_fuel_runtime_diagnostic.py
 ```
 
-The API route now uses `movement_prediction_runtime.py`. It is a runtime facade over the existing movement pipeline, using request-local context rather than creating a second movement engine.
-
-For waypoint Move Most:
+Waypoint runtime order is currently:
 
 ```text
 ordinary geometry
@@ -233,62 +141,138 @@ ordinary geometry
 -> later Intercept sees the fuel-adjusted waypoint position
 ```
 
-If finite-fuel endpoint cannot be resolved safely, waypoint position becomes unresolved instead of leaking the old geometry as a factual-looking answer.
+If finite-fuel endpoint cannot be resolved safely, the predicted waypoint position becomes unresolved instead of leaking geometric output as factual-looking certainty.
 
-Finite-fuel Intercept remains visible as a geometry preview but is marked `certain=false` with `fuel_status=unresolved_intercept` until Tow/fuel ordering is implemented.
+### Fuel evidence closure
 
-Movement response items now expose:
-
-```text
-fuel_status
-movement_mass
-fuel_available
-fuel_factor
-fuel_required
-fuel_used
-fuel_limited
-fuel_basis
-fuel_reason
-```
-
-### Fuel commits in current development pass
+`Numillyash/planets-lab` historical 12-game corpus already established the strict fuel-proration subset as:
 
 ```text
-bc7daaf026f61d7e5531a80f44e2a86f7bb6e9ba  feat: add verified movement fuel primitives
-5350a4d3b9b84a0bb14e4c0464bcc6f5ce2abe13  test: cover verified movement fuel primitives
-e33b2e06fea1e5e47bdcf539a728435d495de203  feat: resolve waypoint fuel policy
-7ec2963f6b068a44f22335f0f9b71b68b2d2173d  test: cover waypoint fuel policy boundaries
-acbf370e89f5bf44faf570716aacf06c7ea3c3b2  feat: apply fuel to movement prediction runtime
-366876252f12a74d5d9aff79fef7e26f30f45b77  refactor: route movement prediction through fuel runtime
-49645d8d5cf65ebcc276f62b2d2701f6ea1eea40  feat: expose movement fuel evidence fields
-1e497f9cdd2945b369bea8ec6cbf403a62f50f94  feat: type movement fuel evidence
-3f643b3edf0ff2fe235918dd6b4f0e4784810b37  feat: add movement fuel runtime diagnostic
-e97e8a4357a38c929d01ffc626f3a89ed4424370  test: cover fuel-aware movement runtime facade
+DOCUMENTED + CORPUS_OBSERVED + TESTED + DIFF_VERIFIED
+fuel_proration_explained = 6
+Nu exact Host matches = 6
+Nu-only discriminating matches = 3
+VGAP3-style control matches = 0
+targeted v6 regression set = 16 passed
 ```
+
+`planets-intel` mirrors the verified 200-KT / 60-ly / 12-KT-required / 11-KT-available -> 55-ly reference vector in its own regression tests.
+
+The production DB cannot provide additional finite-fuel runtime evidence. Read-only diagnostic on the last confirmed server deploy reported:
+
+```text
+latest_factual_groups:                 26
+factual_unlimited_groups:              26
+factual_fuel_enabled_groups:            0
+factual_owner_ships:                  356
+factual_waypoint_items:               180
+factual_unlimited_waypoint_items:     180
+factual_fuel_enabled_waypoint_items:    0
+factual_fuel_status_counts: unlimited=180
+```
+
+Therefore do not keep asking for finite-fuel runtime validation from the current `planets-intel` DB. The finite-fuel checkpoint is closed by the differential-verified `planets-lab` evidence plus the cross-repository production regression.
+
+Remain fail-closed for separate mechanics not covered by the strict fuel subset:
+
+- zero-fuel movement;
+- insufficient-fuel Gravitonic movement;
+- insufficient fuel on an already partial waypoint;
+- pre-movement transfers / Crystal web drain / other fuel-state mutation;
+- Tow movement mass/order until Tow is integrated;
+- finite-fuel Intercept until Tow and Intercept ordering are integrated.
+
+## Current development focus — Tow before Move Most / Intercept
+
+Roadmap now resumes:
+
+```text
+Tow resolution
+-> integrate Tow ahead of Move Most / Intercept
+-> resolve finite-fuel Intercept on the unified movement state
+-> unified movement prediction / turn review
+```
+
+### Tow evidence transferred from planets-lab
+
+`planets-lab` route-equivalent visible Tow is `TESTED + DIFF_VERIFIED` on the historical corpus.
+
+Verified evidence semantics:
+
+- owner-visible Tow mission;
+- Tow mission ID `6`;
+- target ID exposed as `mission1target` / `mission1_target_id`;
+- tower and target colocated before movement;
+- tower and target end at the same non-stationary destination;
+- if several visible towers are route-equivalent, route evidence is valid but winning tower identity remains ambiguous and must not be invented.
+
+Host movement phase ordering is:
+
+```text
+Tow -> Move Most -> Intercept
+```
+
+The research simulator also contains the narrow Tow lock mechanics (engine eligibility, tower fuel where finite, colocation, four-fingers target break) and Tow movement using combined tower + target movement mass.
+
+### New strict production Tow primitives
+
+Current development adds:
+
+```text
+backend/app/services/movement_tow.py
+backend/app/scripts/movement_tow_runtime_diagnostic.py
+backend/tests/test_movement_tow.py
+```
+
+The first production-facing Tow lock subset is deliberately stricter than the lab simulator:
+
+- unique factual tower -> target only;
+- invalid/missing target fails;
+- tower with fewer than two engines fails;
+- finite-fuel tower without fuel fails;
+- non-colocated target fails;
+- four-fingers target-break predicate is evaluated only when all required factual inputs exist;
+- unknown target fuel/engine/waypoint remains unknown;
+- same-target Tow contests fail closed rather than selecting a winner by ship ID;
+- Tow chains/cycles fail closed rather than inventing resolution order.
+
+This pure lock layer does not yet mutate movement prediction. The read-only diagnostic must be run first to measure the actual current factual Tow population and missing prerequisites.
+
+### Draft-model boundary
+
+Current local ship order draft schema still models movement modes only as:
+
+```text
+waypoint
+intercept
+```
+
+There is no `tow_target_ship_id` field yet. Do not abuse `intercept_target_ship_id` for Tow. Initial Tow runtime work may inspect factual upstream Tow orders only. If local Tow planning is added later, introduce a deliberate draft/API/frontend field and migration.
 
 ## Immediate next action
 
-Deploy latest `feature/operational-ui` and run the read-only real-data diagnostic:
+Deploy the latest branch after Tow CI is green (or use the production deploy, which runs build/tests itself), then run:
 
 ```bash
 cd /opt/planets-intel
 bash scripts/deploy/production.sh
 
 echo
-echo "===== MOVEMENT FUEL RUNTIME ====="
+echo "===== TOW RUNTIME AUDIT ====="
 docker compose exec -T backend \
-  python -m app.scripts.movement_fuel_runtime_diagnostic
+  python -m app.scripts.movement_tow_runtime_diagnostic
 ```
 
-Paste the full deploy result and diagnostic JSON.
+Paste the complete deploy result and Tow diagnostic JSON.
 
 Interpretation goals:
 
-- verify how many current saved waypoint drafts have fully reconstructible factual movement mass;
-- inspect real `fuel_required / fuel_available` values;
-- confirm any `limited` waypoint cases use the fuel-adjusted endpoint;
-- classify `unknown` and fail-closed cases without filling gaps with zero;
-- after runtime validation, start Tow resolution ahead of Move Most/Intercept.
+- count actual owner-private Tow mission records;
+- verify target IDs and target visibility;
+- measure unique strict lock candidates;
+- expose missing factual prerequisites without turning them into zero;
+- identify same-target contests and Tow chains/cycles;
+- only after this audit, wire the supported unique Tow subset ahead of Move Most/Intercept.
 
 ## Communications status
 
