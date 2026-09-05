@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { getAccountGames, getGame, getPlanetsAccounts } from "../../api/client";
+import {
+    getAccountGames,
+    getDashboardIntelShares,
+    getGame,
+    getPlanetsAccounts,
+} from "../../api/client";
 import { readRememberedObserverId, rememberObserverId } from "../../lib/observerSelection";
 import { raceName } from "../../lib/races";
 import type {
@@ -29,6 +34,16 @@ type PlayerTurnState =
     | "computer"
     | "empty";
 
+interface GameObserverEntry {
+    account: PlanetsAccountResponse;
+    game: AccountGameSummary;
+}
+
+interface UnifiedGameEntry {
+    game: AccountGameSummary;
+    observers: GameObserverEntry[];
+}
+
 function gamePath(observer: string, gameId: number): string {
     return `/intelboard/${encodeURIComponent(observer)}/${gameId}`;
 }
@@ -47,6 +62,15 @@ function sameObserver(left: string | null, right: string): boolean {
     return left !== null && left.localeCompare(right, undefined, { sensitivity: "accent" }) === 0;
 }
 
+function normalizedUsername(username: string): string {
+    return username.trim().toLocaleLowerCase();
+}
+
+function shortUsername(username: string): string {
+    const first = username.trim().split(/\s+/).filter(Boolean)[0] ?? "?";
+    return first.length > 11 ? `${first.slice(0, 10)}…` : first;
+}
+
 function isRunning(game: AccountGameSummary): boolean {
     return game.status_id === 2 || game.status_name.toLowerCase() === "running";
 }
@@ -59,13 +83,45 @@ function gameStatusRank(game: AccountGameSummary): number {
     return 2;
 }
 
-function sortedGames(games: AccountGameSummary[]): AccountGameSummary[] {
-    return [...games].sort((left, right) => {
-        const statusDifference = gameStatusRank(left) - gameStatusRank(right);
-        if (statusDifference !== 0) return statusDifference;
-        if (right.turn !== left.turn) return right.turn - left.turn;
-        return left.name.localeCompare(right.name);
-    });
+function compareGames(left: AccountGameSummary, right: AccountGameSummary): number {
+    const statusDifference = gameStatusRank(left) - gameStatusRank(right);
+    if (statusDifference !== 0) return statusDifference;
+    if (right.turn !== left.turn) return right.turn - left.turn;
+    return left.name.localeCompare(right.name);
+}
+
+function unifiedGames(
+    accounts: PlanetsAccountResponse[],
+    gamesByAccountId: Record<number, AccountGameSummary[]>,
+): UnifiedGameEntry[] {
+    const byGameId = new Map<number, UnifiedGameEntry>();
+
+    for (const account of accounts) {
+        for (const game of gamesByAccountId[account.id] ?? []) {
+            const existing = byGameId.get(game.id);
+            if (existing === undefined) {
+                byGameId.set(game.id, {
+                    game,
+                    observers: [{ account, game }],
+                });
+                continue;
+            }
+
+            existing.observers.push({ account, game });
+            if (game.turn > existing.game.turn) {
+                existing.game = game;
+            }
+        }
+    }
+
+    return Array.from(byGameId.values())
+        .map((entry) => ({
+            ...entry,
+            observers: [...entry.observers].sort((left, right) => (
+                left.account.planets_username.localeCompare(right.account.planets_username)
+            )),
+        }))
+        .sort((left, right) => compareGames(left.game, right.game));
 }
 
 function observerPlayer(
@@ -77,9 +133,9 @@ function observerPlayer(
         const byId = details.players.find((player) => player.account_id === account.planets_account_id);
         if (byId !== undefined) return byId;
     }
-    const username = account.planets_username.trim().toLocaleLowerCase();
+    const username = normalizedUsername(account.planets_username);
     return details.players.find(
-        (player) => player.username.trim().toLocaleLowerCase() === username,
+        (player) => normalizedUsername(player.username) === username,
     ) ?? null;
 }
 
@@ -103,14 +159,16 @@ function officialTurnMarkerState(marker: string | undefined): PlayerTurnState | 
 }
 
 function compactTurnStates(
-    accountTurnStatus: string | null,
+    accountTurnStatuses: readonly (string | null)[],
     loadInfoTurnStatus: string | null,
     slot: number,
     loadInfoMatchesTurn: boolean,
 ): PlayerTurnState[] {
     const states: PlayerTurnState[] = [];
-    const account = officialTurnMarkerState(accountTurnStatus?.[slot - 1]);
-    if (account !== null) states.push(account);
+    for (const turnStatus of accountTurnStatuses) {
+        const account = officialTurnMarkerState(turnStatus?.[slot - 1]);
+        if (account !== null) states.push(account);
+    }
     if (loadInfoMatchesTurn) {
         const loadInfo = officialTurnMarkerState(loadInfoTurnStatus?.[slot - 1]);
         if (loadInfo !== null) states.push(loadInfo);
@@ -119,14 +177,14 @@ function compactTurnStates(
 }
 
 function gameTurnState(
-    accountTurnStatus: string | null,
+    accountTurnStatuses: readonly (string | null)[],
     loadInfoTurnStatus: string | null,
     slot: number,
     player: PlayerInfo | null,
     loadInfoMatchesTurn: boolean,
 ): PlayerTurnState {
     const compactStates = compactTurnStates(
-        accountTurnStatus,
+        accountTurnStatuses,
         loadInfoTurnStatus,
         slot,
         loadInfoMatchesTurn,
@@ -189,12 +247,14 @@ function PlayerTurnRail({
     details,
     gameTurn,
     slots,
-    turnStatus,
+    turnStatuses,
+    managedUsernames,
 }: {
     details: GameDetailsResponse | undefined;
     gameTurn: number;
     slots: number;
-    turnStatus: string | null;
+    turnStatuses: readonly (string | null)[];
+    managedUsernames: ReadonlyMap<string, string>;
 }) {
     const bySlot = new Map<number, PlayerInfo>();
     for (const player of details?.players ?? []) {
@@ -204,7 +264,7 @@ function PlayerTurnRail({
     const loadInfoTurnStatus = loadInfoMatchesTurn ? details?.game.turn_status ?? null : null;
     const slotCount = Math.max(
         slots,
-        turnStatus?.length ?? 0,
+        ...turnStatuses.map((value) => value?.length ?? 0),
         loadInfoTurnStatus?.length ?? 0,
         ...Array.from(bySlot.keys()),
         0,
@@ -213,114 +273,62 @@ function PlayerTurnRail({
     const densityClass = slotCount > 20 ? " is-very-dense" : slotCount > 14 ? " is-dense" : "";
 
     return (
-        <div aria-label={`Turn status for ${slotCount} player slots`} className={`intelboard-turn-rail${densityClass}`}>
+        <div
+            aria-label={`Turn status for ${slotCount} player slots`}
+            className={`intelboard-turn-rail${densityClass}`}
+        >
             {Array.from({ length: slotCount }, (_, index) => {
                 const slot = index + 1;
                 const player = bySlot.get(slot) ?? null;
                 const state = gameTurnState(
-                    turnStatus,
+                    turnStatuses,
                     loadInfoTurnStatus,
                     slot,
                     player,
                     loadInfoMatchesTurn,
                 );
+                const managedLabel = player === null
+                    ? null
+                    : managedUsernames.get(normalizedUsername(player.username)) ?? null;
+
                 if (player === null) {
                     return (
-                        <span
-                            className={`intelboard-turn-cell is-${state}`}
-                            key={slot}
-                            title={`Slot ${slot} · no public player record · ${turnStateLabel(state)}`}
-                        >
-                            {slot}
+                        <span className="intelboard-turn-slot" key={slot}>
+                            <span
+                                className={`intelboard-turn-cell is-${state}`}
+                                title={`Slot ${slot} · no public player record · ${turnStateLabel(state)}`}
+                            >
+                                {slot}
+                            </span>
                         </span>
                     );
                 }
+
                 const missedClass = missedTurnClass(player, state, loadInfoMatchesTurn);
                 const missedLabel = missedTurnLabel(player, state, loadInfoMatchesTurn);
                 return (
                     <span
-                        className={`intelboard-turn-cell is-${state}${missedClass}`}
+                        className={`intelboard-turn-slot${managedLabel === null ? "" : " is-managed"}`}
                         key={slot}
-                        title={`${raceName(player.race_id)} / slot ${slot} / ${player.username.trim() || "computer"} · ${turnStateLabel(state)}${missedLabel ? ` · ${missedLabel}` : ""}`}
                     >
-                        {slot}
+                        <span
+                            className={`intelboard-turn-cell is-${state}${missedClass}`}
+                            title={`${raceName(player.race_id)} / slot ${slot} / ${player.username.trim() || "computer"} · ${turnStateLabel(state)}${missedLabel ? ` · ${missedLabel}` : ""}`}
+                        >
+                            {slot}
+                        </span>
+                        {managedLabel !== null && (
+                            <span
+                                className={`intelboard-managed-account-marker is-${state}`}
+                                title={`${player.username} · ${turnStateLabel(state)}`}
+                            >
+                                <b aria-hidden="true">↑</b>{managedLabel}
+                            </span>
+                        )}
                     </span>
                 );
             })}
         </div>
-    );
-}
-
-function GameRow({
-    game,
-    details,
-    account,
-}: {
-    game: AccountGameSummary;
-    details: GameDetailsResponse | undefined;
-    account: PlanetsAccountResponse;
-}) {
-    const player = observerPlayer(details, account);
-    const running = isRunning(game);
-    const loadInfoMatchesTurn = details?.game.turn === game.turn;
-    const loadInfoTurnStatus = loadInfoMatchesTurn ? details?.game.turn_status ?? null : null;
-    const ownState = !running || player === null
-        ? null
-        : gameTurnState(
-            game.turn_status,
-            loadInfoTurnStatus,
-            player.slot_id,
-            player,
-            loadInfoMatchesTurn,
-        );
-    const typeLabel = game.is_custom ? "Custom" : game.is_private ? "Private" : "Standard";
-
-    return (
-        <button
-            className="intelboard-game-row"
-            onClick={() => {
-                rememberObserverId(account.id);
-                window.location.assign(gamePath(account.planets_username, game.id));
-            }}
-            type="button"
-        >
-            <div className="intelboard-game-row-main">
-                <div className="intelboard-game-row-title">
-                    <span className="intelboard-game-id">GAME #{game.id}</span>
-                    <h2>{game.name}</h2>
-                    <p>{game.short_description || typeLabel}</p>
-                </div>
-                <span className={`intelboard-game-status${running ? " is-running" : ""}`}>
-                    {game.status_name}
-                </span>
-            </div>
-            <div className="intelboard-game-row-meta">
-                <span><strong>T{game.turn}</strong> turn</span>
-                <span><strong>{game.slots}</strong> slots</span>
-                <span><strong>{typeLabel}</strong></span>
-                <span className="intelboard-next-host">{game.time_to_host || "Host time unknown"}</span>
-            </div>
-            {player !== null && (
-                <div className="intelboard-observer-game-summary">
-                    <span><strong>{player.planets ?? "—"}</strong> planets</span>
-                    <span><strong>{player.ships ?? "—"}</strong> ships</span>
-                    <span><strong>{player.starbases ?? "—"}</strong> bases</span>
-                    {ownState !== null && (
-                        <span className={`intelboard-own-turn-state is-${ownState}`}>
-                            <i aria-hidden="true" />{turnStateLabel(ownState)}
-                        </span>
-                    )}
-                </div>
-            )}
-            {running && (
-                <PlayerTurnRail
-                    details={details}
-                    gameTurn={game.turn}
-                    slots={game.slots}
-                    turnStatus={game.turn_status}
-                />
-            )}
-        </button>
     );
 }
 
@@ -331,22 +339,7 @@ function accountInitials(username: string): string {
     return `${words[0][0] ?? ""}${words[1][0] ?? ""}`.toUpperCase();
 }
 
-function AccountColumn({
-    account,
-    games,
-    detailsByGameId,
-    error,
-    selected,
-    onSelect,
-}: {
-    account: PlanetsAccountResponse;
-    games: AccountGameSummary[];
-    detailsByGameId: Map<number, GameDetailsResponse>;
-    error: string | null;
-    selected: boolean;
-    onSelect: () => void;
-}) {
-    const orderedGames = useMemo(() => sortedGames(games), [games]);
+function ObserverAvatar({ account }: { account: PlanetsAccountResponse }) {
     const [profileImageFailed, setProfileImageFailed] = useState(false);
     useEffect(() => setProfileImageFailed(false), [account.profile_image_url]);
     const showProfileImage = Boolean(
@@ -354,54 +347,147 @@ function AccountColumn({
     );
 
     return (
-        <section className={`intelboard-account-column${selected ? " is-selected" : ""}`}>
-            <button className="intelboard-account-header" onClick={onSelect} type="button">
-                <div className="intelboard-account-avatar">
-                    {showProfileImage ? (
-                        <img
-                            alt=""
-                            decoding="async"
-                            loading="lazy"
-                            onError={() => setProfileImageFailed(true)}
-                            referrerPolicy="no-referrer"
-                            src={account.profile_image_url ?? undefined}
-                        />
-                    ) : (
-                        <span aria-hidden="true">{accountInitials(account.planets_username)}</span>
-                    )}
+        <span className="intelboard-account-avatar">
+            {showProfileImage ? (
+                <img
+                    alt=""
+                    decoding="async"
+                    loading="lazy"
+                    onError={() => setProfileImageFailed(true)}
+                    referrerPolicy="no-referrer"
+                    src={account.profile_image_url ?? undefined}
+                />
+            ) : (
+                <span aria-hidden="true">{accountInitials(account.planets_username)}</span>
+            )}
+        </span>
+    );
+}
+
+function ObserverChoice({
+    account,
+    games,
+    selected,
+    onSelect,
+}: {
+    account: PlanetsAccountResponse;
+    games: AccountGameSummary[];
+    selected: boolean;
+    onSelect: () => void;
+}) {
+    return (
+        <button
+            className={`intelboard-observer-choice${selected ? " is-selected" : ""}`}
+            onClick={onSelect}
+            type="button"
+        >
+            <ObserverAvatar account={account} />
+            <span className="intelboard-observer-choice-copy">
+                <small>Planets.nu observer</small>
+                <strong>{account.planets_username}</strong>
+                <em>{games.filter(isRunning).length} running · {games.length} total</em>
+            </span>
+            {selected && <span className="intelboard-account-current">current</span>}
+        </button>
+    );
+}
+
+function GameCard({
+    entry,
+    details,
+    selectedAccountId,
+    managedUsernames,
+}: {
+    entry: UnifiedGameEntry;
+    details: GameDetailsResponse | undefined;
+    selectedAccountId: number | null;
+    managedUsernames: ReadonlyMap<string, string>;
+}) {
+    const { game } = entry;
+    const running = isRunning(game);
+    const typeLabel = game.is_custom ? "Custom" : game.is_private ? "Private" : "Standard";
+    const preferredObserver = (
+        entry.observers.find(({ account }) => account.id === selectedAccountId)
+        ?? entry.observers[0]
+    );
+    const currentTurnStatuses = entry.observers
+        .filter(({ game: observerGame }) => observerGame.turn === game.turn)
+        .map(({ game: observerGame }) => observerGame.turn_status);
+
+    function openAs(account: PlanetsAccountResponse) {
+        rememberObserverId(account.id);
+        window.location.assign(gamePath(account.planets_username, game.id));
+    }
+
+    return (
+        <article className="intelboard-game-card">
+            <button
+                className="intelboard-game-card-main"
+                onClick={() => openAs(preferredObserver.account)}
+                type="button"
+            >
+                <div className="intelboard-game-row-main">
+                    <div className="intelboard-game-row-title">
+                        <span className="intelboard-game-id">GAME #{game.id}</span>
+                        <h2>{game.name}</h2>
+                        <p>{game.short_description || typeLabel}</p>
+                    </div>
+                    <span className={`intelboard-game-status${running ? " is-running" : ""}`}>
+                        {game.status_name}
+                    </span>
                 </div>
-                <div>
-                    <span>Planets.nu observer</span>
-                    <h2>{account.planets_username}</h2>
-                    <p>{orderedGames.filter(isRunning).length} running · {orderedGames.length} total games</p>
+                <div className="intelboard-game-row-meta">
+                    <span><strong>T{game.turn}</strong> turn</span>
+                    <span><strong>{game.slots}</strong> slots</span>
+                    <span><strong>{typeLabel}</strong></span>
+                    <span className="intelboard-next-host">{game.time_to_host || "Host time unknown"}</span>
                 </div>
-                {selected && <strong className="intelboard-account-current">current</strong>}
             </button>
 
-            {error !== null && orderedGames.length === 0 ? (
-                <div className="intelboard-account-state is-error">{error}</div>
-            ) : orderedGames.length === 0 ? (
-                <div className="intelboard-account-state">No games for this observer.</div>
-            ) : (
-                <>
-                    {error !== null && (
-                        <div className="intelboard-account-warning">
-                            Live Planets.nu game-list metadata is unavailable; showing known games. {error}
-                        </div>
-                    )}
-                    <div className="intelboard-game-list">
-                        {orderedGames.map((game) => (
-                            <GameRow
-                                account={account}
-                                details={detailsByGameId.get(game.id)}
-                                game={game}
-                                key={game.id}
-                            />
-                        ))}
-                    </div>
-                </>
+            <div className="intelboard-game-observer-bar">
+                <span className="intelboard-game-observer-label">Open as</span>
+                {entry.observers.map(({ account, game: observerGame }) => {
+                    const player = observerPlayer(details, account);
+                    const loadInfoMatchesTurn = details?.game.turn === observerGame.turn;
+                    const loadInfoTurnStatus = loadInfoMatchesTurn
+                        ? details?.game.turn_status ?? null
+                        : null;
+                    const ownState = !running || player === null
+                        ? null
+                        : gameTurnState(
+                            [observerGame.turn_status],
+                            loadInfoTurnStatus,
+                            player.slot_id,
+                            player,
+                            loadInfoMatchesTurn,
+                        );
+                    return (
+                        <button
+                            className={`intelboard-game-observer-chip${account.id === preferredObserver.account.id ? " is-preferred" : ""}`}
+                            key={account.id}
+                            onClick={() => openAs(account)}
+                            title={`Open ${game.name} as ${account.planets_username}`}
+                            type="button"
+                        >
+                            {ownState !== null && (
+                                <i className={`is-${ownState}`} aria-hidden="true" />
+                            )}
+                            <strong>{account.planets_username}</strong>
+                        </button>
+                    );
+                })}
+            </div>
+
+            {running && (
+                <PlayerTurnRail
+                    details={details}
+                    gameTurn={game.turn}
+                    managedUsernames={managedUsernames}
+                    slots={game.slots}
+                    turnStatuses={currentTurnStatuses}
+                />
             )}
-        </section>
+        </article>
     );
 }
 
@@ -412,6 +498,7 @@ export function IntelboardGamePicker({ user, onLogout }: IntelboardGamePickerPro
     const [gamesByAccountId, setGamesByAccountId] = useState<Record<number, AccountGameSummary[]>>({});
     const [errorsByAccountId, setErrorsByAccountId] = useState<Record<number, string | null>>({});
     const [detailsByGameId, setDetailsByGameId] = useState<Map<number, GameDetailsResponse>>(new Map());
+    const [managedUsernames, setManagedUsernames] = useState<Map<string, string>>(new Map());
     const [loadingAccounts, setLoadingAccounts] = useState(true);
     const [loadingGames, setLoadingGames] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -423,7 +510,10 @@ export function IntelboardGamePicker({ user, onLogout }: IntelboardGamePickerPro
             setLoadingAccounts(true);
             setError(null);
             try {
-                const response = await getPlanetsAccounts();
+                const [response, sharesResponse] = await Promise.all([
+                    getPlanetsAccounts(),
+                    getDashboardIntelShares().catch(() => null),
+                ]);
                 if (cancelled) return;
                 const active = response.accounts.filter((account) => account.is_active);
                 const routeObserver = routedObserver(window.location.pathname);
@@ -433,7 +523,27 @@ export function IntelboardGamePicker({ user, onLogout }: IntelboardGamePickerPro
                     ? null
                     : active.find((account) => account.id === rememberedId) ?? null;
                 const selected = routed ?? remembered ?? active[0] ?? null;
+
+                const managed = new Map<string, string>();
+                for (const account of active) {
+                    managed.set(
+                        normalizedUsername(account.planets_username),
+                        shortUsername(account.planets_username),
+                    );
+                }
+                for (const share of sharesResponse?.shares ?? []) {
+                    if (share.status !== "active") continue;
+                    for (const shareAccount of [share.account_a, share.account_b]) {
+                        if (!shareAccount.approved || !shareAccount.is_active) continue;
+                        managed.set(
+                            normalizedUsername(shareAccount.planets_username),
+                            shortUsername(shareAccount.planets_username),
+                        );
+                    }
+                }
+
                 setAccounts(active);
+                setManagedUsernames(managed);
                 setSelectedAccountId(selected?.id ?? null);
                 if (selected !== null) rememberObserverId(selected.id);
                 if (window.location.pathname !== "/intelboard") {
@@ -533,6 +643,18 @@ export function IntelboardGamePicker({ user, onLogout }: IntelboardGamePickerPro
         };
     }, [accounts]);
 
+    const games = useMemo(
+        () => unifiedGames(accounts, gamesByAccountId),
+        [accounts, gamesByAccountId],
+    );
+
+    const gameListWarnings = useMemo(() => accounts.flatMap((account) => {
+        const accountError = errorsByAccountId[account.id] ?? null;
+        return accountError === null
+            ? []
+            : [`${account.planets_username}: ${accountError}`];
+    }), [accounts, errorsByAccountId]);
+
     async function handleLogout() {
         setLoggingOut(true);
         try {
@@ -548,7 +670,7 @@ export function IntelboardGamePicker({ user, onLogout }: IntelboardGamePickerPro
                 <div>
                     <div className="eyebrow">PLANETS.NU INTEL</div>
                     <h1>Choose a game</h1>
-                    <p>Each linked observer keeps its own operational game list and turn state.</p>
+                    <p>Games are shown once. Choose the observer only when a game is opened.</p>
                 </div>
                 <div className="intelboard-game-menu-user">
                     <div>
@@ -566,7 +688,7 @@ export function IntelboardGamePicker({ user, onLogout }: IntelboardGamePickerPro
                 </div>
             </header>
 
-            <div style={{ marginBottom: 14 }}>
+            <div className="intelboard-account-settings-wrap">
                 <AccountSettings
                     accounts={accounts}
                     onAccountsChanged={() => setAccountsRevision((value) => value + 1)}
@@ -582,19 +704,41 @@ export function IntelboardGamePicker({ user, onLogout }: IntelboardGamePickerPro
                     No active Planets.nu observers are linked. Open Account settings above to link one.
                 </div>
             ) : (
-                <section className="intelboard-account-grid">
-                    {accounts.map((account) => (
-                        <AccountColumn
-                            account={account}
-                            detailsByGameId={detailsByGameId}
-                            error={errorsByAccountId[account.id] ?? null}
-                            games={gamesByAccountId[account.id] ?? []}
-                            key={account.id}
-                            onSelect={() => setSelectedAccountId(account.id)}
-                            selected={account.id === selectedAccountId}
-                        />
-                    ))}
-                </section>
+                <>
+                    <section className="intelboard-observer-strip" aria-label="Local Planets.nu observers">
+                        {accounts.map((account) => (
+                            <ObserverChoice
+                                account={account}
+                                games={gamesByAccountId[account.id] ?? []}
+                                key={account.id}
+                                onSelect={() => setSelectedAccountId(account.id)}
+                                selected={account.id === selectedAccountId}
+                            />
+                        ))}
+                    </section>
+
+                    {gameListWarnings.length > 0 && (
+                        <div className="intelboard-account-warning intelboard-global-warning">
+                            Live game-list metadata is unavailable for some observers; cached entries remain visible. {gameListWarnings.join(" · ")}
+                        </div>
+                    )}
+
+                    {games.length === 0 ? (
+                        <div className="intelboard-game-menu-state">No games were found for the linked observers.</div>
+                    ) : (
+                        <section className="intelboard-game-grid">
+                            {games.map((entry) => (
+                                <GameCard
+                                    details={detailsByGameId.get(entry.game.id)}
+                                    entry={entry}
+                                    key={entry.game.id}
+                                    managedUsernames={managedUsernames}
+                                    selectedAccountId={selectedAccountId}
+                                />
+                            ))}
+                        </section>
+                    )}
+                </>
             )}
         </main>
     );
