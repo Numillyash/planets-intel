@@ -67,6 +67,56 @@ class MovementFuelPolicyTests(unittest.TestCase):
         self.assertEqual(result.override_moved_distance, 55.0)
         self.assertTrue(result.certain)
 
+    def test_planets_lab_verified_60ly_11_of_12_reference_vector(self) -> None:
+        """Mirror the exact reference vector locked in planets-lab fuel v6.
+
+        planets-lab validates a 200-KT ship with Warp-9 fuel factor 8100:
+        a 60 ly waypoint needs 12 KT, so 11 KT yields a 55 ly Host endpoint.
+        Keep this vector here so production fuel arithmetic cannot drift from
+        the independently researched rule layer.
+        """
+
+        result = resolve_waypoint_fuel(
+            unlimited_fuel=False,
+            payload={
+                "engineid": 1,
+                "beams": 0,
+                "tubes": 0,
+                "ammo": 0,
+                "neutronium": 11,
+                "supplies": 89,
+                "clans": 0,
+                "duranium": 0,
+                "tritanium": 0,
+                "molybdenum": 0,
+            },
+            hull_id=10,
+            owner_observed=True,
+            hulls=[{"id": 10, "mass": 100, "fighterbays": 0}],
+            beams=[],
+            torpedoes=[],
+            engines=[{"id": 1, "warp9": 8100}],
+            warp=9,
+            speed_multiplier=1.0,
+            origin_x=0,
+            origin_y=0,
+            target_x=60,
+            target_y=0,
+            requested_distance=60.0,
+            geometric_moved_distance=60.0,
+            geometric_max_distance=81.0,
+        )
+
+        self.assertEqual(result.status, WaypointFuelStatus.LIMITED)
+        self.assertEqual(result.movement_mass, 200)
+        self.assertEqual(result.fuel_available, 11)
+        self.assertEqual(result.fuel_factor, 8100)
+        self.assertEqual(result.fuel_required, 12)
+        self.assertEqual(result.fuel_used, 11)
+        self.assertEqual((result.override_x, result.override_y), (55, 0))
+        self.assertEqual(result.override_moved_distance, 55.0)
+        self.assertTrue(result.certain)
+
     def test_sufficient_fuel_keeps_geometric_endpoint(self) -> None:
         result = resolve(fuel=12, supplies=88)
         self.assertEqual(result.status, WaypointFuelStatus.SUFFICIENT)
