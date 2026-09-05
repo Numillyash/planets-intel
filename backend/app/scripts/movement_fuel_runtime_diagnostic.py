@@ -59,9 +59,9 @@ def _draft_groups() -> list[tuple[int, int, int, int]]:
 def _latest_factual_groups() -> list[tuple[int, int, int, int, int]]:
     """Return the latest factual batch for every active observer/game pair.
 
-    The diagnostic intentionally does not reuse stale local drafts here. This
-    second input path audits the same fuel policy against factual Planets.nu
-    waypoint/warp state already present in the latest private snapshot.
+    This includes historical/finished games still stored for an active linked
+    account. The diagnostic therefore does not depend on current running games
+    having finite fuel enabled.
     """
 
     with SessionLocal() as session:
@@ -167,6 +167,11 @@ def _audit_factual_waypoints(
 
         settings = dict(catalog.settings)
         unlimited_fuel = bool(settings.get("unlimitedfuel", False))
+        if unlimited_fuel:
+            summary["factual_unlimited_groups"] += 1
+        else:
+            summary["factual_fuel_enabled_groups"] += 1
+
         hulls = list(catalog.hulls)
         beams = list(catalog.beams)
         torpedoes = list(catalog.torpedos)
@@ -177,6 +182,8 @@ def _audit_factual_waypoints(
             if ship.owner_id != owner_slot_id:
                 continue
             summary["factual_owner_ships"] += 1
+            if not unlimited_fuel:
+                summary["factual_fuel_enabled_owner_ships"] += 1
             if ship.x is None or ship.y is None:
                 continue
             payload = dict(ship.payload) if isinstance(ship.payload, dict) else {}
@@ -188,6 +195,11 @@ def _audit_factual_waypoints(
                 continue
 
             summary["factual_waypoint_items"] += 1
+            if unlimited_fuel:
+                summary["factual_unlimited_waypoint_items"] += 1
+            else:
+                summary["factual_fuel_enabled_waypoint_items"] += 1
+
             warp = int(ship.warp or 0)
             speed_multiplier = _speed_multiplier(ship, hull_names=hull_names)
             geometric = resolve_move_most_order(
@@ -226,10 +238,17 @@ def _audit_factual_waypoints(
                 limited_key="factual_fuel_limited_waypoints",
                 unresolved_key="factual_fuel_unknown_or_unsupported_waypoints",
             )
+
+            # Current running games may intentionally use unlimited fuel. They
+            # remain counted as a control, but do not consume the finite-fuel
+            # sample budget needed to inspect historical games.
+            if unlimited_fuel:
+                continue
+
             _append_sample(
                 samples,
                 {
-                    "source": "latest_factual_waypoint",
+                    "source": "historical_or_current_fuel_enabled_waypoint",
                     "linked_account_id": linked_account_id,
                     "game_id": game_id,
                     "turn": turn,
@@ -276,8 +295,13 @@ def run() -> dict:
         "fuel_unknown_or_unsupported_waypoints": 0,
         "latest_factual_groups": 0,
         "factual_catalog_missing": 0,
+        "factual_unlimited_groups": 0,
+        "factual_fuel_enabled_groups": 0,
         "factual_owner_ships": 0,
+        "factual_fuel_enabled_owner_ships": 0,
         "factual_waypoint_items": 0,
+        "factual_unlimited_waypoint_items": 0,
+        "factual_fuel_enabled_waypoint_items": 0,
         "factual_fuel_limited_waypoints": 0,
         "factual_fuel_unknown_or_unsupported_waypoints": 0,
     }
@@ -370,7 +394,8 @@ def run() -> dict:
         "factual_group_errors": factual_errors,
         "notes": [
             "Local draft predictions remain restricted to the latest factual turn; stale drafts are reported, never replayed against newer facts.",
-            "When current local drafts are absent, latest owner-private Planets.nu waypoint/warp state is audited read-only through the same fuel policy.",
+            "Latest factual state is inspected for every stored observer/game pair, including historical or finished games for active linked accounts.",
+            "Unlimited-fuel game groups are counted as controls but omitted from the finite-fuel sample budget.",
             "Waypoint fuel uses factual owner-private load plus the persisted rule catalog; missing movement-mass fields never become zero.",
             "Positive insufficient fuel is applied only to the normal-speed reachable-waypoint subset already differential-verified in planets-lab.",
             "Zero-fuel, Gravitonic shortage and shortage on an already partial waypoint remain fail-closed.",
