@@ -162,6 +162,9 @@ export interface AccountGameSummary {
     is_private: boolean;
     is_custom: boolean;
     data_source: "planets.nu" | "canonical-cache" | string;
+    observer_slot_id: number | null;
+    observer_status: number | null;
+    membership_source: string | null;
 }
 
 export interface AccountGamesResponse {
@@ -217,41 +220,4 @@ export interface ShipObservationResponse {
     y: number | null;
     warp: number | null;
     payload: Record<string, unknown>;
-}
-
-export interface StarbaseObservationResponse {
-    starbase_id: number;
-    planet_id: number | null;
-    race_id: number | null;
-    info_turn: number | null;
-    payload: Record<string, unknown>;
-}
-
-export type StellarCartographyFeatureType =
-    | "nebula"
-    | "ion_storm"
-    | "star_cluster"
-    | "minefield";
-
-export interface StellarCartographyObservationResponse {
-    feature_type: StellarCartographyFeatureType;
-    feature_id: number;
-    name: string | null;
-    info_turn: number | null;
-    x: number | null;
-    y: number | null;
-    radius: number | null;
-    payload: Record<string, unknown>;
-}
-
-export interface LatestPrivateIntelResponse {
-    game_id: number;
-    turn: number;
-    observer: PrivateIntelObserver;
-    observation: PrivateIntelObservationMetadata;
-    counts: PrivateIntelCounts;
-    planets: PlanetObservationResponse[];
-    ships: ShipObservationResponse[];
-    starbases: StarbaseObservationResponse[];
-    stellar_cartography: StellarCartographyObservationResponse[];
 }
