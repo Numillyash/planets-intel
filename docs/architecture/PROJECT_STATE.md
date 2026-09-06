@@ -8,7 +8,7 @@ This is the durable architectural handoff for `Numillyash/planets-intel`. Git hi
 - Product direction: private Planets.nu operational client with factual intel, read-time inference, historical analysis, order drafting, simulation and eventually explicit reviewed upstream turn submission.
 - UI direction: Planets-style fullscreen starmap + operational dashboard; map-first workflow, not the old card-heavy UI.
 - Source of truth across chats: GitHub repository + these handoff docs. Do not reconstruct current implementation from chat memory.
-- Current implementation focus: complete explicit local Tow-target drafting on top of the runtime-validated strict Tow integration, then continue toward finite-fuel Intercept and unified turn movement prediction.
+- Current implementation focus: production-validate explicit local Tow-target drafting, then continue toward finite-fuel Intercept and unified turn movement prediction.
 
 ## Stable baseline
 
@@ -25,6 +25,7 @@ This is the durable architectural handoff for `Numillyash/planets-intel`. Git hi
 - Planet warp-well movement substep, including post-intercept warp wells.
 - Fuel-aware ordinary movement with factual movement-mass reconstruction and verified Nu proportional insufficient-fuel rule.
 - Strict owner-visible Tow resolution integrated ahead of Move Most / Intercept for the supported unlimited-fuel subset.
+- Explicit local `tow_target_ship_id` draft contract and colocated visible Tow-target picker in source/CI.
 - Planets.nu communications UI with verified true threaded replies using `/game/sendmessage` + factual `parentid`.
 - Battle Planner with separate combatant sources, editable simulation loadouts, deterministic replay, odds and sequential-wave queues.
 
@@ -99,10 +100,13 @@ Do not reopen the Battle Planner picker/editor UX without new evidence.
 - Tow participants with unresolved outcomes are withheld from later movement instead of receiving false ordinary endpoints.
 - Movement-prediction API/frontend types expose `phase: tow` and Tow metadata.
 - Map rendering labels known Tow routes as `PREDICTED TOW` / `PREDICTED TOWED`.
+- Local ship drafts now have a separate `tow_target_ship_id` field; `intercept_target_ship_id` is not overloaded.
+- Local Tow target validation requires a visible, non-self, exactly colocated target in the latest factual snapshot.
+- Explicit drafted Tow target has precedence over factual `mission1target` in prediction; stale factual target state from a non-Tow order is never silently inherited.
 
 ### Runtime Tow checkpoint
 
-Production read-only audit on the deployed strict integration found:
+Production read-only audit on the deployed strict factual integration found:
 
 ```text
 29 latest factual observer/game groups
@@ -117,6 +121,8 @@ Production read-only audit on the deployed strict integration found:
 
 This validates the present factual unlimited-fuel Tow population against the strict production lock subset. It does not validate finite-fuel Tow.
 
+The explicit local Tow-target draft feature is currently source/CI verified and awaits production/browser validation; see `CURRENT_HANDOFF.md` for the exact HEAD/deploy state.
+
 ### Deliberate fail-closed boundaries
 
 Remain unresolved unless stronger evidence is added:
@@ -129,26 +135,33 @@ Remain unresolved unless stronger evidence is added:
 - finite-fuel Intercept ordering/consumption;
 - HYP/Chunnel/mine/web/storm interactions in the production turn predictor unless explicitly modeled.
 
-## Current draft-model gap
+## Explicit Tow draft contract
 
-`ShipOrderDraft` currently stores only `intercept_target_ship_id`; there is no `tow_target_ship_id`.
-
-Therefore a local draft that newly changes a ship to `Try to Tow` is intentionally unresolved rather than silently reusing an old factual `mission1target`.
-
-The next Tow product change must add a deliberate Tow target field end-to-end:
+The local ship draft model now deliberately separates:
 
 ```text
-Alembic migration
+movement_mode = waypoint | intercept
+intercept_target_ship_id
+mission = Try to Tow
+tow_target_ship_id
+```
+
+Tow remains a mission layered ahead of ordinary movement; it is not represented as a fake third draft `movement_mode`.
+
+End-to-end support includes:
+
+```text
+Alembic 0018_tow_target_ship_id
 -> ShipOrderDraft model
 -> Pydantic request/response
 -> service validation/serialization
 -> API route
--> frontend type/API state
--> Tow target picker
--> movement runtime uses drafted target
+-> frontend type/state
+-> colocated visible Tow target picker
+-> movement runtime drafted-target precedence
 ```
 
-Do not overload `intercept_target_ship_id` for Tow.
+Changing away from Tow clears the stored Tow target. Tow + Intercept is rejected. Newly drafted Tow requires an explicit target rather than reusing stale factual `mission1target`.
 
 ## Communications write semantics
 
@@ -171,12 +184,11 @@ Reply-to-reply remains attached to the same factual root. Do not reopen Communic
 
 The exact first action is always taken from `CURRENT_HANDOFF.md`. Current order:
 
-1. Add explicit `tow_target_ship_id` drafting and UI target selection.
-2. Feed drafted Tow targets into strict Tow-before-Move-Most prediction with fail-closed validation.
-3. Research/implement finite-fuel Intercept on the unified post-Tow movement state only where evidence is sufficient.
-4. Consolidate Tow / Move Most / Intercept into unified `ShipPrediction` / turn-review output.
-5. Expand draftable missions/cargo/planet/starbase orders.
-6. Continue explicit reviewed Planets.nu write adapters with post-write reconciliation.
+1. Deploy/browser-validate explicit `tow_target_ship_id` drafting and movement prediction.
+2. Research/implement finite-fuel Intercept on the unified post-Tow movement state only where evidence is sufficient.
+3. Consolidate Tow / Move Most / Intercept into unified `ShipPrediction` / turn-review output.
+4. Expand draftable missions/cargo/planet/starbase orders.
+5. Continue explicit reviewed Planets.nu write adapters with post-write reconciliation.
 
 ## New-chat bootstrap
 
