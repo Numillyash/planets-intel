@@ -53,50 +53,21 @@ class MovementTowTests(unittest.TestCase):
         self.assertEqual(hull_engine_count(hull_id=17, hulls=hulls), 1)
         self.assertIsNone(hull_engine_count(hull_id=18, hulls=hulls))
 
-    def test_simple_unique_tow_locks(self) -> None:
-        states = {1: ship(1), 2: ship(2, fuel=0)}
+    def test_unlimited_short_waypoint_locks_without_target_fuel(self) -> None:
+        states = {1: ship(1, fuel=None), 2: ship(2, fuel=None)}
         resolution = resolve_strict_tow_locks(
             ships=states,
             attempts=[TowAttempt(1, 2)],
+            unlimited_fuel=True,
         )
         self.assertEqual(resolution.attempts[0].status, TowLockStatus.LOCKED)
         self.assertTrue(resolution.attempts[0].certain)
 
-    def test_positive_four_fingers_branch_fails_closed(self) -> None:
+    def test_unlimited_single_engine_target_locks_without_target_fuel(self) -> None:
         states = {
-            1: ship(1, warp=7, waypoint_x=110),
-            2: ship(2, warp=7, waypoint_x=150, fuel=26),
+            1: ship(1, fuel=None),
+            2: ship(2, fuel=None, engines=1, waypoint_x=200),
         }
-        resolution = resolve_strict_tow_locks(
-            ships=states,
-            attempts=[TowAttempt(1, 2)],
-        )
-        self.assertEqual(resolution.attempts[0].status, TowLockStatus.UNKNOWN)
-        self.assertFalse(resolution.attempts[0].certain)
-        self.assertIn("historically unresolved", resolution.attempts[0].reason)
-
-    def test_no_fuel_and_single_engine_towers_fail(self) -> None:
-        states = {
-            1: ship(1, fuel=0),
-            2: ship(2, fuel=0),
-            3: ship(3, engines=1),
-        }
-        no_fuel = resolve_strict_tow_locks(
-            ships=states,
-            attempts=[TowAttempt(1, 2)],
-        )
-        one_engine = resolve_strict_tow_locks(
-            ships=states,
-            attempts=[TowAttempt(3, 2)],
-        )
-        self.assertEqual(no_fuel.attempts[0].status, TowLockStatus.NO_FUEL)
-        self.assertEqual(
-            one_engine.attempts[0].status,
-            TowLockStatus.INSUFFICIENT_ENGINES,
-        )
-
-    def test_unlimited_fuel_bypasses_tower_fuel_prerequisite(self) -> None:
-        states = {1: ship(1, fuel=0), 2: ship(2, fuel=0)}
         resolution = resolve_strict_tow_locks(
             ships=states,
             attempts=[TowAttempt(1, 2)],
@@ -104,34 +75,107 @@ class MovementTowTests(unittest.TestCase):
         )
         self.assertEqual(resolution.attempts[0].status, TowLockStatus.LOCKED)
 
-    def test_non_colocated_target_fails(self) -> None:
-        states = {1: ship(1), 2: ship(2, x=101)}
+    def test_unlimited_slower_target_locks_without_target_fuel(self) -> None:
+        states = {
+            1: ship(1, warp=9, fuel=None),
+            2: ship(2, warp=8, waypoint_x=200, fuel=None),
+        }
         resolution = resolve_strict_tow_locks(
             ships=states,
             attempts=[TowAttempt(1, 2)],
+            unlimited_fuel=True,
         )
-        self.assertEqual(
-            resolution.attempts[0].status,
-            TowLockStatus.TARGET_NOT_COLOCATED,
-        )
+        self.assertEqual(resolution.attempts[0].status, TowLockStatus.LOCKED)
 
-    def test_unknown_break_input_stays_unknown(self) -> None:
+    def test_all_nonfuel_four_fingers_true_with_zero_snapshot_fuel_is_unknown(self) -> None:
         states = {
-            1: ship(1),
-            2: ship(2, fuel=26, waypoint_x=150, engines=None),
+            1: ship(1, warp=7, fuel=100),
+            2: ship(2, warp=7, waypoint_x=160, fuel=0),
         }
+        resolution = resolve_strict_tow_locks(
+            ships=states,
+            attempts=[TowAttempt(1, 2)],
+            unlimited_fuel=True,
+        )
+        self.assertEqual(resolution.attempts[0].status, TowLockStatus.UNKNOWN)
+        self.assertFalse(resolution.attempts[0].certain)
+        self.assertIn("target-fuel", resolution.attempts[0].reason)
+
+    def test_all_nonfuel_four_fingers_true_with_positive_snapshot_fuel_is_unknown(self) -> None:
+        states = {
+            1: ship(1, warp=7, fuel=100),
+            2: ship(2, warp=7, waypoint_x=160, fuel=26),
+        }
+        resolution = resolve_strict_tow_locks(
+            ships=states,
+            attempts=[TowAttempt(1, 2)],
+            unlimited_fuel=True,
+        )
+        self.assertEqual(resolution.attempts[0].status, TowLockStatus.UNKNOWN)
+        self.assertFalse(resolution.attempts[0].certain)
+
+    def test_finite_fuel_zero_snapshot_fuel_stays_unknown(self) -> None:
+        states = {1: ship(1, fuel=0), 2: ship(2, fuel=None)}
         resolution = resolve_strict_tow_locks(
             ships=states,
             attempts=[TowAttempt(1, 2)],
         )
         self.assertEqual(resolution.attempts[0].status, TowLockStatus.UNKNOWN)
         self.assertFalse(resolution.attempts[0].certain)
+        self.assertIn("Tow-phase fuel", resolution.attempts[0].reason)
+
+    def test_finite_fuel_positive_snapshot_fuel_stays_unknown(self) -> None:
+        states = {1: ship(1, fuel=100), 2: ship(2, fuel=0)}
+        resolution = resolve_strict_tow_locks(
+            ships=states,
+            attempts=[TowAttempt(1, 2)],
+        )
+        self.assertEqual(resolution.attempts[0].status, TowLockStatus.UNKNOWN)
+        self.assertIn("combined towing mass", resolution.attempts[0].reason)
+
+    def test_single_engine_tower_still_fails_certainly(self) -> None:
+        states = {1: ship(1, engines=1, fuel=0), 2: ship(2, fuel=None)}
+        resolution = resolve_strict_tow_locks(
+            ships=states,
+            attempts=[TowAttempt(1, 2)],
+        )
+        self.assertEqual(
+            resolution.attempts[0].status,
+            TowLockStatus.INSUFFICIENT_ENGINES,
+        )
+        self.assertTrue(resolution.attempts[0].certain)
+
+    def test_non_colocated_target_fails(self) -> None:
+        states = {1: ship(1), 2: ship(2, x=101)}
+        resolution = resolve_strict_tow_locks(
+            ships=states,
+            attempts=[TowAttempt(1, 2)],
+            unlimited_fuel=True,
+        )
+        self.assertEqual(
+            resolution.attempts[0].status,
+            TowLockStatus.TARGET_NOT_COLOCATED,
+        )
+
+    def test_unknown_nonfuel_break_input_stays_unknown(self) -> None:
+        states = {
+            1: ship(1),
+            2: ship(2, fuel=None, waypoint_x=200, engines=None),
+        }
+        resolution = resolve_strict_tow_locks(
+            ships=states,
+            attempts=[TowAttempt(1, 2)],
+            unlimited_fuel=True,
+        )
+        self.assertEqual(resolution.attempts[0].status, TowLockStatus.UNKNOWN)
+        self.assertFalse(resolution.attempts[0].certain)
 
     def test_same_target_contest_is_ambiguous_not_ship_id_resolved(self) -> None:
-        states = {1: ship(1), 2: ship(2), 3: ship(3, fuel=0)}
+        states = {1: ship(1), 2: ship(2), 3: ship(3)}
         resolution = resolve_strict_tow_locks(
             ships=states,
             attempts=[TowAttempt(1, 3), TowAttempt(2, 3)],
+            unlimited_fuel=True,
         )
         self.assertEqual(
             [item.status for item in resolution.attempts],
@@ -139,11 +183,12 @@ class MovementTowTests(unittest.TestCase):
         )
         self.assertEqual(resolution.successful, ())
 
-    def test_tow_chain_fails_closed_for_whole_topology(self) -> None:
-        states = {1: ship(1), 2: ship(2), 3: ship(3, fuel=0)}
+    def test_tow_chain_fails_closed_for_whole_connected_topology(self) -> None:
+        states = {1: ship(1), 2: ship(2), 3: ship(3)}
         resolution = resolve_strict_tow_locks(
             ships=states,
             attempts=[TowAttempt(1, 2), TowAttempt(2, 3)],
+            unlimited_fuel=True,
         )
         self.assertEqual(
             [item.status for item in resolution.attempts],
@@ -155,9 +200,9 @@ class MovementTowTests(unittest.TestCase):
         states = {
             1: ship(1),
             2: ship(2),
-            3: ship(3, fuel=0),
+            3: ship(3),
             10: ship(10),
-            11: ship(11, fuel=0),
+            11: ship(11, fuel=None),
         }
         resolution = resolve_strict_tow_locks(
             ships=states,
@@ -166,6 +211,7 @@ class MovementTowTests(unittest.TestCase):
                 TowAttempt(2, 3),
                 TowAttempt(10, 11),
             ],
+            unlimited_fuel=True,
         )
         self.assertEqual(
             [item.status for item in resolution.attempts],
