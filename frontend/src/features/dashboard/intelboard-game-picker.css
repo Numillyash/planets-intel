@@ -175,6 +175,62 @@
     margin: 0 auto 14px;
 }
 
+.intelboard-game-tabs {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 1720px;
+    margin: 0 auto 14px;
+    padding: 5px;
+    border: 1px solid #223247;
+    border-radius: 10px;
+    background: rgba(10, 18, 28, 0.74);
+}
+
+.intelboard-game-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 10px;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    background: transparent;
+    color: #8fa4ba;
+    font-size: 0.7rem;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.intelboard-game-tab:hover {
+    border-color: #30465e;
+    color: #cfdeed;
+}
+
+.intelboard-game-tab.is-selected {
+    border-color: #466d91;
+    background: #132234;
+    color: #e1edf8;
+}
+
+.intelboard-game-tab span {
+    min-width: 20px;
+    padding: 2px 5px;
+    border-radius: 999px;
+    background: #223247;
+    color: #9fb6ce;
+    font-size: 0.61rem;
+    text-align: center;
+}
+
+.intelboard-game-tabs p {
+    min-width: 0;
+    margin: 0 5px 0 auto;
+    color: #70859c;
+    font-size: 0.64rem;
+    line-height: 1.25;
+    text-align: right;
+}
+
 .intelboard-game-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -569,6 +625,17 @@
 
     .intelboard-account-current {
         display: none;
+    }
+
+    .intelboard-game-tabs {
+        align-items: stretch;
+        flex-wrap: wrap;
+    }
+
+    .intelboard-game-tabs p {
+        width: 100%;
+        margin: 2px 5px 1px;
+        text-align: left;
     }
 
     .intelboard-game-card-main,
