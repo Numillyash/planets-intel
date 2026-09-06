@@ -81,6 +81,12 @@
     box-shadow: 0 0 0 1px rgba(98, 184, 255, 0.18);
 }
 
+.order-draft-mission-editor {
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+}
+
 .order-draft-waypoint-value {
     color: #8dcaff;
     font-weight: 700;
