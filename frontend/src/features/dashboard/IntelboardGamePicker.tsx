@@ -34,6 +34,8 @@ type PlayerTurnState =
     | "computer"
     | "empty";
 
+type GameListMode = "active" | "archive";
+
 interface GameObserverEntry {
     account: PlanetsAccountResponse;
     game: AccountGameSummary;
@@ -73,6 +75,10 @@ function shortUsername(username: string): string {
 
 function isRunning(game: AccountGameSummary): boolean {
     return game.status_id === 2 || game.status_name.toLowerCase() === "running";
+}
+
+function isFinished(game: AccountGameSummary): boolean {
+    return game.status_name.trim().toLowerCase() === "finished";
 }
 
 function gameStatusRank(game: AccountGameSummary): number {
@@ -137,6 +143,34 @@ function observerPlayer(
     return details.players.find(
         (player) => normalizedUsername(player.username) === username,
     ) ?? null;
+}
+
+function observerGameStatus(
+    observer: GameObserverEntry,
+    details: GameDetailsResponse | undefined,
+): number | null {
+    // Current public loadinfo is strongest when identity still resolves. Once a
+    // dead slot loses useful username/account identity, fall back to the
+    // canonical slot status tied to this linked account by historical private
+    // observation. Unknown stays unknown; it never becomes dead by absence.
+    const player = observerPlayer(details, observer.account);
+    return player?.status ?? observer.game.observer_status;
+}
+
+function allLocalObserversInactive(
+    entry: UnifiedGameEntry,
+    details: GameDetailsResponse | undefined,
+): boolean {
+    if (!isRunning(entry.game) || entry.observers.length === 0) return false;
+    const statuses = entry.observers.map((observer) => observerGameStatus(observer, details));
+    return statuses.every((status) => status !== null && status !== 1);
+}
+
+function isArchivedGame(
+    entry: UnifiedGameEntry,
+    details: GameDetailsResponse | undefined,
+): boolean {
+    return isFinished(entry.game) || allLocalObserversInactive(entry, details);
 }
 
 function loadInfoTurnState(player: PlayerInfo): PlayerTurnState {
@@ -452,15 +486,19 @@ function GameCard({
                     const loadInfoTurnStatus = loadInfoMatchesTurn
                         ? details?.game.turn_status ?? null
                         : null;
-                    const ownState = !running || player === null
+                    const ownState = !running
                         ? null
-                        : gameTurnState(
-                            [observerGame.turn_status],
-                            loadInfoTurnStatus,
-                            player.slot_id,
-                            player,
-                            loadInfoMatchesTurn,
-                        );
+                        : player !== null
+                            ? gameTurnState(
+                                [observerGame.turn_status],
+                                loadInfoTurnStatus,
+                                player.slot_id,
+                                player,
+                                loadInfoMatchesTurn,
+                            )
+                            : observerGame.observer_status !== null
+                                ? (observerGame.observer_status === 1 ? "unknown" : "inactive")
+                                : null;
                     return (
                         <button
                             className={`intelboard-game-observer-chip${account.id === preferredObserver.account.id ? " is-preferred" : ""}`}
@@ -499,6 +537,7 @@ export function IntelboardGamePicker({ user, onLogout }: IntelboardGamePickerPro
     const [errorsByAccountId, setErrorsByAccountId] = useState<Record<number, string | null>>({});
     const [detailsByGameId, setDetailsByGameId] = useState<Map<number, GameDetailsResponse>>(new Map());
     const [managedUsernames, setManagedUsernames] = useState<Map<string, string>>(new Map());
+    const [gameListMode, setGameListMode] = useState<GameListMode>("active");
     const [loadingAccounts, setLoadingAccounts] = useState(true);
     const [loadingGames, setLoadingGames] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -648,6 +687,21 @@ export function IntelboardGamePicker({ user, onLogout }: IntelboardGamePickerPro
         [accounts, gamesByAccountId],
     );
 
+    const { activeGames, archivedGames } = useMemo(() => {
+        const active: UnifiedGameEntry[] = [];
+        const archive: UnifiedGameEntry[] = [];
+        for (const entry of games) {
+            if (isArchivedGame(entry, detailsByGameId.get(entry.game.id))) {
+                archive.push(entry);
+            } else {
+                active.push(entry);
+            }
+        }
+        return { activeGames: active, archivedGames: archive };
+    }, [games, detailsByGameId]);
+
+    const visibleGames = gameListMode === "archive" ? archivedGames : activeGames;
+
     const gameListWarnings = useMemo(() => accounts.flatMap((account) => {
         const accountError = errorsByAccountId[account.id] ?? null;
         return accountError === null
@@ -726,17 +780,53 @@ export function IntelboardGamePicker({ user, onLogout }: IntelboardGamePickerPro
                     {games.length === 0 ? (
                         <div className="intelboard-game-menu-state">No games were found for the linked observers.</div>
                     ) : (
-                        <section className="intelboard-game-grid">
-                            {games.map((entry) => (
-                                <GameCard
-                                    details={detailsByGameId.get(entry.game.id)}
-                                    entry={entry}
-                                    key={entry.game.id}
-                                    managedUsernames={managedUsernames}
-                                    selectedAccountId={selectedAccountId}
-                                />
-                            ))}
-                        </section>
+                        <>
+                            <nav className="intelboard-game-tabs" aria-label="Game categories">
+                                <button
+                                    aria-selected={gameListMode === "active"}
+                                    className={`intelboard-game-tab${gameListMode === "active" ? " is-selected" : ""}`}
+                                    onClick={() => setGameListMode("active")}
+                                    role="tab"
+                                    type="button"
+                                >
+                                    Active <span>{activeGames.length}</span>
+                                </button>
+                                <button
+                                    aria-selected={gameListMode === "archive"}
+                                    className={`intelboard-game-tab${gameListMode === "archive" ? " is-selected" : ""}`}
+                                    onClick={() => setGameListMode("archive")}
+                                    role="tab"
+                                    type="button"
+                                >
+                                    Archive <span>{archivedGames.length}</span>
+                                </button>
+                                <p>
+                                    {gameListMode === "archive"
+                                        ? "Finished games and running games where every linked local observer is inactive / dead."
+                                        : "Running and joining games with at least one local observer not factually known inactive."}
+                                </p>
+                            </nav>
+
+                            {visibleGames.length === 0 ? (
+                                <div className="intelboard-game-menu-state">
+                                    {gameListMode === "archive"
+                                        ? "No finished or locally eliminated games are known yet."
+                                        : "No active games were found for the linked observers."}
+                                </div>
+                            ) : (
+                                <section className="intelboard-game-grid">
+                                    {visibleGames.map((entry) => (
+                                        <GameCard
+                                            details={detailsByGameId.get(entry.game.id)}
+                                            entry={entry}
+                                            key={entry.game.id}
+                                            managedUsernames={managedUsernames}
+                                            selectedAccountId={selectedAccountId}
+                                        />
+                                    ))}
+                                </section>
+                            )}
+                        </>
                     )}
                 </>
             )}
