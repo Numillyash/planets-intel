@@ -152,6 +152,34 @@ class MovementTowTests(unittest.TestCase):
         )
         self.assertTrue(all(not item.certain for item in resolution.attempts))
 
+    def test_tow_chain_does_not_poison_independent_component(self) -> None:
+        states = {
+            1: ship(1),
+            2: ship(2),
+            3: ship(3, fuel=0),
+            10: ship(10),
+            11: ship(11, fuel=0),
+        }
+        resolution = resolve_strict_tow_locks(
+            ships=states,
+            attempts=[
+                TowAttempt(1, 2),
+                TowAttempt(2, 3),
+                TowAttempt(10, 11),
+            ],
+        )
+        self.assertEqual(
+            [item.status for item in resolution.attempts],
+            [
+                TowLockStatus.UNSUPPORTED_CHAIN,
+                TowLockStatus.UNSUPPORTED_CHAIN,
+                TowLockStatus.LOCKED,
+            ],
+        )
+        self.assertFalse(resolution.attempts[0].certain)
+        self.assertFalse(resolution.attempts[1].certain)
+        self.assertTrue(resolution.attempts[2].certain)
+
 
 if __name__ == "__main__":
     unittest.main()
