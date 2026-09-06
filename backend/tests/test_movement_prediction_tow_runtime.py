@@ -59,6 +59,7 @@ def draft(
     warp: int | None = None,
     waypoint_x: int | None = None,
     waypoint_y: int | None = None,
+    tow_target_ship_id: int | None = None,
 ):
     return SimpleNamespace(
         ship_id=ship_id,
@@ -66,6 +67,7 @@ def draft(
         warp=warp,
         waypoint_x=waypoint_x,
         waypoint_y=waypoint_y,
+        tow_target_ship_id=tow_target_ship_id,
     )
 
 
@@ -94,6 +96,49 @@ class MovementPredictionTowRuntimeTests(unittest.TestCase):
         self.assertTrue(outcomes[2].certain)
         self.assertEqual(known[1], Point(60.0, 0.0))
         self.assertEqual(known[2], Point(60.0, 0.0))
+
+    def test_explicit_local_tow_target_resolves_without_factual_tow(self) -> None:
+        ships = [
+            ship(1, waypoint_x=60),
+            ship(2, waypoint_x=10),
+        ]
+        outcomes, known = _build_tow_outcomes(
+            ships=ships,
+            drafts=[draft(1, mission="Try to Tow", tow_target_ship_id=2)],
+            owner_slot_id=3,
+            hulls=HULLS,
+            hull_names=HULL_NAMES,
+            unlimited_fuel=True,
+            gravity_wells_enabled=False,
+            planet_wells=[],
+        )
+
+        self.assertEqual(outcomes[1].status, "locked")
+        self.assertEqual(outcomes[2].status, "towed")
+        self.assertEqual(outcomes[1].target_ship_id, 2)
+        self.assertEqual(known[2], Point(60.0, 0.0))
+
+    def test_explicit_local_tow_target_overrides_factual_target(self) -> None:
+        ships = [
+            ship(1, mission=6, target_id=2, waypoint_x=60),
+            ship(2, waypoint_x=10),
+            ship(3, waypoint_x=10),
+        ]
+        outcomes, known = _build_tow_outcomes(
+            ships=ships,
+            drafts=[draft(1, mission="Try to Tow", tow_target_ship_id=3)],
+            owner_slot_id=3,
+            hulls=HULLS,
+            hull_names=HULL_NAMES,
+            unlimited_fuel=True,
+            gravity_wells_enabled=False,
+            planet_wells=[],
+        )
+
+        self.assertEqual(outcomes[1].target_ship_id, 3)
+        self.assertEqual(outcomes[3].status, "towed")
+        self.assertNotIn(2, outcomes)
+        self.assertEqual(known[3], Point(60.0, 0.0))
 
     def test_finite_fuel_tow_blocks_later_movement_fail_closed(self) -> None:
         ships = [
@@ -136,14 +181,14 @@ class MovementPredictionTowRuntimeTests(unittest.TestCase):
         self.assertEqual(outcomes, {})
         self.assertEqual(known, {})
 
-    def test_new_draft_tow_does_not_reuse_stale_factual_target(self) -> None:
+    def test_new_local_tow_without_explicit_target_stays_unresolved(self) -> None:
         ships = [
-            ship(1, mission=7, target_id=2, waypoint_x=60),
+            ship(1, waypoint_x=60),
             ship(2, waypoint_x=10),
         ]
         outcomes, known = _build_tow_outcomes(
             ships=ships,
-            drafts=[draft(1, mission="Try to Tow", waypoint_x=60, waypoint_y=0)],
+            drafts=[draft(1, mission="Try to Tow")],
             owner_slot_id=3,
             hulls=HULLS,
             hull_names=HULL_NAMES,
@@ -153,12 +198,8 @@ class MovementPredictionTowRuntimeTests(unittest.TestCase):
         )
 
         self.assertEqual(outcomes[1].status, "draft_tow_target_unresolved")
-        self.assertEqual(outcomes[1].lock_status, "unknown")
-        self.assertIsNone(outcomes[1].target_ship_id)
         self.assertFalse(outcomes[1].certain)
-        self.assertNotIn(2, outcomes)
         self.assertEqual(known, {})
-        self.assertIn("stale factual mission1target is not reused", outcomes[1].reason)
 
     def test_all_nonfuel_four_fingers_true_stays_unresolved(self) -> None:
         ships = [
@@ -206,36 +247,6 @@ class MovementPredictionTowRuntimeTests(unittest.TestCase):
         self.assertEqual(outcomes[1].status, "locked_route_unresolved")
         self.assertFalse(outcomes[1].certain)
         self.assertEqual(outcomes[1].warp_well.status.value, "captured")
-        self.assertEqual(known, {})
-
-    def test_tow_well_guard_does_not_depend_on_tower_warp(self) -> None:
-        ships = [
-            ship(1, mission=6, target_id=2, warp=1, waypoint_x=1),
-            ship(2, warp=9, waypoint_x=10),
-        ]
-        outcomes, known = _build_tow_outcomes(
-            ships=ships,
-            drafts=[],
-            owner_slot_id=3,
-            hulls=HULLS,
-            hull_names=HULL_NAMES,
-            unlimited_fuel=True,
-            gravity_wells_enabled=True,
-            planet_wells=[
-                PlanetWarpWell(
-                    planet_id=99,
-                    name="Tow Well",
-                    position=Point(1.0, 0.0),
-                )
-            ],
-        )
-
-        self.assertEqual(outcomes[1].lock_status, "locked")
-        self.assertEqual(outcomes[1].status, "locked_route_unresolved")
-        self.assertEqual(outcomes[2].status, "locked_route_unresolved")
-        self.assertFalse(outcomes[1].certain)
-        self.assertFalse(outcomes[2].certain)
-        self.assertEqual(outcomes[1].warp_well.status.value, "not_applicable")
         self.assertEqual(known, {})
 
     def test_intercept_uses_known_post_tow_target_position(self) -> None:

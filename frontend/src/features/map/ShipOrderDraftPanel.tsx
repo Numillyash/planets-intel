@@ -14,7 +14,7 @@ import type {
 import "./order-draft.css";
 
 interface WaypointPickedDetail { shipId: number; x: number; y: number; }
-interface InterceptCandidate { shipId: number; name: string | null; x: number; y: number; }
+interface ShipTargetCandidate { shipId: number; name: string | null; x: number; y: number; }
 
 const COMMON_MISSIONS = [
     "Exploration", "Mine Sweep", "Lay Mines", "Kill!", "Sensor Sweep",
@@ -25,11 +25,15 @@ const COMMON_MISSIONS = [
 function waypointLabel(x: number | null, y: number | null): string {
     return x !== null && y !== null ? `${x}, ${y}` : "—";
 }
-function candidateLabel(candidate: InterceptCandidate): string {
+function candidateLabel(candidate: ShipTargetCandidate): string {
     return `${candidate.name ?? `Ship #${candidate.shipId}`} (#${candidate.shipId})`;
 }
 function isInterceptMission(value: string): boolean {
     return value.trim().toLowerCase() === "intercept";
+}
+function isTowMission(value: string): boolean {
+    const normalized = value.trim().toLowerCase();
+    return normalized === "tow" || normalized === "try to tow" || normalized === "mission #6";
 }
 function payloadString(payload: Record<string, unknown>, ...keys: string[]): string | null {
     const wanted = new Set(keys.map((key) => key.toLowerCase()));
@@ -69,16 +73,19 @@ export function ShipOrderDraftPanel({
     const [factualFriendlyCode, setFactualFriendlyCode] = useState<string | null>(null);
     const [factualMission, setFactualMission] = useState<string | null>(null);
     const [factualPrimaryEnemyId, setFactualPrimaryEnemyId] = useState<number | null>(null);
+    const [factualTowTargetShipId, setFactualTowTargetShipId] = useState<number | null>(null);
     const [warp, setWarp] = useState<number>(upstreamWarp ?? 0);
     const [waypointX, setWaypointX] = useState<number | null>(upstreamWaypointX);
     const [waypointY, setWaypointY] = useState<number | null>(upstreamWaypointY);
     const [movementMode, setMovementMode] = useState<ShipDraftMovementMode>("waypoint");
     const [interceptTargetShipId, setInterceptTargetShipId] = useState<number | null>(null);
+    const [towTargetShipId, setTowTargetShipId] = useState<number | null>(null);
     const [friendlyCode, setFriendlyCode] = useState("");
     const [mission, setMission] = useState("Exploration");
     const [primaryEnemyId, setPrimaryEnemyId] = useState(0);
-    const [interceptCandidates, setInterceptCandidates] = useState<InterceptCandidate[]>([]);
-    const [ambiguousTargets, setAmbiguousTargets] = useState<InterceptCandidate[]>([]);
+    const [interceptCandidates, setInterceptCandidates] = useState<ShipTargetCandidate[]>([]);
+    const [towCandidates, setTowCandidates] = useState<ShipTargetCandidate[]>([]);
+    const [ambiguousTargets, setAmbiguousTargets] = useState<ShipTargetCandidate[]>([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [pickingWaypoint, setPickingWaypoint] = useState(false);
@@ -90,6 +97,7 @@ export function ShipOrderDraftPanel({
         setLoading(true);
         setError(null);
         setInterceptCandidates([]);
+        setTowCandidates([]);
         setAmbiguousTargets([]);
 
         void Promise.all([
@@ -110,17 +118,36 @@ export function ShipOrderDraftPanel({
                 })();
             const factualEnemy = value?.upstream_primary_enemy_id
                 ?? payloadNumber(payload, "enemy", "primaryenemy", "primary_enemy_id");
+            const factualTowTarget = value?.upstream_tow_target_ship_id
+                ?? (payloadNumber(payload, "mission") === 6
+                    ? payloadNumber(payload, "mission1target", "mission1_target_id", "mission1targetid")
+                    : null);
+            const colocatedTowCandidates = factualShip?.x !== null && factualShip?.y !== null
+                ? (intel?.ships ?? [])
+                    .filter((ship) => (
+                        ship.ship_id !== shipId
+                        && ship.x !== null
+                        && ship.y !== null
+                        && ship.x === factualShip?.x
+                        && ship.y === factualShip?.y
+                    ))
+                    .map((ship) => ({ shipId: ship.ship_id, name: ship.name, x: ship.x as number, y: ship.y as number }))
+                    .sort((a, b) => a.shipId - b.shipId)
+                : [];
 
             setDraft(value);
             setPlayers(game.players);
             setFactualFriendlyCode(factualCode);
             setFactualMission(factualMissionName);
             setFactualPrimaryEnemyId(factualEnemy);
+            setFactualTowTargetShipId(factualTowTarget);
             setWarp(value?.warp ?? upstreamWarp ?? 0);
             setWaypointX(value?.waypoint_x ?? upstreamWaypointX);
             setWaypointY(value?.waypoint_y ?? upstreamWaypointY);
             setMovementMode(value?.movement_mode ?? "waypoint");
             setInterceptTargetShipId(value?.intercept_target_ship_id ?? null);
+            setTowTargetShipId(value?.tow_target_ship_id ?? factualTowTarget);
+            setTowCandidates(colocatedTowCandidates);
             setFriendlyCode(value?.friendly_code ?? factualCode ?? "");
             setMission(
                 value?.mission
@@ -193,16 +220,21 @@ export function ShipOrderDraftPanel({
         const savedY = draft?.waypoint_y ?? upstreamWaypointY;
         const savedMode = draft?.movement_mode ?? "waypoint";
         const savedTarget = draft?.intercept_target_ship_id ?? null;
+        const savedTowTarget = draft?.tow_target_ship_id ?? factualTowTargetShipId;
         const savedCode = draft?.friendly_code ?? factualFriendlyCode ?? "";
         const savedMission = draft?.mission ?? (savedMode === "intercept" ? "Intercept" : factualMission ?? "Exploration");
         const savedEnemy = draft?.primary_enemy_id ?? factualPrimaryEnemyId ?? 0;
         return warp !== savedWarp || waypointX !== savedX || waypointY !== savedY
             || movementMode !== savedMode || interceptTargetShipId !== savedTarget
+            || towTargetShipId !== savedTowTarget
             || friendlyCode !== savedCode || mission !== savedMission || primaryEnemyId !== savedEnemy;
-    }, [draft, factualFriendlyCode, factualMission, factualPrimaryEnemyId, friendlyCode, interceptTargetShipId, mission, movementMode, primaryEnemyId, upstreamWarp, upstreamWaypointX, upstreamWaypointY, warp, waypointX, waypointY]);
+    }, [draft, factualFriendlyCode, factualMission, factualPrimaryEnemyId, factualTowTargetShipId, friendlyCode, interceptTargetShipId, mission, movementMode, primaryEnemyId, towTargetShipId, upstreamWarp, upstreamWaypointX, upstreamWaypointY, warp, waypointX, waypointY]);
 
+    const towTargetEligible = towTargetShipId !== null
+        && towCandidates.some((candidate) => candidate.shipId === towTargetShipId);
     const canSave = changed && mission.trim().length > 0 && friendlyCode.length <= 3
-        && (movementMode !== "intercept" || interceptTargetShipId !== null);
+        && (movementMode !== "intercept" || interceptTargetShipId !== null)
+        && (!isTowMission(mission) || (movementMode === "waypoint" && towTargetEligible));
 
     function announceDraftChange(action: "saved" | "discarded") {
         window.dispatchEvent(new CustomEvent("intel-order-drafts-changed", {
@@ -218,10 +250,19 @@ export function ShipOrderDraftPanel({
         setMission(next);
         cancelMapPicker();
         setAmbiguousTargets([]);
-        if (isInterceptMission(next)) setMovementMode("intercept");
-        else {
+        if (isInterceptMission(next)) {
+            setMovementMode("intercept");
+            setTowTargetShipId(null);
+        } else {
             setMovementMode("waypoint");
             setInterceptTargetShipId(null);
+            if (isTowMission(next)) {
+                if (towTargetShipId === null && factualTowTargetShipId !== null) {
+                    setTowTargetShipId(factualTowTargetShipId);
+                }
+            } else {
+                setTowTargetShipId(null);
+            }
         }
     }
     function toggleWaypointPicker() {
@@ -266,11 +307,15 @@ export function ShipOrderDraftPanel({
                 primary_enemy_id: primaryEnemyId,
                 ...(movementMode === "intercept"
                     ? { intercept_target_ship_id: interceptTargetShipId ?? undefined }
-                    : waypointX !== null && waypointY !== null ? { waypoint_x: waypointX, waypoint_y: waypointY } : {}),
+                    : {
+                        ...(waypointX !== null && waypointY !== null ? { waypoint_x: waypointX, waypoint_y: waypointY } : {}),
+                        ...(isTowMission(mission) ? { tow_target_ship_id: towTargetShipId ?? undefined } : {}),
+                    }),
             });
             setDraft(next);
             setMovementMode(next.movement_mode);
             setInterceptTargetShipId(next.intercept_target_ship_id);
+            setTowTargetShipId(next.tow_target_ship_id ?? next.upstream_tow_target_ship_id);
             announceDraftChange("saved");
         } catch (reason) {
             setError(reason instanceof Error ? reason.message : "Failed to save local order draft");
@@ -287,6 +332,7 @@ export function ShipOrderDraftPanel({
             setWaypointY(upstreamWaypointY);
             setMovementMode("waypoint");
             setInterceptTargetShipId(null);
+            setTowTargetShipId(factualTowTargetShipId);
             setFriendlyCode(factualFriendlyCode ?? "");
             setMission(factualMission ?? "Exploration");
             setPrimaryEnemyId(factualPrimaryEnemyId ?? 0);
@@ -298,6 +344,10 @@ export function ShipOrderDraftPanel({
     }
 
     if (loading) return <p className="intel-no-facts">Loading local order draft…</p>;
+
+    const selectedTowCandidate = towTargetShipId !== null
+        ? towCandidates.find((candidate) => candidate.shipId === towTargetShipId) ?? null
+        : null;
 
     return (
         <div className="order-draft-panel">
@@ -341,7 +391,27 @@ export function ShipOrderDraftPanel({
                 ) : (
                     <div className="order-draft-row"><strong>Intercept target</strong><span>Visible ship required</span><span className="order-draft-waypoint-value">{interceptTargetShipId !== null ? `Ship #${interceptTargetShipId}` : "—"}</span></div>
                 )}
+                {isTowMission(mission) && (
+                    <div className="order-draft-row">
+                        <strong>Tow target</strong>
+                        <span>{factualTowTargetShipId !== null ? `Ship #${factualTowTargetShipId}` : "—"}</span>
+                        <select aria-label="Draft Tow target" disabled={saving || towCandidates.length === 0} onChange={(event) => {
+                            const value = Number(event.target.value);
+                            setTowTargetShipId(Number.isFinite(value) && value > 0 ? value : null);
+                        }} value={selectedTowCandidate?.shipId ?? ""}>
+                            <option value="">Choose colocated ship…</option>
+                            {towCandidates.map((candidate) => <option key={candidate.shipId} value={candidate.shipId}>{candidateLabel(candidate)}</option>)}
+                        </select>
+                    </div>
+                )}
             </div>
+
+            {isTowMission(mission) && towCandidates.length === 0 && (
+                <div className="order-draft-warning">No visible colocated ship is available as a Tow target in the latest factual snapshot.</div>
+            )}
+            {isTowMission(mission) && towTargetShipId !== null && !towTargetEligible && (
+                <div className="order-draft-warning">The saved Tow target is no longer a visible colocated ship. Choose a current target before saving.</div>
+            )}
 
             {ambiguousTargets.length > 1 && (
                 <div className="order-draft-target-choice"><strong>Several ships are stacked near that click</strong>
@@ -363,6 +433,7 @@ export function ShipOrderDraftPanel({
             </div>
             {pickingWaypoint && <p className="order-draft-map-hint">Click a destination on the Starmap. Dragging still pans the map.</p>}
             {pickingInterceptTarget && <p className="order-draft-map-hint">Click the visible target ship on the Starmap.</p>}
+            {isTowMission(mission) && <p className="order-draft-map-hint">Tow target selection is limited to ships visibly colocated with this tower in the latest factual snapshot.</p>}
             <p className="order-draft-provenance">Common missions are suggested. Special race/hull missions may be typed by their Nu display name; numeric write-back mapping remains intentionally separate.</p>
             {draft && <p className="order-draft-provenance">Draft based on factual batch #{draft.base_batch_id}.</p>}
         </div>

@@ -84,6 +84,10 @@ class ShipOrderDraft(Base):
         BigInteger,
         nullable=True,
     )
+    tow_target_ship_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        nullable=True,
+    )
 
     # Semantic local orders. Mission is intentionally stored by stable display
     # name rather than guessed Nu numeric id until write-back mapping is

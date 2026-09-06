@@ -161,22 +161,24 @@ def _effective_is_tow(
     return payload_is_tow_mission(_payload(ship))
 
 
-def _draft_introduces_unbound_tow(
+def _effective_tow_target_id(
     ship: ShipObservation,
     draft: ShipOrderDraft | None,
-) -> bool:
-    """Return true when a draft adds Tow but has no draftable target contract.
-
-    ShipOrderDraft currently stores only an Intercept target. Reusing an old
-    ``mission1target`` when a local draft newly changes a non-Tow ship to Tow
-    would silently bind the draft to stale factual state. Such a draft therefore
-    blocks ordinary movement prediction until a Tow-target draft field exists.
-    """
-
-    return (
-        _draft_mission_is_tow(draft)
-        and not payload_is_tow_mission(_payload(ship))
+) -> int | None:
+    draft_target = (
+        getattr(draft, "tow_target_ship_id", None)
+        if draft is not None
+        else None
     )
+    if draft_target is not None:
+        return int(draft_target)
+
+    # A local draft that newly selects Tow must never inherit a stale
+    # mission1target from a factual non-Tow order. Existing factual Tow may
+    # still use its observed target when the draft only changes another field.
+    if _draft_mission_is_tow(draft) and not payload_is_tow_mission(_payload(ship)):
+        return None
+    return payload_tow_target_id(_payload(ship))
 
 
 def _strict_tow_speed_multiplier(
@@ -366,7 +368,8 @@ def _build_tow_outcomes(
             if state.waypoint_x is not None and state.waypoint_y is not None
             else None
         )
-        if _draft_introduces_unbound_tow(ship, draft):
+        target_id = _effective_tow_target_id(ship, draft)
+        if target_id is None:
             tower_outcomes[ship_id] = _unresolved_tow_outcome(
                 role="tower",
                 tower_ship_id=ship_id,
@@ -377,9 +380,9 @@ def _build_tow_outcomes(
                 route_speed_multiplier=state.speed_multiplier,
                 waypoint=waypoint,
                 reason=(
-                    "Local draft selects Tow, but ShipOrderDraft has no Tow-target "
-                    "field. A stale factual mission1target is not reused; ordinary "
-                    "movement is withheld until the Tow target is explicitly draftable."
+                    "Tow mission is selected, but no explicit local Tow target or "
+                    "eligible factual Tow target is available. Ordinary movement is "
+                    "withheld rather than reusing stale mission1target state."
                 ),
             )
             continue
@@ -387,7 +390,7 @@ def _build_tow_outcomes(
         attempts.append(
             TowAttempt(
                 tower_ship_id=ship_id,
-                target_ship_id=payload_tow_target_id(_payload(ship)),
+                target_ship_id=target_id,
             )
         )
 

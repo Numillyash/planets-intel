@@ -28,6 +28,15 @@ class ShipOrderDraftSchemaTests(unittest.TestCase):
         self.assertEqual(request.movement_mode, "intercept")
         self.assertEqual(request.intercept_target_ship_id, 48)
 
+    def test_tow_target_is_valid_without_overloading_movement_mode(self) -> None:
+        request = ShipOrderDraftUpsertRequest(
+            mission="Try to Tow",
+            tow_target_ship_id=77,
+        )
+        self.assertEqual(request.mission, "Try to Tow")
+        self.assertEqual(request.tow_target_ship_id, 77)
+        self.assertIsNone(request.movement_mode)
+
     def test_waypoint_mode_can_be_saved_without_waypoint_change(self) -> None:
         request = ShipOrderDraftUpsertRequest(movement_mode="waypoint")
         self.assertEqual(request.movement_mode, "waypoint")
@@ -55,6 +64,14 @@ class ShipOrderDraftSchemaTests(unittest.TestCase):
             ShipOrderDraftUpsertRequest(
                 movement_mode="waypoint",
                 intercept_target_ship_id=48,
+            )
+
+    def test_intercept_cannot_carry_tow_target(self) -> None:
+        with self.assertRaises(ValidationError):
+            ShipOrderDraftUpsertRequest(
+                movement_mode="intercept",
+                intercept_target_ship_id=48,
+                tow_target_ship_id=77,
             )
 
     def test_partial_waypoint_is_rejected(self) -> None:

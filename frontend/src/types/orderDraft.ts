@@ -23,12 +23,14 @@ export interface ShipOrderDraft {
     upstream_friendly_code: string | null;
     upstream_mission: string | null;
     upstream_primary_enemy_id: number | null;
+    upstream_tow_target_ship_id: number | null;
 
     warp: number | null;
     waypoint_x: number | null;
     waypoint_y: number | null;
     movement_mode: ShipDraftMovementMode;
     intercept_target_ship_id: number | null;
+    tow_target_ship_id: number | null;
     friendly_code: string | null;
     mission: string | null;
     primary_enemy_id: number | null;
@@ -36,6 +38,7 @@ export interface ShipOrderDraft {
     changed_warp: boolean;
     changed_waypoint: boolean;
     changed_movement: boolean;
+    changed_tow_target: boolean;
     changed_friendly_code: boolean;
     changed_mission: boolean;
     changed_primary_enemy: boolean;
@@ -48,6 +51,7 @@ export interface ShipOrderDraftUpdate {
     waypoint_y?: number;
     movement_mode?: ShipDraftMovementMode;
     intercept_target_ship_id?: number;
+    tow_target_ship_id?: number;
     friendly_code?: string;
     mission?: string;
     primary_enemy_id?: number;

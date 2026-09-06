@@ -34,6 +34,7 @@ class ShipOrderDraftUpsertRequest(BaseModel):
     waypoint_y: int | None = None
     movement_mode: MovementMode | None = None
     intercept_target_ship_id: int | None = Field(default=None, gt=0)
+    tow_target_ship_id: int | None = Field(default=None, gt=0)
     friendly_code: str | None = None
     mission: str | None = Field(default=None, min_length=1, max_length=80)
     primary_enemy_id: int | None = Field(default=None, ge=0, le=99)
@@ -57,6 +58,9 @@ class ShipOrderDraftUpsertRequest(BaseModel):
         ):
             raise ValueError("intercept_target_ship_id requires intercept movement")
 
+        if self.tow_target_ship_id is not None and self.movement_mode == "intercept":
+            raise ValueError("tow_target_ship_id cannot be combined with intercept movement")
+
         if not self.model_fields_set:
             raise ValueError("at least one draft order must be supplied")
         return self
@@ -77,12 +81,14 @@ class ShipOrderDraftResponse(BaseModel):
     upstream_friendly_code: str | None
     upstream_mission: str | None
     upstream_primary_enemy_id: int | None
+    upstream_tow_target_ship_id: int | None
 
     warp: int | None
     waypoint_x: int | None
     waypoint_y: int | None
     movement_mode: MovementMode
     intercept_target_ship_id: int | None
+    tow_target_ship_id: int | None
     friendly_code: str | None
     mission: str | None
     primary_enemy_id: int | None
@@ -90,6 +96,7 @@ class ShipOrderDraftResponse(BaseModel):
     changed_warp: bool
     changed_waypoint: bool
     changed_movement: bool
+    changed_tow_target: bool
     changed_friendly_code: bool
     changed_mission: bool
     changed_primary_enemy: bool

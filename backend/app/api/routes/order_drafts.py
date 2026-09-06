@@ -102,6 +102,7 @@ def save_ship_order_draft(
             waypoint_y=payload.waypoint_y,
             movement_mode=payload.movement_mode,
             intercept_target_ship_id=payload.intercept_target_ship_id,
+            tow_target_ship_id=payload.tow_target_ship_id,
             friendly_code=payload.friendly_code,
             mission=payload.mission,
             primary_enemy_id=payload.primary_enemy_id,

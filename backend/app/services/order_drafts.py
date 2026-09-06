@@ -10,6 +10,9 @@ from app.models.ship_observation import ShipObservation
 from app.models.ship_order_draft import ShipOrderDraft
 
 
+TOW_MISSION_NAMES = frozenset({"tow", "try to tow", "mission #6"})
+
+
 class OrderDraftAccessError(Exception):
     pass
 
@@ -47,6 +50,10 @@ def _payload_str(payload: dict[str, Any], *keys: str) -> str | None:
         if isinstance(value, (int, float)) and not isinstance(value, bool):
             return str(value)
     return None
+
+
+def _is_tow_mission_name(value: str | None) -> bool:
+    return value is not None and value.strip().casefold() in TOW_MISSION_NAMES
 
 
 def _account(
@@ -147,12 +154,55 @@ def _validate_intercept_target(
         )
 
 
+def _validate_tow_target(
+    session: Session,
+    *,
+    batch_id: int,
+    ship: ShipObservation,
+    target_ship_id: int,
+) -> None:
+    if target_ship_id == ship.ship_id:
+        raise OrderDraftAccessError("A ship cannot Tow itself")
+
+    target = session.execute(
+        select(ShipObservation).where(
+            ShipObservation.batch_id == batch_id,
+            ShipObservation.ship_id == target_ship_id,
+        )
+    ).scalar_one_or_none()
+    if target is None:
+        raise OrderDraftAccessError(
+            "Tow target is not visible in the latest factual snapshot"
+        )
+
+    if None in (ship.x, ship.y, target.x, target.y):
+        raise OrderDraftAccessError(
+            "Tow target colocation cannot be established from factual positions"
+        )
+    if (ship.x, ship.y) != (target.x, target.y):
+        raise OrderDraftAccessError(
+            "Tow target must be colocated with the towing ship in the latest factual snapshot"
+        )
+
+
 def _upstream_mission(ship: ShipObservation) -> str | None:
     named = _payload_str(ship.payload, "missionname", "mission_name")
     if named:
         return named
     mission_id = _payload_int(ship.payload, "mission")
     return f"Mission #{mission_id}" if mission_id is not None else None
+
+
+def _upstream_tow_target(ship: ShipObservation) -> int | None:
+    if _payload_int(ship.payload, "mission") != 6:
+        return None
+    target_id = _payload_int(
+        ship.payload,
+        "mission1target",
+        "mission1_target_id",
+        "mission1targetid",
+    )
+    return target_id if target_id is not None and target_id > 0 else None
 
 
 def _serialize(
@@ -186,6 +236,7 @@ def _serialize(
         "primaryenemy",
         "primary_enemy_id",
     )
+    upstream_tow_target_ship_id = _upstream_tow_target(ship)
     changed_waypoint = (
         draft.waypoint_x is not None
         and draft.waypoint_y is not None
@@ -209,17 +260,23 @@ def _serialize(
         "upstream_friendly_code": upstream_friendly_code,
         "upstream_mission": upstream_mission,
         "upstream_primary_enemy_id": upstream_primary_enemy_id,
+        "upstream_tow_target_ship_id": upstream_tow_target_ship_id,
         "warp": draft.warp,
         "waypoint_x": draft.waypoint_x,
         "waypoint_y": draft.waypoint_y,
         "movement_mode": draft.movement_mode,
         "intercept_target_ship_id": draft.intercept_target_ship_id,
+        "tow_target_ship_id": draft.tow_target_ship_id,
         "friendly_code": draft.friendly_code,
         "mission": draft.mission,
         "primary_enemy_id": draft.primary_enemy_id,
         "changed_warp": draft.warp is not None and draft.warp != ship.warp,
         "changed_waypoint": changed_waypoint,
         "changed_movement": draft.movement_mode == "intercept",
+        "changed_tow_target": (
+            draft.tow_target_ship_id is not None
+            and draft.tow_target_ship_id != upstream_tow_target_ship_id
+        ),
         "changed_friendly_code": (
             draft.friendly_code is not None
             and draft.friendly_code != upstream_friendly_code
@@ -278,6 +335,7 @@ def upsert_ship_order_draft(
     waypoint_y: int | None,
     movement_mode: str | None,
     intercept_target_ship_id: int | None,
+    tow_target_ship_id: int | None = None,
     friendly_code: str | None = None,
     mission: str | None = None,
     primary_enemy_id: int | None = None,
@@ -292,18 +350,6 @@ def upsert_ship_order_draft(
             ship_id=ship_id,
         )
 
-        if movement_mode == "intercept":
-            if intercept_target_ship_id is None:
-                raise OrderDraftAccessError(
-                    "Intercept movement requires a target ship"
-                )
-            _validate_intercept_target(
-                session,
-                batch_id=batch.id,
-                ship_id=ship_id,
-                target_ship_id=intercept_target_ship_id,
-            )
-
         draft = session.execute(
             select(ShipOrderDraft).where(
                 ShipOrderDraft.user_id == user_id,
@@ -313,6 +359,76 @@ def upsert_ship_order_draft(
                 ShipOrderDraft.ship_id == ship_id,
             )
         ).scalar_one_or_none()
+
+        next_movement_mode = (
+            movement_mode
+            if movement_mode is not None
+            else (draft.movement_mode if draft is not None else "waypoint")
+        )
+        next_mission = (
+            mission.strip()
+            if mission is not None
+            else (
+                draft.mission
+                if draft is not None and draft.mission is not None
+                else _upstream_mission(ship)
+            )
+        )
+
+        effective_intercept_target = (
+            intercept_target_ship_id
+            if intercept_target_ship_id is not None
+            else (
+                draft.intercept_target_ship_id
+                if draft is not None
+                else None
+            )
+        )
+        if next_movement_mode == "intercept":
+            if effective_intercept_target is None:
+                raise OrderDraftAccessError(
+                    "Intercept movement requires a target ship"
+                )
+            _validate_intercept_target(
+                session,
+                batch_id=batch.id,
+                ship_id=ship_id,
+                target_ship_id=effective_intercept_target,
+            )
+
+        stored_tow_target = (
+            draft.tow_target_ship_id if draft is not None else None
+        )
+        upstream_tow_target = _upstream_tow_target(ship)
+        effective_tow_target = (
+            tow_target_ship_id
+            if tow_target_ship_id is not None
+            else (
+                stored_tow_target
+                if stored_tow_target is not None
+                else upstream_tow_target
+            )
+        )
+
+        if _is_tow_mission_name(next_mission):
+            if next_movement_mode == "intercept":
+                raise OrderDraftAccessError(
+                    "Tow mission cannot be combined with Intercept movement"
+                )
+            if effective_tow_target is None:
+                raise OrderDraftAccessError(
+                    "Tow mission requires an explicit tow_target_ship_id"
+                )
+            _validate_tow_target(
+                session,
+                batch_id=batch.id,
+                ship=ship,
+                target_ship_id=effective_tow_target,
+            )
+        elif tow_target_ship_id is not None:
+            raise OrderDraftAccessError(
+                "tow_target_ship_id requires the Tow mission"
+            )
 
         if draft is None:
             draft = ShipOrderDraft(
@@ -326,14 +442,19 @@ def upsert_ship_order_draft(
                 warp=warp,
                 waypoint_x=waypoint_x,
                 waypoint_y=waypoint_y,
-                movement_mode=movement_mode or "waypoint",
+                movement_mode=next_movement_mode,
                 intercept_target_ship_id=(
-                    intercept_target_ship_id
-                    if movement_mode == "intercept"
+                    effective_intercept_target
+                    if next_movement_mode == "intercept"
+                    else None
+                ),
+                tow_target_ship_id=(
+                    effective_tow_target
+                    if _is_tow_mission_name(next_mission)
                     else None
                 ),
                 friendly_code=friendly_code,
-                mission=mission,
+                mission=mission.strip() if mission is not None else None,
                 primary_enemy_id=primary_enemy_id,
             )
             session.add(draft)
@@ -348,11 +469,15 @@ def upsert_ship_order_draft(
                 if movement_mode == "waypoint":
                     draft.intercept_target_ship_id = None
                 else:
-                    draft.intercept_target_ship_id = intercept_target_ship_id
+                    draft.intercept_target_ship_id = effective_intercept_target
             if friendly_code is not None:
                 draft.friendly_code = friendly_code
             if mission is not None:
                 draft.mission = mission.strip()
+            if _is_tow_mission_name(next_mission):
+                draft.tow_target_ship_id = effective_tow_target
+            else:
+                draft.tow_target_ship_id = None
             if primary_enemy_id is not None:
                 draft.primary_enemy_id = primary_enemy_id
             draft.base_batch_id = batch.id
