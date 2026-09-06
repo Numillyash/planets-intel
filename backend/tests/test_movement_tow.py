@@ -62,7 +62,7 @@ class MovementTowTests(unittest.TestCase):
         self.assertEqual(resolution.attempts[0].status, TowLockStatus.LOCKED)
         self.assertTrue(resolution.attempts[0].certain)
 
-    def test_four_fingers_target_breaks_tow(self) -> None:
+    def test_positive_four_fingers_branch_fails_closed(self) -> None:
         states = {
             1: ship(1, warp=7, waypoint_x=110),
             2: ship(2, warp=7, waypoint_x=150, fuel=26),
@@ -71,10 +71,9 @@ class MovementTowTests(unittest.TestCase):
             ships=states,
             attempts=[TowAttempt(1, 2)],
         )
-        self.assertEqual(
-            resolution.attempts[0].status,
-            TowLockStatus.TARGET_BROKE_LOCK,
-        )
+        self.assertEqual(resolution.attempts[0].status, TowLockStatus.UNKNOWN)
+        self.assertFalse(resolution.attempts[0].certain)
+        self.assertIn("historically unresolved", resolution.attempts[0].reason)
 
     def test_no_fuel_and_single_engine_towers_fail(self) -> None:
         states = {
