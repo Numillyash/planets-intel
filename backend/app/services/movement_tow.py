@@ -173,6 +173,42 @@ def _target_breaks_tow(
     return target_speed >= tower_speed, None
 
 
+def _tow_chain_nodes(attempts: Sequence[TowAttempt]) -> frozenset[int]:
+    """Return only ship ids in connected Tow components containing a chain.
+
+    A chain exists when a Tow target is itself a Tow tower. The strict runtime
+    does not resolve ordering inside that connected component, but an unrelated
+    Tow pair elsewhere in the same turn must remain independently decidable.
+    """
+
+    tower_ids = {item.tower_ship_id for item in attempts}
+    adjacency: dict[int, set[int]] = defaultdict(set)
+    seeds: set[int] = set()
+
+    for item in attempts:
+        target_id = item.target_ship_id
+        if target_id is None or target_id <= 0:
+            continue
+        adjacency[item.tower_ship_id].add(target_id)
+        adjacency[target_id].add(item.tower_ship_id)
+        if target_id in tower_ids:
+            seeds.add(item.tower_ship_id)
+            seeds.add(target_id)
+
+    if not seeds:
+        return frozenset()
+
+    affected: set[int] = set()
+    pending = list(seeds)
+    while pending:
+        ship_id = pending.pop()
+        if ship_id in affected:
+            continue
+        affected.add(ship_id)
+        pending.extend(adjacency.get(ship_id, ()))
+    return frozenset(affected)
+
+
 def resolve_strict_tow_locks(
     *,
     ships: Mapping[int, TowShipState],
@@ -182,8 +218,11 @@ def resolve_strict_tow_locks(
     """Resolve the narrow deterministic Tow-lock subset used by prediction.
 
     This is deliberately stricter than the research simulator. Tow chains and
-    same-target contests fail closed instead of selecting a winner. The
-    historical corpus verifies route-equivalent Tow movement, but does not
+    same-target contests fail closed instead of selecting a winner. Chain
+    failure is scoped to the connected Tow component so unrelated Tow pairs in
+    the same turn remain independently resolvable.
+
+    The historical corpus verifies route-equivalent Tow movement, but does not
     justify inventing a winning tower identity when several visible towers
     imply the same route.
 
@@ -193,29 +232,7 @@ def resolve_strict_tow_locks(
     """
 
     ordered = tuple(sorted(attempts, key=lambda item: item.tower_ship_id))
-    tower_ids = {item.tower_ship_id for item in ordered}
-
-    # A tower that is itself targeted by another Tow creates an ordering
-    # dependency. Match the lab guardrail by refusing the entire connected Tow
-    # topology rather than pretending independent lock resolution is safe.
-    chain_present = any(
-        item.target_ship_id in tower_ids
-        for item in ordered
-        if item.target_ship_id is not None
-    )
-    if chain_present:
-        return TowResolution(
-            tuple(
-                TowAttemptResult(
-                    item.tower_ship_id,
-                    item.target_ship_id,
-                    TowLockStatus.UNSUPPORTED_CHAIN,
-                    False,
-                    "Tow chains/cycles are not resolved by the strict prediction subset.",
-                )
-                for item in ordered
-            )
-        )
+    chain_nodes = _tow_chain_nodes(ordered)
 
     by_target: dict[int, list[TowAttempt]] = defaultdict(list)
     for item in ordered:
@@ -230,6 +247,21 @@ def resolve_strict_tow_locks(
         tower_id = item.tower_ship_id
         target_id = item.target_ship_id
         tower = ships.get(tower_id)
+
+        if (
+            tower_id in chain_nodes
+            or (target_id is not None and target_id in chain_nodes)
+        ):
+            results.append(
+                TowAttemptResult(
+                    tower_id,
+                    target_id,
+                    TowLockStatus.UNSUPPORTED_CHAIN,
+                    False,
+                    "Tow chain/cycle component is not resolved by the strict prediction subset.",
+                )
+            )
+            continue
 
         if (
             tower is None
