@@ -11,7 +11,7 @@ import sqlalchemy as sa
 from alembic import op
 
 
-revision: str = "0018_tow_target_ship_id"
+revision = "0018_tow_target_ship_id"
 down_revision: str | None = "0017_outgoing_msg_recipients"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
