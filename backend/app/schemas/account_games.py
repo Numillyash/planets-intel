@@ -21,6 +21,13 @@ class AccountGameSummary(BaseModel):
 
     data_source: str = "planets.nu"
 
+    # Local factual membership evidence. These fields remain optional because
+    # a game returned only by upstream games/list may not have been observed or
+    # canonically synced yet.
+    observer_slot_id: int | None = None
+    observer_status: int | None = None
+    membership_source: str | None = None
+
 
 class AccountGamesResponse(BaseModel):
     linked_account_id: int
