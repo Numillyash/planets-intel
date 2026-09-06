@@ -5,7 +5,9 @@ from sqlalchemy.dialects import postgresql
 
 from app.services.account_games import (
     _cached_membership_condition,
+    _game_record_from_cache,
     _game_record_from_remote,
+    _merge_remote_observer_evidence,
 )
 
 
@@ -91,6 +93,65 @@ class AccountGameRecordTests(unittest.TestCase):
             planets_username="   ",
         )
         self.assertIs(_cached_membership_condition(account), False)
+
+    def test_cached_record_carries_historical_observer_status(self):
+        game = SimpleNamespace(
+            id=684000,
+            name="Bernices Sector",
+            status_id=2,
+            status_name="Running",
+            current_turn=42,
+            slots=8,
+            is_private=False,
+            is_custom=False,
+        )
+
+        record = _game_record_from_cache(
+            game,
+            observer_slot_id=4,
+            observer_status=0,
+            membership_source="historical-private-observation",
+        )
+
+        self.assertEqual(record["observer_slot_id"], 4)
+        self.assertEqual(record["observer_status"], 0)
+        self.assertEqual(
+            record["membership_source"],
+            "historical-private-observation",
+        )
+
+    def test_remote_metadata_preserves_cached_observer_evidence(self):
+        remote = _game_record_from_remote(
+            {
+                "id": 684000,
+                "name": "Bernices Sector",
+                "status": 2,
+                "statusname": "Running",
+                "turn": 43,
+                "slots": 8,
+            }
+        )
+        self.assertIsNotNone(remote)
+        assert remote is not None
+
+        cached = {
+            **remote,
+            "turn": 42,
+            "data_source": "canonical-cache",
+            "observer_slot_id": 4,
+            "observer_status": 0,
+            "membership_source": "historical-private-observation",
+        }
+        merged = _merge_remote_observer_evidence(remote, cached)
+
+        self.assertEqual(merged["turn"], 43)
+        self.assertEqual(merged["data_source"], "planets.nu")
+        self.assertEqual(merged["observer_slot_id"], 4)
+        self.assertEqual(merged["observer_status"], 0)
+        self.assertEqual(
+            merged["membership_source"],
+            "historical-private-observation",
+        )
 
 
 if __name__ == "__main__":
