@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextvars import ContextVar
 from dataclasses import dataclass, field, replace
+from math import hypot
 from typing import Any, Mapping
 
 from sqlalchemy import select
@@ -39,14 +40,15 @@ from app.services.movement_tow import (
     resolve_strict_tow_locks,
 )
 from app.services.movement_warp_well import (
+    WARP_WELL_RADIUS,
     PlanetWarpWell,
     WarpWellResult,
-    WarpWellStatus,
     resolve_warp_well,
 )
 
 
 TOW_MISSION_NAMES = frozenset({"tow", "try to tow", "mission #6"})
+_TOW_WELL_EPSILON = 1e-9
 
 
 @dataclass(frozen=True, slots=True)
@@ -142,13 +144,39 @@ def _effective_waypoint(
     return Point(float(x), float(y))
 
 
+def _draft_mission_is_tow(draft: ShipOrderDraft | None) -> bool:
+    return (
+        draft is not None
+        and draft.mission is not None
+        and draft.mission.strip().casefold() in TOW_MISSION_NAMES
+    )
+
+
 def _effective_is_tow(
     ship: ShipObservation,
     draft: ShipOrderDraft | None,
 ) -> bool:
     if draft is not None and draft.mission is not None:
-        return draft.mission.strip().casefold() in TOW_MISSION_NAMES
+        return _draft_mission_is_tow(draft)
     return payload_is_tow_mission(_payload(ship))
+
+
+def _draft_introduces_unbound_tow(
+    ship: ShipObservation,
+    draft: ShipOrderDraft | None,
+) -> bool:
+    """Return true when a draft adds Tow but has no draftable target contract.
+
+    ShipOrderDraft currently stores only an Intercept target. Reusing an old
+    ``mission1target`` when a local draft newly changes a non-Tow ship to Tow
+    would silently bind the draft to stale factual state. Such a draft therefore
+    blocks ordinary movement prediction until a Tow-target draft field exists.
+    """
+
+    return (
+        _draft_mission_is_tow(draft)
+        and not payload_is_tow_mission(_payload(ship))
+    )
 
 
 def _strict_tow_speed_multiplier(
@@ -201,6 +229,24 @@ def _tow_state(
             ship,
             hull_names=hull_names,
         ),
+    )
+
+
+def _tow_endpoint_inside_well(
+    *,
+    position: Point,
+    moved_distance: float | None,
+    planets: list[PlanetWarpWell],
+) -> bool:
+    if moved_distance is None or moved_distance <= _TOW_WELL_EPSILON:
+        return False
+    return any(
+        hypot(
+            position.x - planet.position.x,
+            position.y - planet.position.y,
+        )
+        <= WARP_WELL_RADIUS + _TOW_WELL_EPSILON
+        for planet in planets
     )
 
 
@@ -304,12 +350,40 @@ def _build_tow_outcomes(
     }
 
     attempts: list[TowAttempt] = []
+    tower_outcomes: dict[int, _TowRuntimeOutcome] = {}
+    target_outcomes: dict[int, _TowRuntimeOutcome] = {}
+
     for ship_id, ship in ships_by_id.items():
         if ship.owner_id != owner_slot_id:
             continue
         draft = draft_by_ship_id.get(ship_id)
         if not _effective_is_tow(ship, draft):
             continue
+
+        state = states[ship_id]
+        waypoint = (
+            Point(float(state.waypoint_x), float(state.waypoint_y))
+            if state.waypoint_x is not None and state.waypoint_y is not None
+            else None
+        )
+        if _draft_introduces_unbound_tow(ship, draft):
+            tower_outcomes[ship_id] = _unresolved_tow_outcome(
+                role="tower",
+                tower_ship_id=ship_id,
+                target_ship_id=None,
+                lock_status=TowLockStatus.UNKNOWN.value,
+                status="draft_tow_target_unresolved",
+                route_warp=state.warp,
+                route_speed_multiplier=state.speed_multiplier,
+                waypoint=waypoint,
+                reason=(
+                    "Local draft selects Tow, but ShipOrderDraft has no Tow-target "
+                    "field. A stale factual mission1target is not reused; ordinary "
+                    "movement is withheld until the Tow target is explicitly draftable."
+                ),
+            )
+            continue
+
         attempts.append(
             TowAttempt(
                 tower_ship_id=ship_id,
@@ -317,19 +391,16 @@ def _build_tow_outcomes(
             )
         )
 
-    if not attempts:
-        return {}, {}
+    if attempts:
+        resolution = resolve_strict_tow_locks(
+            ships=states,
+            attempts=attempts,
+            unlimited_fuel=unlimited_fuel,
+        )
+    else:
+        resolution = None
 
-    resolution = resolve_strict_tow_locks(
-        ships=states,
-        attempts=attempts,
-        unlimited_fuel=unlimited_fuel,
-    )
-
-    tower_outcomes: dict[int, _TowRuntimeOutcome] = {}
-    target_outcomes: dict[int, _TowRuntimeOutcome] = {}
-
-    for result in resolution.attempts:
+    for result in resolution.attempts if resolution is not None else ():
         tower_id = int(result.tower_ship_id)
         target_id = (
             int(result.target_ship_id)
@@ -497,14 +568,16 @@ def _build_tow_outcomes(
                 moved_distance=float(route.moved_distance or 0.0),
                 planets=planet_wells,
             )
-            if well.status in {
-                WarpWellStatus.CAPTURED,
-                WarpWellStatus.UNRESOLVED_MULTIPLE,
-            }:
+            if _tow_endpoint_inside_well(
+                position=route.position,
+                moved_distance=route.moved_distance,
+                planets=planet_wells,
+            ):
                 reason = (
-                    "Tow lock and pre-well endpoint are known, but Tow plus "
-                    "planetary warp-well propagation to the towed ship has not "
-                    "been independently verified."
+                    "Tow lock and pre-well endpoint are known, but the Tow + "
+                    "planetary warp-well interaction is not independently verified. "
+                    "The whole Tow pair is withheld regardless of the participants' "
+                    "individual warp values."
                 )
                 tower_outcomes[tower_id] = _unresolved_tow_outcome(
                     role="tower",
