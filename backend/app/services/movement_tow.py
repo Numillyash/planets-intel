@@ -135,6 +135,11 @@ def _target_breaks_tow(
     `None` means factual inputs are insufficient to decide safely. The caller
     must keep that attempt unresolved rather than interpreting an unknown field
     as zero.
+
+    A positive result is currently evidence only, not a production-certain
+    failed Tow. Historical corpus analysis still contains route-matched cases
+    where this predicate is true, so the strict resolver fails closed on that
+    branch until those cases are fully disambiguated.
     """
 
     if target.fuel is None:
@@ -224,7 +229,10 @@ def resolve_strict_tow_locks(
 
     The historical corpus verifies route-equivalent Tow movement, but does not
     justify inventing a winning tower identity when several visible towers
-    imply the same route.
+    imply the same route. It strongly supports the >=2-engine tower prerequisite.
+    Four-fingers predicate-false cases may enter the supported lock subset;
+    predicate-true cases remain unresolved because five historical route matches
+    are still not explained by independent target movement alone.
 
     In unlimited-fuel games the tower's movement-fuel prerequisite is bypassed.
     The target's >25 KT four-fingers fuel predicate is still factual state; if
@@ -381,9 +389,9 @@ def resolve_strict_tow_locks(
                 TowAttemptResult(
                     tower_id,
                     target_id,
-                    TowLockStatus.TARGET_BROKE_LOCK,
-                    True,
-                    "Target satisfies the four-fingers tow-break predicate.",
+                    TowLockStatus.UNKNOWN,
+                    False,
+                    "Four-fingers tow-break predicate is true, but that positive branch remains historically unresolved; prediction fails closed.",
                 )
             )
             continue
@@ -394,7 +402,7 @@ def resolve_strict_tow_locks(
                 target_id,
                 TowLockStatus.LOCKED,
                 True,
-                "Unique factual Tow attempt satisfies the strict lock predicate.",
+                "Unique factual Tow attempt satisfies the corpus-supported strict lock subset.",
             )
         )
 
