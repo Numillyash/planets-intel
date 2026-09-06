@@ -149,10 +149,13 @@ function observerGameStatus(
     observer: GameObserverEntry,
     details: GameDetailsResponse | undefined,
 ): number | null {
-    // Current public loadinfo is strongest when identity still resolves. Once a
-    // dead slot loses useful username/account identity, fall back to the
-    // canonical slot status tied to this linked account by historical private
-    // observation. Unknown stays unknown; it never becomes dead by absence.
+    // Public loadinfo may be retained from an older picker refresh when a later
+    // request fails. Never let stale roster identity override newer canonical
+    // observer membership evidence. Unknown remains unknown; absence is not death.
+    if (details === undefined || details.game.turn !== observer.game.turn) {
+        return observer.game.observer_status;
+    }
+
     const player = observerPlayer(details, observer.account);
     return player?.status ?? observer.game.observer_status;
 }
