@@ -167,6 +167,24 @@ function drawVector({
 }
 
 
+function predictionColor(item: ShipMovementPrediction): number {
+    if (item.phase === "intercept") return 0xffa7ff;
+    if (item.phase === "tow") return 0xffcf6b;
+    return 0x76f0c0;
+}
+
+
+function predictionPhaseLabel(item: ShipMovementPrediction): string {
+    if (item.phase === "intercept") return "PREDICTED INTERCEPT";
+    if (item.phase === "tow") {
+        return item.tow_role === "target"
+            ? "PREDICTED TOWED"
+            : "PREDICTED TOW";
+    }
+    return "PREDICTED MOVE";
+}
+
+
 function drawPrediction(
     world: Container,
     bounds: MapBounds,
@@ -194,7 +212,7 @@ function drawPrediction(
 
     const from = rendered(route[0], bounds);
     const to = rendered(route[1], bounds);
-    const color = item.phase === "intercept" ? 0xffa7ff : 0x76f0c0;
+    const color = predictionColor(item);
     const alpha = item.certain ? 0.88 : 0.52;
 
     const path = new Graphics()
@@ -211,9 +229,7 @@ function drawPrediction(
     world.addChild(endpoint);
 
     const moved = item.moved_distance ?? distance;
-    const phaseLabel = item.phase === "intercept"
-        ? "PREDICTED INTERCEPT"
-        : "PREDICTED MOVE";
+    const phaseLabel = predictionPhaseLabel(item);
     const label = new Text({
         text: `${phaseLabel} · ${moved.toFixed(1)} ly · W${item.warp ?? "—"}`,
         style: {
