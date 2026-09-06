@@ -1,5 +1,6 @@
-export type PredictionPhase = "move_most" | "intercept";
-export type PredictionMode = "waypoint" | "intercept";
+export type PredictionPhase = "tow" | "move_most" | "intercept";
+export type PredictionMode = "tow" | "waypoint" | "intercept";
+export type TowRole = "tower" | "target";
 
 
 export interface ShipMovementPrediction {
@@ -41,6 +42,10 @@ export interface ShipMovementPrediction {
     fuel_limited: boolean | null;
     fuel_basis: string;
     fuel_reason: string;
+    tow_role: TowRole | null;
+    tow_tower_ship_id: number | null;
+    tow_target_ship_id: number | null;
+    tow_lock_status: string | null;
     reason: string;
     warnings: string[];
 }
