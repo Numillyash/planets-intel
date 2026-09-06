@@ -126,56 +126,73 @@ def hull_engine_count(
     return None
 
 
-def _target_breaks_tow(
+def _target_nonfuel_break_gate(
     target: TowShipState,
     tower: TowShipState,
 ) -> tuple[bool | None, str | None]:
-    """Evaluate the documented/classic four-fingers tow-break predicate.
+    """Evaluate only the phase-stable, non-fuel Four Fingers conditions.
 
-    `None` means factual inputs are insufficient to decide safely. The caller
-    must keep that attempt unresolved rather than interpreting an unknown field
-    as zero.
+    False means at least one known non-fuel condition guarantees that the target
+    cannot break the Tow lock. True means all non-fuel conditions are known and
+    permit a break, but the Tow-phase target-fuel condition is still unresolved.
+    None means no known condition rules the break out, while at least one
+    required non-fuel input is unknown.
 
-    A positive result is currently evidence only, not a production-certain
-    failed Tow. Historical corpus analysis still contains route-matched cases
-    where this predicate is true, so the strict resolver fails closed on that
-    branch until those cases are fully disambiguated.
+    Snapshot neutronium is intentionally excluded here. Transfers, web drain and
+    other pre-Tow Host phases can mutate fuel before Tow resolves, so a loadturn
+    fuel value is not a safe Tow-phase fact.
     """
 
-    if target.fuel is None:
-        return None, "target fuel is unknown"
-    if target.fuel <= 25:
-        return False, None
+    unknown_reasons: list[str] = []
 
     if target.engine_count is None:
-        return None, "target engine count is unknown"
-    if target.engine_count < 2:
+        unknown_reasons.append("target engine count is unknown")
+    elif target.engine_count < 2:
         return False, None
 
+    waypoint_long: bool | None
     if target.x is None or target.y is None:
-        return None, "target position is unknown"
+        waypoint_long = None
+        unknown_reasons.append("target position is unknown")
+    elif target.warp is None:
+        waypoint_long = None
+        unknown_reasons.append("target warp is unknown")
+    elif target.waypoint_x is None or target.waypoint_y is None:
+        waypoint_long = None
+        unknown_reasons.append("target waypoint is unknown")
+    else:
+        target_waypoint_distance = hypot(
+            target.waypoint_x - target.x,
+            target.waypoint_y - target.y,
+        )
+        waypoint_long = target_waypoint_distance > target.warp * target.warp
+        if not waypoint_long:
+            return False, None
+
+    speed_compare: bool | None
     if target.warp is None:
-        return None, "target warp is unknown"
-    if target.waypoint_x is None or target.waypoint_y is None:
-        return None, "target waypoint is unknown"
+        speed_compare = None
+        if "target warp is unknown" not in unknown_reasons:
+            unknown_reasons.append("target warp is unknown")
+    elif tower.warp is None:
+        speed_compare = None
+        unknown_reasons.append("tower warp is unknown")
+    elif target.speed_multiplier is None:
+        speed_compare = None
+        unknown_reasons.append("target speed multiplier is unknown")
+    elif tower.speed_multiplier is None:
+        speed_compare = None
+        unknown_reasons.append("tower speed multiplier is unknown")
+    else:
+        target_speed = target.warp * target.warp * target.speed_multiplier
+        tower_speed = tower.warp * tower.warp * tower.speed_multiplier
+        speed_compare = target_speed >= tower_speed
+        if not speed_compare:
+            return False, None
 
-    target_waypoint_distance = hypot(
-        target.waypoint_x - target.x,
-        target.waypoint_y - target.y,
-    )
-    if target_waypoint_distance <= target.warp * target.warp:
-        return False, None
-
-    if tower.warp is None:
-        return None, "tower warp is unknown"
-    if target.speed_multiplier is None:
-        return None, "target speed multiplier is unknown"
-    if tower.speed_multiplier is None:
-        return None, "tower speed multiplier is unknown"
-
-    target_speed = target.warp * target.warp * target.speed_multiplier
-    tower_speed = tower.warp * tower.warp * tower.speed_multiplier
-    return target_speed >= tower_speed, None
+    if unknown_reasons or waypoint_long is None or speed_compare is None:
+        return None, "; ".join(dict.fromkeys(unknown_reasons))
+    return True, None
 
 
 def _tow_chain_nodes(attempts: Sequence[TowAttempt]) -> frozenset[int]:
@@ -222,21 +239,21 @@ def resolve_strict_tow_locks(
 ) -> TowResolution:
     """Resolve the narrow deterministic Tow-lock subset used by prediction.
 
-    This is deliberately stricter than the research simulator. Tow chains and
-    same-target contests fail closed instead of selecting a winner. Chain
-    failure is scoped to the connected Tow component so unrelated Tow pairs in
-    the same turn remain independently resolvable.
+    The historical corpus strongly supports the >=2-engine tower prerequisite
+    and the documented Euclidean/base-range Four Fingers geometry. Same-target
+    contests and Tow chains remain fail-closed, with chains scoped to their
+    connected Tow component.
 
-    The historical corpus verifies route-equivalent Tow movement, but does not
-    justify inventing a winning tower identity when several visible towers
-    imply the same route. It strongly supports the >=2-engine tower prerequisite.
-    Four-fingers predicate-false cases may enter the supported lock subset;
-    predicate-true cases remain unresolved because five historical route matches
-    are still not explained by independent target movement alone.
+    Raw snapshot fuel is never treated as Tow-phase fuel. In finite-fuel games
+    both the tower movement prerequisite and towing fuel burn depend on state
+    after earlier Host phases, and towing burn additionally requires combined
+    tower+target physical mass. Therefore finite-fuel Tow movement remains
+    unresolved in this production subset.
 
-    In unlimited-fuel games the tower's movement-fuel prerequisite is bypassed.
-    The target's >25 KT four-fingers fuel predicate is still factual state; if
-    it is unavailable the break check remains unresolved.
+    In unlimited-fuel games a unique colocated Tow can be marked LOCKED only
+    when a known non-fuel Four Fingers condition guarantees that the target
+    cannot break the lock. If all non-fuel break conditions are true, the
+    target-fuel finger remains unresolved and prediction fails closed.
     """
 
     ordered = tuple(sorted(attempts, key=lambda item: item.tower_ship_id))
@@ -325,30 +342,6 @@ def resolve_strict_tow_locks(
             )
             continue
 
-        if not unlimited_fuel:
-            if tower.fuel is None:
-                results.append(
-                    TowAttemptResult(
-                        tower_id,
-                        target_id,
-                        TowLockStatus.UNKNOWN,
-                        False,
-                        "Tower fuel is unknown.",
-                    )
-                )
-                continue
-            if tower.fuel <= 0:
-                results.append(
-                    TowAttemptResult(
-                        tower_id,
-                        target_id,
-                        TowLockStatus.NO_FUEL,
-                        True,
-                        "Tow tower has no movement fuel.",
-                    )
-                )
-                continue
-
         if None in (tower.x, tower.y, target.x, target.y):
             results.append(
                 TowAttemptResult(
@@ -372,26 +365,38 @@ def resolve_strict_tow_locks(
             )
             continue
 
-        broke, break_reason = _target_breaks_tow(target, tower)
-        if broke is None:
+        if not unlimited_fuel:
             results.append(
                 TowAttemptResult(
                     tower_id,
                     target_id,
                     TowLockStatus.UNKNOWN,
                     False,
-                    f"Tow-break predicate unresolved: {break_reason}.",
+                    "Finite-fuel Tow movement requires Tow-phase fuel state and combined towing mass.",
                 )
             )
             continue
-        if broke:
+
+        break_gate, break_reason = _target_nonfuel_break_gate(target, tower)
+        if break_gate is None:
             results.append(
                 TowAttemptResult(
                     tower_id,
                     target_id,
                     TowLockStatus.UNKNOWN,
                     False,
-                    "Four-fingers tow-break predicate is true, but that positive branch remains historically unresolved; prediction fails closed.",
+                    f"Tow-break non-fuel predicate unresolved: {break_reason}.",
+                )
+            )
+            continue
+        if break_gate:
+            results.append(
+                TowAttemptResult(
+                    tower_id,
+                    target_id,
+                    TowLockStatus.UNKNOWN,
+                    False,
+                    "All non-fuel Four Fingers conditions permit a break, but the Tow-phase target-fuel condition is unresolved.",
                 )
             )
             continue
@@ -402,7 +407,7 @@ def resolve_strict_tow_locks(
                 target_id,
                 TowLockStatus.LOCKED,
                 True,
-                "Unique factual Tow attempt satisfies the corpus-supported strict lock subset.",
+                "Unique factual Tow attempt satisfies the corpus-supported unlimited-fuel lock subset.",
             )
         )
 
