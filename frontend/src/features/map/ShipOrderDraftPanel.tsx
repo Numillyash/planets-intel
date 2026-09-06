@@ -21,6 +21,7 @@ const COMMON_MISSIONS = [
     "Land and Disassemble", "Try to Tow", "Intercept", "Enter Wormhole",
     "Load Artifact", "Transfer Artifact", "Beam Up",
 ];
+const CUSTOM_MISSION_VALUE = "__custom_mission__";
 
 function waypointLabel(x: number | null, y: number | null): string {
     return x !== null && y !== null ? `${x}, ${y}` : "—";
@@ -34,6 +35,12 @@ function isInterceptMission(value: string): boolean {
 function isTowMission(value: string): boolean {
     const normalized = value.trim().toLowerCase();
     return normalized === "tow" || normalized === "try to tow" || normalized === "mission #6";
+}
+function isNumericMissionAlias(value: string): boolean {
+    return /^mission #\d+$/i.test(value.trim());
+}
+function isPresetMission(value: string): boolean {
+    return COMMON_MISSIONS.includes(value) || isNumericMissionAlias(value);
 }
 function payloadString(payload: Record<string, unknown>, ...keys: string[]): string | null {
     const wanted = new Set(keys.map((key) => key.toLowerCase()));
@@ -348,12 +355,12 @@ export function ShipOrderDraftPanel({
     const selectedTowCandidate = towTargetShipId !== null
         ? towCandidates.find((candidate) => candidate.shipId === towTargetShipId) ?? null
         : null;
+    const missionIsPreset = isPresetMission(mission);
+    const showCurrentNumericMission = isNumericMissionAlias(mission)
+        && !COMMON_MISSIONS.includes(mission);
 
     return (
         <div className="order-draft-panel">
-            <datalist id={`ship-missions-${shipId}`}>
-                {COMMON_MISSIONS.map((value) => <option key={value} value={value} />)}
-            </datalist>
             <div className="operational-intel-callout order-draft-callout">
                 <strong>{draft ? "Local draft orders" : "Plan this ship"}</strong>
                 <span>Local draft only. Nothing is sent to Planets.nu yet.</span>
@@ -365,7 +372,35 @@ export function ShipOrderDraftPanel({
                 <div className="order-draft-row order-draft-row-heading"><span>Order</span><span>Upstream</span><span>Draft</span></div>
                 <div className="order-draft-row">
                     <strong>Mission</strong><span>{factualMission ?? "—"}</span>
-                    <input aria-label="Draft mission" disabled={saving} list={`ship-missions-${shipId}`} maxLength={80} onChange={(event) => changeMission(event.target.value)} value={mission} />
+                    <div className="order-draft-mission-editor">
+                        <select
+                            aria-label="Draft mission"
+                            disabled={saving}
+                            onChange={(event) => {
+                                const next = event.target.value;
+                                if (next === CUSTOM_MISSION_VALUE) {
+                                    if (missionIsPreset) changeMission("");
+                                    return;
+                                }
+                                changeMission(next);
+                            }}
+                            value={missionIsPreset ? mission : CUSTOM_MISSION_VALUE}
+                        >
+                            {showCurrentNumericMission && <option value={mission}>{mission} (current upstream)</option>}
+                            {COMMON_MISSIONS.map((value) => <option key={value} value={value}>{value}</option>)}
+                            <option value={CUSTOM_MISSION_VALUE}>Custom mission…</option>
+                        </select>
+                        {!missionIsPreset && (
+                            <input
+                                aria-label="Custom draft mission"
+                                disabled={saving}
+                                maxLength={80}
+                                onChange={(event) => changeMission(event.target.value)}
+                                placeholder="Nu mission display name"
+                                value={mission}
+                            />
+                        )}
+                    </div>
                 </div>
                 <div className="order-draft-row">
                     <strong>Primary enemy</strong><span>{factualPrimaryEnemyId && factualPrimaryEnemyId > 0 ? `Player ${factualPrimaryEnemyId}` : "None"}</span>
@@ -434,7 +469,7 @@ export function ShipOrderDraftPanel({
             {pickingWaypoint && <p className="order-draft-map-hint">Click a destination on the Starmap. Dragging still pans the map.</p>}
             {pickingInterceptTarget && <p className="order-draft-map-hint">Click the visible target ship on the Starmap.</p>}
             {isTowMission(mission) && <p className="order-draft-map-hint">Tow target selection is limited to ships visibly colocated with this tower in the latest factual snapshot.</p>}
-            <p className="order-draft-provenance">Common missions are suggested. Special race/hull missions may be typed by their Nu display name; numeric write-back mapping remains intentionally separate.</p>
+            <p className="order-draft-provenance">Choose common missions from the list. Special race/hull missions can be entered through Custom mission; numeric write-back mapping remains intentionally separate.</p>
             {draft && <p className="order-draft-provenance">Draft based on factual batch #{draft.base_batch_id}.</p>}
         </div>
     );
