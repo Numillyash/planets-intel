@@ -3,8 +3,9 @@ from typing import Literal
 from pydantic import BaseModel
 
 
-PredictionPhase = Literal["move_most", "intercept"]
-PredictionMode = Literal["waypoint", "intercept"]
+PredictionPhase = Literal["tow", "move_most", "intercept"]
+PredictionMode = Literal["tow", "waypoint", "intercept"]
+TowRole = Literal["tower", "target"]
 
 
 class ShipMovementPrediction(BaseModel):
@@ -46,6 +47,10 @@ class ShipMovementPrediction(BaseModel):
     fuel_limited: bool | None = None
     fuel_basis: str = "not_evaluated"
     fuel_reason: str = "Fuel evaluation was not available for this movement item."
+    tow_role: TowRole | None = None
+    tow_tower_ship_id: int | None = None
+    tow_target_ship_id: int | None = None
+    tow_lock_status: str | None = None
     reason: str
     warnings: list[str]
 
