@@ -68,6 +68,12 @@ export function DiplomacyPanel({
                 </div>
             </div>
 
+            <div className="loading-card" style={{ marginBottom: 12 }}>
+                Planets.nu diplomacy is read-only in IntelBoard right now. Changing Share Intel,
+                Safe Passage, Full Alliance, or other Nu relations is not sent upstream until the
+                current /game/save relation serialization has been captured and verified.
+            </div>
+
             <div className="diplomacy-cards">
                 {rows.map(({ player, relation }) => (
                     <article
