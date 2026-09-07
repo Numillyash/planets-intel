@@ -129,16 +129,24 @@ function replaceChatChannelInLocation(channelKey: string): void {
 }
 
 
+function factualRecipientIdsForChannel(channel: CommunicationChannel): number[] {
+    if (channel.kind !== "private") return [];
+    for (const item of channel.items) {
+        const ids = normalizedConversationPlayerIds(item);
+        if (ids.length > 0) return ids;
+    }
+    return [];
+}
+
+
 function recipientIdsForChannel(
     channel: CommunicationChannel,
     players: PlayerInfo[],
 ): number[] {
     if (channel.kind !== "private") return [];
 
-    for (const item of channel.items) {
-        const ids = normalizedConversationPlayerIds(item);
-        if (ids.length > 0) return ids;
-    }
+    const factualIds = factualRecipientIdsForChannel(channel);
+    if (factualIds.length > 0) return factualIds;
 
     const item = channel.items.find((candidate) =>
         candidate.conversation_with_id !== null
@@ -358,18 +366,30 @@ export function CommunicationsDashboardPanel(props: {
     }
 
     function replyToMessage(item: GameActivityItem, channel: CommunicationChannel) {
-        setReplyTarget(item);
         setSendError(null);
         setSendNotice(null);
-        setSendWarning(null);
         if (channel.kind === "private") {
+            const exactRecipients = factualRecipientIdsForChannel(channel)
+                .filter((slotId) => recipientPlayers.some((player) => player.slot_id === slotId));
             const channelRecipients = recipientIdsForChannel(channel, recipientPlayers)
                 .filter((slotId) => recipientPlayers.some((player) => player.slot_id === slotId));
             setComposeMode("private");
             setRecipientIds(channelRecipients);
+            if (exactRecipients.length > 0) {
+                setReplyTarget(item);
+                setSendWarning(null);
+            } else {
+                setReplyTarget(null);
+                setSendWarning(
+                    `Exact participants for Planets.nu thread #${replyThreadRootId(item)} are not factually resolved. `
+                    + "A threaded reply is blocked; this composer will send a new private message to the selected roster recipient(s) instead.",
+                );
+            }
         } else {
+            setReplyTarget(item);
             setComposeMode("general");
             setRecipientIds([]);
+            setSendWarning(null);
         }
         setComposeOpen(true);
         scrollComposerIntoView();
@@ -471,8 +491,9 @@ export function CommunicationsDashboardPanel(props: {
                     <div className="eyebrow">Observer communications</div>
                     <h2>Communications</h2>
                     <p>
-                        Public Board and direct conversations are separated. Reply actions preserve
-                        the factual Planets.nu thread root and exact private participant set.
+                        Public Board and direct conversations are separated. Threaded private replies
+                        are used only when the factual participant set is resolved; otherwise the
+                        composer safely falls back to a new private message.
                     </p>
                 </div>
                 <button
@@ -738,7 +759,10 @@ export function CommunicationsDashboardPanel(props: {
                                                     style={{ padding: "4px 9px", minHeight: 0 }}
                                                     type="button"
                                                 >
-                                                    Reply
+                                                    {selectedChannel.kind === "private"
+                                                        && factualRecipientIdsForChannel(selectedChannel).length === 0
+                                                        ? "Message"
+                                                        : "Reply"}
                                                 </button>
                                             )}
                                         </footer>
