@@ -39,10 +39,22 @@ interface MissionEligibilityContext {
     canCloak: boolean | null;
 }
 
+const MISSION_FIELD_NAMES = new Set([
+    "mission",
+    "missionname",
+    "missions",
+    "specialmission",
+    "specialmissions",
+]);
+
 function normalized(value: unknown): string {
     return typeof value === "string"
         ? value.trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()
         : "";
+}
+
+function normalizedKey(value: string): string {
+    return value.toLowerCase().replace(/[^a-z0-9]+/g, "");
 }
 
 function integer(record: Record<string, unknown> | null, ...keys: string[]): number | null {
@@ -109,6 +121,22 @@ function stringsFromSpecialFields(record: Record<string, unknown> | null): strin
     return result;
 }
 
+function explicitMissionNames(record: Record<string, unknown> | null): string[] {
+    if (record === null) return [];
+    const result = new Set<string>();
+    for (const [key, value] of Object.entries(record)) {
+        if (!MISSION_FIELD_NAMES.has(normalizedKey(key))) continue;
+        const candidates = Array.isArray(value) ? value : [value];
+        for (const candidate of candidates) {
+            if (typeof candidate !== "string") continue;
+            const name = candidate.trim();
+            if (!name || /^\d+$/.test(name)) continue;
+            result.add(name);
+        }
+    }
+    return Array.from(result);
+}
+
 function includesPhrase(text: string, phrase: string): boolean {
     return normalized(text).includes(normalized(phrase));
 }
@@ -124,35 +152,31 @@ function capabilityCount(
 }
 
 function addMission(target: Set<string>, mission: string, allowed: boolean = true): void {
-    if (allowed) target.add(mission);
+    const value = mission.trim();
+    if (allowed && value) target.add(value);
 }
 
 function advantageMissionNames(name: string): string[] {
-    switch (normalized(name)) {
-        case "build clans": return ["Build Clans"];
-        case "build fighters": return ["Build Fighters"];
-        case "cloak and intercept": return ["Cloak and Intercept"];
-        case "dark sense": return ["Dark Sense"];
-        case "destroy planet": return ["Destroy Planet"];
-        case "hide in warp well": return ["Hide in Warp Well"];
-        case "hisssss":
-        case "hiss": return ["Hisssss!"];
-        case "web mines":
-        case "lay web mines":
-        case "lay webmines": return ["Lay Web Mines"];
-        case "pillage planet": return ["Pillage Planet"];
-        case "plunder planet": return ["Plunder Planet"];
-        case "move minefields": return ["Pull Minefield", "Push Minefield"];
-        case "rebel ground attack": return ["Rebel Ground Attack"];
-        case "repair self": return ["Repair Self"];
-        case "rob ship": return ["Rob Ship"];
-        case "starbase fighter transfer": return ["Send Fighters", "Receive Fighters"];
-        case "super refit": return ["Super Refit"];
-        case "super spy": return ["Super Spy"];
-        case "swarm":
-        case "swarming": return ["Swarm"];
-        default: return [];
-    }
+    const value = normalized(name);
+    if (value.includes("build clans")) return ["Build Clans"];
+    if (value.includes("build fighters")) return ["Build Fighters"];
+    if (value.includes("cloak and intercept")) return ["Cloak and Intercept"];
+    if (value.includes("dark sense")) return ["Dark Sense"];
+    if (value.includes("destroy planet")) return ["Destroy Planet"];
+    if (value.includes("hide in warp well")) return ["Hide in Warp Well"];
+    if (value.includes("hiss")) return ["Hisssss!"];
+    if (value.includes("web mine")) return ["Lay Web Mines"];
+    if (value.includes("pillage")) return ["Pillage Planet"];
+    if (value.includes("plunder")) return ["Plunder Planet"];
+    if (value.includes("move minefield")) return ["Pull Minefield", "Push Minefield"];
+    if (value.includes("rebel ground attack")) return ["Rebel Ground Attack"];
+    if (value.includes("repair self")) return ["Repair Self"];
+    if (value.includes("rob ship")) return ["Rob Ship"];
+    if (value.includes("fighter transfer")) return ["Send Fighters", "Receive Fighters"];
+    if (value.includes("super refit")) return ["Super Refit"];
+    if (value.includes("super spy")) return ["Super Spy"];
+    if (value.includes("swarm")) return ["Swarm"];
+    return [];
 }
 
 function missionAllowedForShip(
@@ -190,61 +214,6 @@ function missionAllowedForShip(
     return true;
 }
 
-function defaultRaceMissions(
-    raceId: number | null,
-    capabilities: {
-        beams: number | null;
-        launchers: number | null;
-        bays: number | null;
-        canCloak: boolean | null;
-    },
-): string[] {
-    if (raceId === null) return [];
-    const result = new Set<string>();
-    switch (raceId) {
-        case 1:
-            addMission(result, "Super Refit");
-            break;
-        case 2:
-            addMission(result, "Hisssss!", capabilities.beams !== null && capabilities.beams > 0);
-            break;
-        case 3:
-            addMission(result, "Super Spy");
-            addMission(result, "Cloak and Intercept", capabilities.canCloak === true);
-            break;
-        case 4:
-            addMission(result, "Pillage Planet", capabilities.beams !== null && capabilities.beams > 0);
-            break;
-        case 5:
-            addMission(result, "Rob Ship", capabilities.beams !== null && capabilities.beams > 0);
-            break;
-        case 6:
-            addMission(result, "Repair Self");
-            break;
-        case 7:
-            addMission(result, "Lay Web Mines", capabilities.launchers !== null && capabilities.launchers > 0);
-            break;
-        case 8:
-            addMission(result, "Dark Sense");
-            break;
-        case 9:
-            addMission(result, "Build Fighters", capabilities.bays !== null && capabilities.bays > 0);
-            break;
-        case 10:
-            addMission(result, "Rebel Ground Attack");
-            break;
-        case 11:
-            addMission(result, "Build Fighters", capabilities.bays !== null && capabilities.bays > 0);
-            break;
-        case 12:
-            addMission(result, "Swarm");
-            break;
-        default:
-            break;
-    }
-    return Array.from(result);
-}
-
 export function buildShipMissionGroups(context: ShipMissionCatalogContext): ShipMissionGroup[] {
     const { owner, hullId, shipPayload, ruleCatalog } = context;
     const hull = ruleCatalog ? recordById(ruleCatalog.hulls, hullId) : null;
@@ -279,32 +248,53 @@ export function buildShipMissionGroups(context: ShipMissionCatalogContext): Ship
         hullMass,
         canCloak,
     };
-    const raceMissions = new Set(defaultRaceMissions(owner?.race_id ?? null, {
-        beams,
-        launchers,
-        bays,
-        canCloak,
-    }));
+    const raceMissions = new Set<string>();
 
+    // Prefer factual game configuration. Player activeadvantages and the race
+    // baseadvantages list are Nu's game-specific availability evidence; this
+    // deliberately avoids assuming that every classic racial ability is enabled
+    // in custom/campaign games.
     if (ruleCatalog && owner) {
         const activeIds = commaSeparatedIds(owner.active_advantages);
         for (const id of idsFromUnknown(race?.baseadvantages)) activeIds.add(id);
+
+        for (const missionName of explicitMissionNames(race)) {
+            addMission(
+                raceMissions,
+                missionName,
+                missionAllowedForShip(missionName, eligibility),
+            );
+        }
+
         for (const advantage of ruleCatalog.advantages) {
             const advantageId = integer(advantage, "id");
             if (advantageId === null || !activeIds.has(advantageId)) continue;
+
+            const missionNames = new Set(explicitMissionNames(advantage));
             const advantageNameValue = advantage.name;
-            const name = typeof advantageNameValue === "string" ? advantageNameValue : "";
-            for (const mission of advantageMissionNames(name)) {
+            if (typeof advantageNameValue === "string") {
+                for (const missionName of advantageMissionNames(advantageNameValue)) {
+                    missionNames.add(missionName);
+                }
+            }
+            for (const missionName of missionNames) {
                 addMission(
                     raceMissions,
-                    mission,
-                    missionAllowedForShip(mission, eligibility),
+                    missionName,
+                    missionAllowedForShip(missionName, eligibility),
                 );
             }
         }
     }
 
     const hullMissions = new Set<string>();
+    for (const missionName of explicitMissionNames(hull)) {
+        addMission(
+            hullMissions,
+            missionName,
+            missionAllowedForShip(missionName, eligibility),
+        );
+    }
     if (canCloak === true) addMission(hullMissions, "Cloak");
     if (includesPhrase(hullSpecial, "Bio Scan") || includesPhrase(hullSpecial, "Bioscan")) {
         addMission(hullMissions, "Bio Scan");
@@ -330,10 +320,13 @@ export function buildShipMissionGroups(context: ShipMissionCatalogContext): Ship
         { label: "Common", missions: Array.from(COMMON_SHIP_MISSIONS) },
     ];
     if (raceMissions.size > 0) {
-        groups.push({ label: "Race & active advantages", missions: Array.from(raceMissions) });
+        groups.push({
+            label: "Race & active advantages",
+            missions: Array.from(raceMissions).sort(),
+        });
     }
     if (hullMissions.size > 0) {
-        groups.push({ label: "Hull abilities", missions: Array.from(hullMissions) });
+        groups.push({ label: "Hull abilities", missions: Array.from(hullMissions).sort() });
     }
     return groups;
 }
