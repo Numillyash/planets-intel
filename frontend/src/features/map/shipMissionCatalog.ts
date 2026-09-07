@@ -1,5 +1,5 @@
-import type { PlayerInfo } from "../../types/api";
 import type { GameRuleCatalogResponse } from "../../api/ruleCatalog";
+import type { PlayerInfo } from "../../types/api";
 
 export const COMMON_SHIP_MISSIONS = [
     "Exploration",
@@ -26,6 +26,17 @@ export interface ShipMissionCatalogContext {
     hullId: number | null;
     shipPayload: Record<string, unknown>;
     ruleCatalog: GameRuleCatalogResponse | null;
+}
+
+interface MissionEligibilityContext {
+    raceId: number | null;
+    hullName: string;
+    hullSpecial: string;
+    beams: number | null;
+    launchers: number | null;
+    bays: number | null;
+    hullMass: number | null;
+    canCloak: boolean | null;
 }
 
 function normalized(value: unknown): string {
@@ -146,27 +157,30 @@ function advantageMissionNames(name: string): string[] {
 
 function missionAllowedForShip(
     mission: string,
-    *,
-    raceId: number | null,
-    hullName: string,
-    hullSpecial: string,
-    beams: number | null,
-    launchers: number | null,
-    bays: number | null,
-    hullMass: number | null,
-    canCloak: boolean | null,
+    context: MissionEligibilityContext,
 ): boolean {
+    const {
+        raceId,
+        hullName,
+        hullSpecial,
+        beams,
+        launchers,
+        bays,
+        hullMass,
+        canCloak,
+    } = context;
+
     if (["Hisssss!", "Pillage Planet", "Plunder Planet", "Rob Ship"].includes(mission)) {
-        return beams !== 0;
+        return beams !== null && beams > 0;
     }
-    if (mission === "Lay Web Mines") return launchers !== 0;
+    if (mission === "Lay Web Mines") return launchers !== null && launchers > 0;
     if (mission === "Build Fighters") {
         // Rebel fighter construction is automatic and does not need this mission.
         if (raceId === 10) return false;
-        return bays !== 0;
+        return bays !== null && bays > 0;
     }
-    if (mission === "Cloak and Intercept") return canCloak !== false;
-    if (mission === "Hide in Warp Well") return hullMass === null || hullMass < 60;
+    if (mission === "Cloak and Intercept") return canCloak === true;
+    if (mission === "Hide in Warp Well") return hullMass !== null && hullMass < 60;
     if (mission === "Destroy Planet") {
         return includesPhrase(hullName, "Gorbie") || includesPhrase(hullSpecial, "Destroy Planet");
     }
@@ -192,35 +206,35 @@ function defaultRaceMissions(
             addMission(result, "Super Refit");
             break;
         case 2:
-            addMission(result, "Hisssss!", capabilities.beams !== 0);
+            addMission(result, "Hisssss!", capabilities.beams !== null && capabilities.beams > 0);
             break;
         case 3:
             addMission(result, "Super Spy");
-            addMission(result, "Cloak and Intercept", capabilities.canCloak !== false);
+            addMission(result, "Cloak and Intercept", capabilities.canCloak === true);
             break;
         case 4:
-            addMission(result, "Pillage Planet", capabilities.beams !== 0);
+            addMission(result, "Pillage Planet", capabilities.beams !== null && capabilities.beams > 0);
             break;
         case 5:
-            addMission(result, "Rob Ship", capabilities.beams !== 0);
+            addMission(result, "Rob Ship", capabilities.beams !== null && capabilities.beams > 0);
             break;
         case 6:
             addMission(result, "Repair Self");
             break;
         case 7:
-            addMission(result, "Lay Web Mines", capabilities.launchers !== 0);
+            addMission(result, "Lay Web Mines", capabilities.launchers !== null && capabilities.launchers > 0);
             break;
         case 8:
             addMission(result, "Dark Sense");
             break;
         case 9:
-            addMission(result, "Build Fighters", capabilities.bays !== 0);
+            addMission(result, "Build Fighters", capabilities.bays !== null && capabilities.bays > 0);
             break;
         case 10:
             addMission(result, "Rebel Ground Attack");
             break;
         case 11:
-            addMission(result, "Build Fighters", capabilities.bays !== 0);
+            addMission(result, "Build Fighters", capabilities.bays !== null && capabilities.bays > 0);
             break;
         case 12:
             addMission(result, "Swarm");
@@ -235,10 +249,16 @@ export function buildShipMissionGroups(context: ShipMissionCatalogContext): Ship
     const { owner, hullId, shipPayload, ruleCatalog } = context;
     const hull = ruleCatalog ? recordById(ruleCatalog.hulls, hullId) : null;
     const race = ruleCatalog && owner ? recordById(ruleCatalog.races, owner.race_id) : null;
-    const hullName = typeof hull?.name === "string" ? hull.name : "";
+    const hullNameValue = hull?.name;
+    const hullName = typeof hullNameValue === "string" ? hullNameValue : "";
     const hullSpecial = stringsFromSpecialFields(hull).join("\n");
     const beams = capabilityCount(shipPayload, hull, ["beams", "beamcount"], ["beams"]);
-    const launchers = capabilityCount(shipPayload, hull, ["tubes", "launchers", "launchercount"], ["launchers", "tubes"]);
+    const launchers = capabilityCount(
+        shipPayload,
+        hull,
+        ["tubes", "launchers", "launchercount"],
+        ["launchers", "tubes"],
+    );
     const bays = capabilityCount(shipPayload, hull, ["bays", "fighterbays"], ["fighterbays", "bays"]);
     const hullMass = integer(hull, "mass");
     const canCloak = booleanValue(hull, "cancloak")
@@ -249,6 +269,16 @@ export function buildShipMissionGroups(context: ShipMissionCatalogContext): Ship
             ? true
             : null);
 
+    const eligibility: MissionEligibilityContext = {
+        raceId: owner?.race_id ?? null,
+        hullName,
+        hullSpecial,
+        beams,
+        launchers,
+        bays,
+        hullMass,
+        canCloak,
+    };
     const raceMissions = new Set(defaultRaceMissions(owner?.race_id ?? null, {
         beams,
         launchers,
@@ -262,18 +292,14 @@ export function buildShipMissionGroups(context: ShipMissionCatalogContext): Ship
         for (const advantage of ruleCatalog.advantages) {
             const advantageId = integer(advantage, "id");
             if (advantageId === null || !activeIds.has(advantageId)) continue;
-            const name = typeof advantage.name === "string" ? advantage.name : "";
+            const advantageNameValue = advantage.name;
+            const name = typeof advantageNameValue === "string" ? advantageNameValue : "";
             for (const mission of advantageMissionNames(name)) {
-                addMission(raceMissions, mission, missionAllowedForShip(mission, {
-                    raceId: owner.race_id,
-                    hullName,
-                    hullSpecial,
-                    beams,
-                    launchers,
-                    bays,
-                    hullMass,
-                    canCloak,
-                }));
+                addMission(
+                    raceMissions,
+                    mission,
+                    missionAllowedForShip(mission, eligibility),
+                );
             }
         }
     }
@@ -294,11 +320,11 @@ export function buildShipMissionGroups(context: ShipMissionCatalogContext): Ship
 
     // A contextual item should not be repeated in more than one group.
     const common = new Set<string>(COMMON_SHIP_MISSIONS);
-    for (const mission of common) {
-        raceMissions.delete(mission);
-        hullMissions.delete(mission);
+    for (const missionName of common) {
+        raceMissions.delete(missionName);
+        hullMissions.delete(missionName);
     }
-    for (const mission of raceMissions) hullMissions.delete(mission);
+    for (const missionName of raceMissions) hullMissions.delete(missionName);
 
     const groups: ShipMissionGroup[] = [
         { label: "Common", missions: Array.from(COMMON_SHIP_MISSIONS) },
