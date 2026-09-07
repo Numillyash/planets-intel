@@ -26,6 +26,20 @@ interface ShipTargetCandidate { shipId: number; name: string | null; x: number; 
 
 const CUSTOM_MISSION_VALUE = "__custom_mission__";
 
+// Planets.nu stores the ordinary ship missions as zero-based numeric ids.
+// Keep this deliberately limited to the core ids we can identify exactly;
+// unknown/special ids remain visible as Mission #N rather than being guessed.
+const CORE_MISSION_NAME_BY_ID = new Map<number, string>([
+    [0, "Exploration"],
+    [1, "Mine Sweep"],
+    [2, "Lay Mines"],
+    [3, "Kill!"],
+    [4, "Sensor Sweep"],
+    [5, "Land and Disassemble"],
+    [6, "Try to Tow"],
+    [7, "Intercept"],
+]);
+
 function waypointLabel(x: number | null, y: number | null): string {
     return x !== null && y !== null ? `${x}, ${y}` : "—";
 }
@@ -64,6 +78,19 @@ function payloadNumber(payload: Record<string, unknown>, ...keys: string[]): num
     if (raw === null) return null;
     const value = Number(raw);
     return Number.isFinite(value) ? value : null;
+}
+
+function missionNameFromId(missionId: number | null): string | null {
+    if (missionId === null || !Number.isInteger(missionId) || missionId < 0) return null;
+    return CORE_MISSION_NAME_BY_ID.get(missionId) ?? `Mission #${missionId}`;
+}
+
+function normalizeMissionDisplay(value: string | null): string | null {
+    if (value === null) return null;
+    const trimmed = value.trim();
+    const match = trimmed.match(/^mission #(\d+)$/i);
+    if (match === null) return trimmed || null;
+    return missionNameFromId(Number(match[1])) ?? trimmed;
 }
 
 export function ShipOrderDraftPanel({
@@ -131,12 +158,10 @@ export function ShipOrderDraftPanel({
             const payload = factualShip?.payload ?? {};
             const factualCode = value?.upstream_friendly_code
                 ?? payloadString(payload, "friendlycode", "friendly_code", "fcode");
-            const factualMissionName = value?.upstream_mission
-                ?? payloadString(payload, "missionname", "mission_name")
-                ?? (() => {
-                    const id = payloadNumber(payload, "mission");
-                    return id !== null ? `Mission #${id}` : null;
-                })();
+            const namedMission = value?.upstream_mission
+                ?? payloadString(payload, "missionname", "mission_name");
+            const factualMissionName = normalizeMissionDisplay(namedMission)
+                ?? missionNameFromId(payloadNumber(payload, "mission"));
             const factualEnemy = value?.upstream_primary_enemy_id
                 ?? payloadNumber(payload, "enemy", "primaryenemy", "primary_enemy_id");
             const factualTowTarget = value?.upstream_tow_target_ship_id
@@ -180,7 +205,7 @@ export function ShipOrderDraftPanel({
             setTowCandidates(colocatedTowCandidates);
             setFriendlyCode(value?.friendly_code ?? factualCode ?? "");
             setMission(
-                value?.mission
+                normalizeMissionDisplay(value?.mission ?? null)
                 ?? (value?.movement_mode === "intercept" ? "Intercept" : null)
                 ?? factualMissionName
                 ?? "Exploration",
@@ -286,7 +311,7 @@ export function ShipOrderDraftPanel({
         const savedTarget = draft?.intercept_target_ship_id ?? null;
         const savedTowTarget = draft?.tow_target_ship_id ?? factualTowTargetShipId;
         const savedCode = draft?.friendly_code ?? factualFriendlyCode ?? "";
-        const savedMission = draft?.mission
+        const savedMission = normalizeMissionDisplay(draft?.mission ?? null)
             ?? (savedMode === "intercept" ? "Intercept" : factualMission ?? "Exploration");
         const savedEnemy = draft?.primary_enemy_id ?? factualPrimaryEnemyId ?? 0;
         return warp !== savedWarp
