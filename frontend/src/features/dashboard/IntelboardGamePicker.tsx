@@ -73,6 +73,24 @@ function shortUsername(username: string): string {
     return first.length > 11 ? `${first.slice(0, 10)}…` : first;
 }
 
+function turnRailRaceLabel(raceId: number): string {
+    switch (raceName(raceId)) {
+        case "Federation": return "Fed";
+        case "Lizards": return "Lizard";
+        case "Bird Men": return "Bird";
+        case "Fury": return "Fury";
+        case "Privateers": return "Priv";
+        case "Cyborg": return "Borg";
+        case "Crystal People": return "Crystal";
+        case "Evil Empire": return "Empire";
+        case "Robots": return "Robot";
+        case "Rebels": return "Rebel";
+        case "Colonies": return "Colony";
+        case "Horwasp": return "Wasp";
+        default: return raceName(raceId);
+    }
+}
+
 function isRunning(game: AccountGameSummary): boolean {
     return game.status_id === 2 || game.status_name.toLowerCase() === "running";
 }
@@ -311,7 +329,7 @@ function PlayerTurnRail({
 
     return (
         <div
-            aria-label={`Turn status for ${slotCount} player slots`}
+            aria-label={`Race and turn status for ${slotCount} player slots`}
             className={`intelboard-turn-rail${densityClass}`}
         >
             {Array.from({ length: slotCount }, (_, index) => {
@@ -335,7 +353,7 @@ function PlayerTurnRail({
                                 className={`intelboard-turn-cell is-${state}`}
                                 title={`Slot ${slot} · no public player record · ${turnStateLabel(state)}`}
                             >
-                                {slot}
+                                #{slot}
                             </span>
                         </span>
                     );
@@ -352,7 +370,7 @@ function PlayerTurnRail({
                             className={`intelboard-turn-cell is-${state}${missedClass}`}
                             title={`${raceName(player.race_id)} / slot ${slot} / ${player.username.trim() || "computer"} · ${turnStateLabel(state)}${missedLabel ? ` · ${missedLabel}` : ""}`}
                         >
-                            {slot}
+                            {turnRailRaceLabel(player.race_id)}
                         </span>
                         {managedLabel !== null && (
                             <span
