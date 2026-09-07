@@ -103,8 +103,45 @@ function normalizedConversationPlayerIds(item: GameActivityItem): number[] {
 }
 
 
-function privateChannelKey(item: GameActivityItem): string {
-    const playerIds = normalizedConversationPlayerIds(item);
+function displayNameMatchesPlayer(value: string, player: PlayerInfo): boolean {
+    const display = value.trim().toLocaleLowerCase();
+    const username = player.username.trim().toLocaleLowerCase();
+    if (!display || !username) return false;
+    return display === username
+        || (display.startsWith(`${username} (`) && display.endsWith(")"));
+}
+
+
+function canonicalPrivatePlayerIds(
+    item: GameActivityItem,
+    players: PlayerInfo[],
+): number[] {
+    const factualIds = normalizedConversationPlayerIds(item);
+    if (factualIds.length > 0) return factualIds;
+
+    if (item.conversation_with_id !== null) {
+        const player = players.find(
+            (candidate) => candidate.account_id === item.conversation_with_id,
+        );
+        if (player) return [player.slot_id];
+    }
+
+    if (item.conversation_with_name) {
+        const matches = players.filter((player) =>
+            displayNameMatchesPlayer(item.conversation_with_name ?? "", player),
+        );
+        if (matches.length === 1) return [matches[0].slot_id];
+    }
+
+    return [];
+}
+
+
+function privateChannelKey(
+    item: GameActivityItem,
+    players: PlayerInfo[],
+): string {
+    const playerIds = canonicalPrivatePlayerIds(item, players);
     if (playerIds.length > 0) return `private:slots:${playerIds.join(",")}`;
     if (item.conversation_with_id !== null) return `private:${item.conversation_with_id}`;
     if (item.conversation_with_name) return `private:name:${item.conversation_with_name}`;
@@ -112,7 +149,19 @@ function privateChannelKey(item: GameActivityItem): string {
 }
 
 
-function privateChannelLabel(item: GameActivityItem): string {
+function privateChannelLabel(
+    item: GameActivityItem,
+    players: PlayerInfo[],
+): string {
+    const playerIds = canonicalPrivatePlayerIds(item, players);
+    if (playerIds.length > 0) {
+        const matched = playerIds
+            .map((slotId) => players.find((player) => player.slot_id === slotId))
+            .filter((player): player is PlayerInfo => player !== undefined);
+        if (matched.length === playerIds.length) {
+            return matched.map((player) => player.username).join(" + ");
+        }
+    }
     return item.conversation_with_name ?? "Private thread";
 }
 
@@ -139,6 +188,32 @@ function factualRecipientIdsForChannel(channel: CommunicationChannel): number[] 
 }
 
 
+function replyThreadRootId(item: GameActivityItem): number {
+    if (item.thread_root_id !== null && item.thread_root_id > 0) {
+        return item.thread_root_id;
+    }
+    if (item.parent_id !== null && item.parent_id > 0) {
+        return item.parent_id;
+    }
+    return item.activity_id;
+}
+
+
+function factualRecipientIdsForThread(
+    item: GameActivityItem,
+    channel: CommunicationChannel,
+): number[] {
+    if (channel.kind !== "private") return [];
+    const rootId = replyThreadRootId(item);
+    for (const candidate of channel.items) {
+        if (replyThreadRootId(candidate) !== rootId) continue;
+        const ids = normalizedConversationPlayerIds(candidate);
+        if (ids.length > 0) return ids;
+    }
+    return [];
+}
+
+
 function recipientIdsForChannel(
     channel: CommunicationChannel,
     players: PlayerInfo[],
@@ -148,25 +223,11 @@ function recipientIdsForChannel(
     const factualIds = factualRecipientIdsForChannel(channel);
     if (factualIds.length > 0) return factualIds;
 
-    const item = channel.items.find((candidate) =>
-        candidate.conversation_with_id !== null
-        || candidate.conversation_with_name !== null,
-    );
-    if (item === undefined) return [];
-
-    if (item.conversation_with_id !== null) {
-        const player = players.find(
-            (candidate) => candidate.account_id === item.conversation_with_id,
-        );
-        return player ? [player.slot_id] : [];
+    for (const item of channel.items) {
+        const ids = canonicalPrivatePlayerIds(item, players);
+        if (ids.length > 0) return ids;
     }
-
-    const name = item.conversation_with_name?.trim().toLocaleLowerCase();
-    if (!name) return [];
-    const player = players.find(
-        (candidate) => candidate.username.trim().toLocaleLowerCase() === name,
-    );
-    return player ? [player.slot_id] : [];
+    return [];
 }
 
 
@@ -174,17 +235,6 @@ function replyPreview(item: GameActivityItem): string {
     const text = readableMessage(item.message).replace(/\s+/g, " ").trim();
     if (text.length <= 180) return text;
     return `${text.slice(0, 177)}…`;
-}
-
-
-function replyThreadRootId(item: GameActivityItem): number {
-    if (item.thread_root_id !== null && item.thread_root_id > 0) {
-        return item.thread_root_id;
-    }
-    if (item.parent_id !== null && item.parent_id > 0) {
-        return item.parent_id;
-    }
-    return item.activity_id;
 }
 
 
@@ -287,10 +337,13 @@ export function CommunicationsDashboardPanel(props: {
 
         for (const item of items) {
             if (item.kind !== "private_message") continue;
-            const key = privateChannelKey(item);
+            const key = privateChannelKey(item, players);
             const existing = privateGroups.get(key);
             if (existing) existing.items.push(item);
-            else privateGroups.set(key, { label: privateChannelLabel(item), items: [item] });
+            else privateGroups.set(
+                key,
+                { label: privateChannelLabel(item, players), items: [item] },
+            );
         }
 
         const privateChannels = [...privateGroups.entries()]
@@ -320,7 +373,7 @@ export function CommunicationsDashboardPanel(props: {
                 latestSortKey: newestKey(activity),
             },
         ];
-    }, [items]);
+    }, [items, players]);
 
     useEffect(() => {
         if (loading) return;
@@ -369,7 +422,7 @@ export function CommunicationsDashboardPanel(props: {
         setSendError(null);
         setSendNotice(null);
         if (channel.kind === "private") {
-            const exactRecipients = factualRecipientIdsForChannel(channel)
+            const exactRecipients = factualRecipientIdsForThread(item, channel)
                 .filter((slotId) => recipientPlayers.some((player) => player.slot_id === slotId));
             const channelRecipients = recipientIdsForChannel(channel, recipientPlayers)
                 .filter((slotId) => recipientPlayers.some((player) => player.slot_id === slotId));
@@ -760,7 +813,7 @@ export function CommunicationsDashboardPanel(props: {
                                                     type="button"
                                                 >
                                                     {selectedChannel.kind === "private"
-                                                        && factualRecipientIdsForChannel(selectedChannel).length === 0
+                                                        && factualRecipientIdsForThread(item, selectedChannel).length === 0
                                                         ? "Message"
                                                         : "Reply"}
                                                 </button>
