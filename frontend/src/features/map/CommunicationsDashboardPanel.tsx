@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { getGameActivity, sendGameMessage } from "../../api/activity";
 import { getGame, getPlanetsAccounts } from "../../api/client";
+import { raceName } from "../../lib/races";
 import type { PlayerInfo } from "../../types/api";
 import type { GameActivityItem } from "../../types/activity";
 import "./operational-shell-v2.css";
@@ -159,7 +160,9 @@ function privateChannelLabel(
             .map((slotId) => players.find((player) => player.slot_id === slotId))
             .filter((player): player is PlayerInfo => player !== undefined);
         if (matched.length === playerIds.length) {
-            return matched.map((player) => player.username).join(" + ");
+            return matched
+                .map((player) => `${raceName(player.race_id)} (${player.username})`)
+                .join(" + ");
         }
     }
     return item.conversation_with_name ?? "Private thread";
