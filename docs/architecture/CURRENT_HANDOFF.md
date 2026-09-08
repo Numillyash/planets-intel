@@ -1,6 +1,6 @@
 # Planets Intel — Current Handoff
 
-Updated: 2026-09-07
+Updated: 2026-09-08
 
 GitHub is the source of truth. Active development remains on `feature/operational-ui`. A fresh chat must read this file together with `NEW_CHAT_START.md`, `PROJECT_STATE.md` and `BATTLE_PLANNER_HANDOFF_2026-08-25.md`, then inspect the actual branch HEAD and `/opt/planets-intel` before deploying.
 
@@ -13,26 +13,30 @@ GitHub is the source of truth. Active development remains on `feature/operationa
 - Production backend image embeds the React/Vite frontend.
 - Never infer server HEAD from chat history; inspect it before every deploy.
 
-Current GitHub source HEAD at this checkpoint:
+GitHub source inspected for this update:
 
 ```text
-1c42770101472e5605c26ee4f6ac504907bd7caa
-fix: use literal Alembic Tow revision id
+e3237cbf3d6e876dfc02ea6849702243289d1693
+docs: record communications runtime acceptance
 ```
 
-GitHub CI for that HEAD passed backend compile/tests, frontend type-check/build and production image build.
+The runtime evidence below is preserved in `docs/handoff/2026-09-08-chat-handoff.md`.
+It is a previously recorded server/browser result, not a new Work server inspection.
 
 Last explicitly runtime-confirmed production deploy with full output remains:
 
 ```text
-HEAD:       de16e15d4104afa402215bd54c12260b93d4d379
+HEAD:       f3d807faef4ef763d4898f91d3b27faaa319d52e
 BUILD:      OK
-TESTS:      OK — 286
-MIGRATIONS: 0017_outgoing_msg_recipients (head)
+TESTS:      OK — 289
+MIGRATIONS: 0018_tow_target_ship_id (head)
 HEALTH:     OK
 ```
 
-Therefore `1c427701...` is **source/CI verified but not yet runtime-deployed** at this handoff.
+Communications canonical grouping, race-first labels and unresolved-root reply
+safety were also browser-accepted at `f3d807f...`. Later documentation commits
+are not presumed deployed. The Tow migration is deployed; a dedicated Tow draft
+save/render browser result is still not recorded.
 
 ## Hard invariants
 
@@ -145,7 +149,7 @@ status_counts: locked=25
 
 This closes the current factual unlimited-fuel Tow lock checkpoint: every currently observed Tow attempt is inside the strict supported subset. It does **not** validate finite-fuel Tow.
 
-## Explicit local Tow target — implemented in source, runtime validation pending
+## Explicit local Tow target — deployed, dedicated browser validation pending
 
 Commits:
 
@@ -182,19 +186,28 @@ Semantics:
 
 CI initially exposed only an Alembic parser compatibility issue (`revision: str = ...` was not accepted by the repository guard); commit `1c427701...` changed it to a literal assignment and the full CI then passed.
 
-This feature has not yet been production/browser validated. Expected migration after deploy is `0018_tow_target_ship_id (head)`.
+Migration `0018_tow_target_ship_id (head)` and the containing code passed the
+recorded `f3d807f...` production deploy. That does not establish that the explicit
+Tow target picker, saved draft precedence and map rendering were exercised in
+the browser. Those specific acceptance checks remain pending.
 
 ## Immediate development order
 
 ```text
-1. Deploy 1c427701... and runtime/browser-validate explicit Tow target drafting.
-2. Confirm saved Tow draft feeds Tow-before-Move-Most prediction and PREDICTED TOW / PREDICTED TOWED rendering.
-3. Resolve finite-fuel Intercept semantics on the unified movement state using researched evidence; keep unsupported fuel/Tow ordering fail-closed.
+1. Continue the bounded post-change historical fuel validation in planets-lab; read its 2026-09-08-work-chat-handoff.md and intel-fuel handoff.
+2. At the next product browser checkpoint, validate saved Tow target precedence and PREDICTED TOW / PREDICTED TOWED rendering; do not redeploy an obsolete SHA.
+3. Keep the lab nominal-leg candidate out of production until historical differential and separate Tow evidence gates are satisfied.
 4. Consolidate Tow / Move Most / Intercept into a unified movement prediction / turn-review model.
 5. Continue broader draftable missions/cargo/planet/starbase orders and explicit reviewed upstream write-back.
 ```
 
 ## Communications status
+
+Canonical grouping and race-first labels are runtime/browser confirmed at
+`f3d807f...`: `Robots (spaceshepherd)` contains 3 messages. Root `7649938`
+still offers **Message**, not **Reply**. Visual identity never promotes factual
+recipient provenance between roots. Do not reopen this closed UX check absent
+a regression; full evidence is in `docs/handoff/2026-09-08-chat-handoff.md`.
 
 True Planets.nu threaded replies remain validated and working through:
 

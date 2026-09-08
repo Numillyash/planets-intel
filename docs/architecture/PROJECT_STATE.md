@@ -8,7 +8,7 @@ This is the durable architectural handoff for `Numillyash/planets-intel`. Git hi
 - Product direction: private Planets.nu operational client with factual intel, read-time inference, historical analysis, order drafting, simulation and eventually explicit reviewed upstream turn submission.
 - UI direction: Planets-style fullscreen starmap + operational dashboard; map-first workflow, not the old card-heavy UI.
 - Source of truth across chats: GitHub repository + these handoff docs. Do not reconstruct current implementation from chat memory.
-- Current implementation focus: production-validate explicit local Tow-target drafting, then continue toward finite-fuel Intercept and unified turn movement prediction.
+- Current implementation focus: bounded historical finite-fuel validation in `planets-lab`, then unified turn movement prediction. Explicit local Tow-target drafting is deployed but still needs a dedicated browser acceptance check.
 
 ## Stable baseline
 
@@ -25,7 +25,7 @@ This is the durable architectural handoff for `Numillyash/planets-intel`. Git hi
 - Planet warp-well movement substep, including post-intercept warp wells.
 - Fuel-aware ordinary movement with factual movement-mass reconstruction and verified Nu proportional insufficient-fuel rule.
 - Strict owner-visible Tow resolution integrated ahead of Move Most / Intercept for the supported unlimited-fuel subset.
-- Explicit local `tow_target_ship_id` draft contract and colocated visible Tow-target picker in source/CI.
+- Explicit local `tow_target_ship_id` draft contract and colocated visible Tow-target picker deployed with migration `0018`; dedicated browser acceptance remains pending.
 - Planets.nu communications UI with verified true threaded replies using `/game/sendmessage` + factual `parentid`.
 - Battle Planner with separate combatant sources, editable simulation loadouts, deterministic replay, odds and sequential-wave queues.
 
@@ -121,7 +121,7 @@ Production read-only audit on the deployed strict factual integration found:
 
 This validates the present factual unlimited-fuel Tow population against the strict production lock subset. It does not validate finite-fuel Tow.
 
-The explicit local Tow-target draft feature is currently source/CI verified and awaits production/browser validation; see `CURRENT_HANDOFF.md` for the exact HEAD/deploy state.
+The explicit local Tow-target draft feature and migration are included in the recorded `f3d807f...` production deploy. Dedicated Tow draft save/render browser validation is still pending; see `CURRENT_HANDOFF.md`.
 
 ### Deliberate fail-closed boundaries
 
@@ -184,8 +184,8 @@ Reply-to-reply remains attached to the same factual root. Do not reopen Communic
 
 The exact first action is always taken from `CURRENT_HANDOFF.md`. Current order:
 
-1. Deploy/browser-validate explicit `tow_target_ship_id` drafting and movement prediction.
-2. Research/implement finite-fuel Intercept on the unified post-Tow movement state only where evidence is sufficient.
+1. Complete the lab-only nominal-leg candidate historical differential; Communications canonical grouping and labels are already runtime/browser accepted.
+2. Browser-validate explicit `tow_target_ship_id` drafting and movement prediction at the next product checkpoint. Research finite-fuel Intercept on the unified post-Tow state only where evidence is sufficient; Tow fuel semantics require separate empirical evidence.
 3. Consolidate Tow / Move Most / Intercept into unified `ShipPrediction` / turn-review output.
 4. Expand draftable missions/cargo/planet/starbase orders.
 5. Continue explicit reviewed Planets.nu write adapters with post-write reconciliation.
