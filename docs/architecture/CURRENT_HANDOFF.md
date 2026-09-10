@@ -1,6 +1,6 @@
 # Planets Intel — Current Handoff
 
-Updated: 2026-09-08
+Updated: 2026-09-10
 
 GitHub is the source of truth. Active development remains on `feature/operational-ui`. A fresh chat must read this file together with `NEW_CHAT_START.md`, `PROJECT_STATE.md` and `BATTLE_PLANNER_HANDOFF_2026-08-25.md`, then inspect the actual branch HEAD and `/opt/planets-intel` before deploying.
 
@@ -16,14 +16,13 @@ GitHub is the source of truth. Active development remains on `feature/operationa
 GitHub source inspected for this update:
 
 ```text
-e3237cbf3d6e876dfc02ea6849702243289d1693
-docs: record communications runtime acceptance
+dc5a897743a5fde844e7d73f5308d2799a7914d0
+docs: record private refresh proxy incident runtime
 ```
 
-The runtime evidence below is preserved in `docs/handoff/2026-09-08-chat-handoff.md`.
-It is a previously recorded server/browser result, not a new Work server inspection.
+The latest private-refresh runtime evidence is preserved in `docs/handoff/2026-09-10-private-refresh-proxy-runtime.md`. Earlier communications/Tow runtime evidence remains in `docs/handoff/2026-09-08-chat-handoff.md`.
 
-Last explicitly runtime-confirmed production deploy with full output remains:
+Last explicitly runtime-confirmed production code deploy with full deploy output remains:
 
 ```text
 HEAD:       f3d807faef4ef763d4898f91d3b27faaa319d52e
@@ -33,10 +32,9 @@ MIGRATIONS: 0018_tow_target_ship_id (head)
 HEALTH:     OK
 ```
 
-Communications canonical grouping, race-first labels and unresolved-root reply
-safety were also browser-accepted at `f3d807f...`. Later documentation commits
-are not presumed deployed. The Tow migration is deployed; a dedicated Tow draft
-save/render browser result is still not recorded.
+On 2026-09-10 the production `.env` was repaired in place without changing the server code SHA: `PLANETSNU_PROXY_URL` was updated from obsolete `http://10.147.17.166:18088` to runtime-verified `http://10.147.17.198:18088`, the backend was recreated, and private sync for Beta Auriga game `684653` succeeded at turn 20 for both `helping die` and `mussoleni ii`. This is a runtime configuration repair, not a new application-code deployment.
+
+Communications canonical grouping, race-first labels and unresolved-root reply safety were browser-accepted at `f3d807f...`. Later documentation commits are not presumed deployed. The Tow migration is deployed; a dedicated Tow draft save/render browser result is still not recorded.
 
 ## Hard invariants
 
@@ -67,6 +65,18 @@ One old screenshot showed `Battle sequence odds failed: 502 Proxy Error` with 10
 ## Game chooser checkpoint
 
 The chooser is game-centric rather than account-centric and browser-accepted. New games are also discovered by the background private-refresh loop rather than waiting for canonical scheduler membership. Runtime logs confirmed live discovery and private refresh for a newly appearing game. Do not reopen chooser/refresh without new evidence.
+
+## Private refresh / stale-map incident — runtime repaired 2026-09-10
+
+Beta Auriga Sector advanced to canonical turn 20 while the map remained on an older private snapshot around turn 16. Scheduler diagnostics proved that public synchronization and target discovery were healthy, but every eligible private observer failed. A direct private sync exposed:
+
+```text
+Planets.nu request failed: proxy ConnectError; direct ReadTimeout
+```
+
+Production `.env` still pointed to obsolete proxy address `10.147.17.166:18088`. After changing it to `10.147.17.198:18088` and recreating the backend, explicit private syncs for linked accounts 2 and 3 both returned turn 20 with two combat reports, matching the official Planets.nu turn-20 VCR count. The user then confirmed the dashboard appeared to work again.
+
+Do not misdiagnose a future stale map as Pixi rendering until comparing canonical game turn with the latest private snapshot turn and checking private-sync transport. The application still needs two robustness improvements: explicit stale-intel UI when the displayed private snapshot lags canonical turn, and preservation of concrete per-account private-sync errors in aggregate refresh diagnostics. Full incident details are in `docs/handoff/2026-09-10-private-refresh-proxy-runtime.md`.
 
 ## Movement fuel — closed verified subset
 
@@ -186,28 +196,22 @@ Semantics:
 
 CI initially exposed only an Alembic parser compatibility issue (`revision: str = ...` was not accepted by the repository guard); commit `1c427701...` changed it to a literal assignment and the full CI then passed.
 
-Migration `0018_tow_target_ship_id (head)` and the containing code passed the
-recorded `f3d807f...` production deploy. That does not establish that the explicit
-Tow target picker, saved draft precedence and map rendering were exercised in
-the browser. Those specific acceptance checks remain pending.
+Migration `0018_tow_target_ship_id (head)` and the containing code passed the recorded `f3d807f...` production deploy. That does not establish that the explicit Tow target picker, saved draft precedence and map rendering were exercised in the browser. Those specific acceptance checks remain pending.
 
 ## Immediate development order
 
 ```text
-1. Continue the bounded post-change historical fuel validation in planets-lab; read its 2026-09-08-work-chat-handoff.md and intel-fuel handoff.
-2. At the next product browser checkpoint, validate saved Tow target precedence and PREDICTED TOW / PREDICTED TOWED rendering; do not redeploy an obsolete SHA.
-3. Keep the lab nominal-leg candidate out of production until historical differential and separate Tow evidence gates are satisfied.
-4. Consolidate Tow / Move Most / Intercept into a unified movement prediction / turn-review model.
-5. Continue broader draftable missions/cargo/planet/starbase orders and explicit reviewed upstream write-back.
+1. Continue the bounded finite-fuel Tow evidence work in planets-lab from the current post-classic-storm / Chunnel-context checkpoint.
+2. At the next planets-intel product-hardening pass, add an explicit stale-private-intel warning when canonical turn is newer than the displayed private snapshot and preserve concrete per-account refresh failure details.
+3. At the next product browser checkpoint, validate saved Tow target precedence and PREDICTED TOW / PREDICTED TOWED rendering; do not redeploy an obsolete SHA.
+4. Keep any lab Tow-fuel candidate out of production until the separate Tow evidence gate is satisfied.
+5. Consolidate Tow / Move Most / Intercept into a unified movement prediction / turn-review model.
+6. Continue broader draftable missions/cargo/planet/starbase orders and explicit reviewed upstream write-back.
 ```
 
 ## Communications status
 
-Canonical grouping and race-first labels are runtime/browser confirmed at
-`f3d807f...`: `Robots (spaceshepherd)` contains 3 messages. Root `7649938`
-still offers **Message**, not **Reply**. Visual identity never promotes factual
-recipient provenance between roots. Do not reopen this closed UX check absent
-a regression; full evidence is in `docs/handoff/2026-09-08-chat-handoff.md`.
+Canonical grouping and race-first labels are runtime/browser confirmed at `f3d807f...`: `Robots (spaceshepherd)` contains 3 messages. Root `7649938` still offers **Message**, not **Reply**. Visual identity never promotes factual recipient provenance between roots. Do not reopen this closed UX check absent a regression; full evidence is in `docs/handoff/2026-09-08-chat-handoff.md`.
 
 True Planets.nu threaded replies remain validated and working through:
 
