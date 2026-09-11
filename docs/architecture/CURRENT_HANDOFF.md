@@ -18,7 +18,7 @@ Source/runtime checkpoint at this handoff:
 
 ```text
 feature/operational-ui
-9f40b63677e1f73a5d70f10e043ede2115d38aa1
+d93fce4df17d25376f7c98ac98eed02253ce68f4
 ```
 
 Production was deployed successfully at that exact SHA on 2026-09-11:
@@ -30,10 +30,10 @@ DB: 0018_tow_target_ship_id (head)
 Backend recreate: OK
 Health: {"status":"ok","service":"planets-intel-backend"}
 DEPLOY OK
-Log: /opt/planets-intel/logs/deploy/20260911-211534-production.log
+Log: /opt/planets-intel/logs/deploy/20260911-223653-production.log
 ```
 
-Detailed checkpoint: `docs/handoff/2026-09-11-production-combat-rules-and-stale-intel.md`.
+Detailed checkpoint: `docs/handoff/2026-09-11-turn-review-blockers-production.md`.
 
 ## Current product state
 
@@ -66,6 +66,21 @@ Communications are considered CLOSED absent regression:
 - unresolved root `#7649938` renders as `Message`, not `Reply`;
 - visual thread merge must not change factual recipient provenance.
 
+### Turn Review / movement provenance
+
+The first production Turn Review / evidence ledger is deployed. It uses the existing unified movement pipeline rather than a parallel simulator and keeps factual observations, local planning state and derived movement output separate.
+
+Movement rows now expose why an endpoint is UNKNOWN through structured blocker provenance:
+
+- `phase_state_required` — the formula is supported, but the factual state at that Host phase is not available;
+- `implementation_gap` — the rule is supported by the lab evidence but has not yet been integrated safely into this production path;
+- `missing_fact` — a required factual input is missing or unknown;
+- `dependency_unresolved` — the row depends on an earlier unresolved movement result;
+- `order_ambiguity` — Host ordering/target selection is ambiguous;
+- `unsupported_host_rule` — the applicable Host behavior remains outside the supported model.
+
+The blocker classification is provenance metadata only. It must never turn an uncertain endpoint into a certain one.
+
 ### Movement / local order drafts
 
 A unified movement-prediction pipeline already exists. Do not rebuild it from scratch.
@@ -76,6 +91,7 @@ Relevant implementation includes:
 - `movement_prediction.py`
 - `movement_prediction_runtime.py`
 - `movement_prediction_unified_runtime.py`
+- `movement_prediction_blockers.py`
 - Tow / Move Most / Intercept phase services
 - local ship / planet / starbase order drafts
 - frontend movement-prediction API, map hook, prediction state and draft panels.
@@ -97,13 +113,25 @@ The adjacent research repository `Numillyash/planets-lab` is the evidence source
 2cfad9f5de83e052afc420179f45ab22557cec4f
 ```
 
-Base finite-fuel Tow movement in ordinary Classic/Nu scope is no longer an open formula question there. It is supported as:
+The latest compiled-corpus checkpoint records two production-relevant movement conclusions.
+
+Base finite-fuel Tow movement in ordinary Classic/Nu scope is supported as:
 
 `DOCUMENTED + CORPUS_OBSERVED + TESTED + DIFF_VERIFIED`.
 
 The cleaned historical discriminator supports post-Alchemy combined tower+towed movement mass and proportional insufficient-fuel movement.
 
-Important production boundary: this does **not** automatically make every finite-fuel Tow prediction safe in IntelBoard. The product still must know the actual Tow-phase fuel state. Snapshot neutronium is not automatically movement-phase neutronium. Keep unsupported cases fail-closed until the data boundary is explicitly reconciled.
+Important production boundary: this does **not** automatically make every finite-fuel Tow prediction safe in IntelBoard. The product still must know the actual Tow-phase fuel state. Snapshot neutronium is not automatically movement-phase neutronium. Finite-fuel Tow therefore remains fail-closed when that phase-aligned state is unavailable.
+
+For normal movement, the lab evidence also supports the continuous nominal one-turn fuel basis for true-partial Move Most / Intercept as:
+
+`CORPUS_OBSERVED + TESTED + DIFF_VERIFIED`.
+
+Production still keeps the old true-partial shortage guard. It is now classified as an `implementation_gap`, not as an unknown formula. Do not remove the guard until the production path preserves the exact Host major/minor projection and the verified continuous one-turn fuel leg without weakening phase-state safety.
+
+Finite-fuel Intercept likewise has a supported fuel formula, but snapshot neutronium is not automatically Intercept-phase fuel. Those withheld endpoints are `phase_state_required` rather than evidence that the formula is unknown.
+
+Tow contests/chains/cycles, web-hit interruption details and other special interactions remain separately scoped and must not be smuggled into the base rule.
 
 ### Battle Planner / combat rules
 
@@ -136,10 +164,10 @@ Inference must remain visibly distinct from facts.
 
 ## Immediate product priorities
 
-1. Build a bounded **Turn Review / provenance** surface on top of existing data and movement prediction. The first slice should visibly separate `CURRENT FACT`, local `DRAFT`, `PREDICTED`, and `UNKNOWN` rather than invent another simulator.
-2. Reconcile old movement fail-closed messages with the latest `planets-lab` evidence. Promote only rules for which the required phase-state data is actually available.
+1. Use the deployed Turn Review blocker classes to identify and close the highest-value `implementation_gap` cases without weakening fail-closed behavior.
+2. Integrate the lab-verified true-partial normal-movement fuel path only with the exact Host major/minor projection and verified continuous nominal one-turn fuel basis; preserve missing/phase-state boundaries.
 3. Complete the pending Tow draft browser acceptance.
-4. Continue stale-data / refresh diagnostics only on concrete regressions; the proxy incident itself is resolved.
+4. Extend analyst/threat UX using existing provenance and prediction layers rather than inventing new factual state.
 5. Keep product work independent from ongoing `planets-lab` Host combat-order reverse. Do not wait for full NuHost reconstruction before improving provenance, review and analyst UX.
 
 ## Working rules
