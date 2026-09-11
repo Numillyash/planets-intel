@@ -185,27 +185,38 @@ function predictionPhaseLabel(item: ShipMovementPrediction): string {
 }
 
 
+function hasRenderablePrediction(item: ShipMovementPrediction | undefined): boolean {
+    return item !== undefined
+        && item.start_x !== null
+        && item.start_y !== null
+        && item.predicted_x !== null
+        && item.predicted_y !== null;
+}
+
+
+function predictionLabelOffsetY(item: ShipMovementPrediction): number {
+    if (item.phase !== "tow") return 0;
+    return item.tow_role === "target" ? 10 : -10;
+}
+
+
 function drawPrediction(
     world: Container,
     bounds: MapBounds,
     item: ShipMovementPrediction,
+    labelOffsetY = 0,
 ) {
     if (drawWarpWellPrediction({ world, bounds, item })) {
         return;
     }
 
-    if (
-        item.start_x === null
-        || item.start_y === null
-        || item.predicted_x === null
-        || item.predicted_y === null
-    ) {
+    if (!hasRenderablePrediction(item)) {
         return;
     }
 
     const route: MapPoint[] = [
-        { x: item.start_x, y: item.start_y },
-        { x: item.predicted_x, y: item.predicted_y },
+        { x: item.start_x as number, y: item.start_y as number },
+        { x: item.predicted_x as number, y: item.predicted_y as number },
     ];
     const distance = routeDistance(route);
     if (distance < 0.5) return;
@@ -244,7 +255,7 @@ function drawPrediction(
     label.anchor.set(0.5, 1);
     label.position.set(
         (from.x + to.x) / 2,
-        (from.y + to.y) / 2 - 5,
+        (from.y + to.y) / 2 - 5 + labelOffsetY,
     );
     world.addChild(label);
 }
@@ -323,6 +334,8 @@ export function drawOrderVectors({
         const draft = draftByShipId.get(ship.ship_id);
         if (draft === undefined) continue;
 
+        const predicted = predictionByShipId.get(ship.ship_id);
+
         if (
             draft.movement_mode === "intercept"
             && draft.intercept_target_ship_id !== null
@@ -353,14 +366,12 @@ export function drawOrderVectors({
                 }
             }
 
-            const predicted = predictionByShipId.get(ship.ship_id);
             if (predicted !== undefined) {
                 drawProvisionalInterceptPrediction({
                     world,
                     bounds,
                     item: predicted,
                 });
-                drawPrediction(world, bounds, predicted);
             }
             continue;
         }
@@ -384,14 +395,26 @@ export function drawOrderVectors({
                     width: 1.55,
                     dashLength: 10,
                     gapLength: 5,
-                    label: `DRAFT · ${distance.toFixed(1)} ly · W${draft.warp ?? draft.upstream_warp ?? "—"}`,
+                    label: hasRenderablePrediction(predicted)
+                        ? null
+                        : `DRAFT · ${distance.toFixed(1)} ly · W${draft.warp ?? draft.upstream_warp ?? "—"}`,
                 });
             }
         }
+    }
 
-        const predicted = predictionByShipId.get(ship.ship_id);
-        if (predicted !== undefined) {
-            drawPrediction(world, bounds, predicted);
-        }
+    // Prediction rows are derived outputs, not merely annotations for ships
+    // that happen to have their own local draft. In particular, a Tow target
+    // normally has no draft of its own but still receives a `tow_role=target`
+    // prediction row. Render the response independently so PREDICTED TOWED is
+    // not silently dropped. Offsetting the paired Tow labels also keeps the
+    // tower and target text legible when their routes coincide exactly.
+    for (const item of prediction?.items ?? []) {
+        drawPrediction(
+            world,
+            bounds,
+            item,
+            predictionLabelOffsetY(item),
+        );
     }
 }
