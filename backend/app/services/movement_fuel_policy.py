@@ -22,6 +22,9 @@ class WaypointFuelStatus(StrEnum):
     LIMITED = "limited"
     UNKNOWN = "unknown"
     UNSUPPORTED_ZERO_FUEL = "unsupported_zero_fuel"
+    # Kept for compatibility with rows produced before true-partial normal
+    # movement was integrated. The supported normal-speed path no longer
+    # returns this status.
     UNSUPPORTED_PARTIAL_WAYPOINT = "unsupported_partial_waypoint"
     UNSUPPORTED_GRAVITONIC = "unsupported_gravitonic"
 
@@ -78,6 +81,25 @@ def _base(
     )
 
 
+def _projected_endpoint(
+    *,
+    origin_x: int,
+    origin_y: int,
+    target_x: int,
+    target_y: int,
+    distance: float,
+) -> tuple[int, int, float]:
+    destination_x, destination_y = project_toward_waypoint(
+        x=origin_x,
+        y=origin_y,
+        target_x=target_x,
+        target_y=target_y,
+        distance=distance,
+    )
+    actual_distance = hypot(destination_x - origin_x, destination_y - origin_y)
+    return destination_x, destination_y, actual_distance
+
+
 def resolve_waypoint_fuel(
     *,
     unlimited_fuel: bool,
@@ -100,15 +122,67 @@ def resolve_waypoint_fuel(
 ) -> WaypointFuelResolution:
     """Resolve the supported production subset of normal waypoint fuel.
 
-    Sufficient-fuel arithmetic and positive insufficient-fuel proration are
-    historically supported for the integrated reachable normal-speed subset.
-    True-partial normal-movement semantics are also supported by planets-lab,
-    but this production path still withholds them until their phase-aligned
-    application is integrated. Zero-fuel movement and shortage on a Gravitonic
-    move remain separate unsupported Host cases.
+    The normal-speed true-partial path mirrors the independently verified
+    planets-lab semantics:
+
+    * Host endpoint projection uses major/minor-axis integer geometry;
+    * fuel is charged for the continuous nominal one-turn leg before endpoint
+      rasterization;
+    * positive insufficient fuel prorates that one-turn leg and then applies
+      the same Host projection.
+
+    Zero-fuel movement and insufficient-fuel Gravitonic movement remain
+    separate Host cases and continue to fail closed.
     """
 
+    positive_route = (
+        target_x is not None
+        and target_y is not None
+        and requested_distance is not None
+        and geometric_moved_distance is not None
+        and requested_distance > 0
+        and geometric_moved_distance > 0
+        and warp > 0
+    )
+    true_partial = bool(
+        positive_route
+        and requested_distance is not None
+        and requested_distance > geometric_max_distance + 1e-9
+    )
+    normal_speed = abs(speed_multiplier - 1.0) <= 1e-9
+    supported_true_partial = true_partial and normal_speed
+
+    # Partial-route endpoint rasterization is geometric and does not require a
+    # fuel/mass reconstruction. Apply it even in unlimited-fuel games for the
+    # verified normal-speed subset.
     if unlimited_fuel:
+        if supported_true_partial:
+            assert target_x is not None
+            assert target_y is not None
+            destination_x, destination_y, actual_distance = _projected_endpoint(
+                origin_x=origin_x,
+                origin_y=origin_y,
+                target_x=target_x,
+                target_y=target_y,
+                distance=geometric_max_distance,
+            )
+            return _base(
+                status=WaypointFuelStatus.UNLIMITED,
+                evidence=None,
+                fuel_factor=None,
+                fuel_required=None,
+                fuel_used=None,
+                fuel_limited=False,
+                certain=True,
+                reason=(
+                    "Game rules provide unlimited movement fuel; the verified Host "
+                    "major/minor-axis projection is applied to this true-partial "
+                    "normal route."
+                ),
+                override_x=destination_x,
+                override_y=destination_y,
+                override_moved_distance=actual_distance,
+            )
         return _base(
             status=WaypointFuelStatus.UNLIMITED,
             evidence=None,
@@ -120,15 +194,7 @@ def resolve_waypoint_fuel(
             reason="Game rules provide unlimited movement fuel.",
         )
 
-    if (
-        target_x is None
-        or target_y is None
-        or requested_distance is None
-        or geometric_moved_distance is None
-        or requested_distance <= 0
-        or geometric_moved_distance <= 0
-        or warp <= 0
-    ):
+    if not positive_route:
         return _base(
             status=WaypointFuelStatus.NOT_REQUIRED,
             evidence=None,
@@ -177,15 +243,53 @@ def resolve_waypoint_fuel(
             reason="Fuel-limited endpoint cannot be resolved because the engine fuel factor is unknown.",
         )
 
+    assert requested_distance is not None
+    assert geometric_moved_distance is not None
+    assert target_x is not None
+    assert target_y is not None
+
+    # This distinction is the historical discriminator: a true-partial route
+    # is charged for the continuous nominal one-turn leg, not for the slightly
+    # shorter distance of its rasterized endpoint.
+    fuel_distance = (
+        geometric_max_distance
+        if supported_true_partial
+        else geometric_moved_distance
+    )
     fuel_required = movement_fuel_use(
         fuel_factor=fuel_factor,
         total_mass=evidence.total_mass,
-        distance_traveled=geometric_moved_distance,
+        distance_traveled=fuel_distance,
         max_distance_per_turn=geometric_max_distance,
     )
     fuel_available = evidence.fuel_available
 
     if fuel_required <= fuel_available:
+        if supported_true_partial:
+            destination_x, destination_y, actual_distance = _projected_endpoint(
+                origin_x=origin_x,
+                origin_y=origin_y,
+                target_x=target_x,
+                target_y=target_y,
+                distance=geometric_max_distance,
+            )
+            return _base(
+                status=WaypointFuelStatus.SUFFICIENT,
+                evidence=evidence,
+                fuel_factor=fuel_factor,
+                fuel_required=fuel_required,
+                fuel_used=fuel_required,
+                fuel_limited=False,
+                certain=True,
+                reason=(
+                    "Current factual fuel is sufficient for the verified true-partial "
+                    "normal route; Host major/minor-axis endpoint projection is "
+                    "applied after the continuous nominal one-turn fuel leg."
+                ),
+                override_x=destination_x,
+                override_y=destination_y,
+                override_moved_distance=actual_distance,
+            )
         return _base(
             status=WaypointFuelStatus.SUFFICIENT,
             evidence=evidence,
@@ -209,23 +313,7 @@ def resolve_waypoint_fuel(
             reason="Zero-fuel movement is a separate Host mechanic and is not yet predicted.",
         )
 
-    if requested_distance > geometric_max_distance + 1e-9:
-        return _base(
-            status=WaypointFuelStatus.UNSUPPORTED_PARTIAL_WAYPOINT,
-            evidence=evidence,
-            fuel_factor=fuel_factor,
-            fuel_required=fuel_required,
-            fuel_used=None,
-            fuel_limited=True,
-            certain=False,
-            reason=(
-                "True-partial normal-movement fuel semantics are historically supported, "
-                "but this production path has not yet integrated their phase-aligned "
-                "application safely."
-            ),
-        )
-
-    if abs(speed_multiplier - 1.0) > 1e-9:
+    if not normal_speed:
         return _base(
             status=WaypointFuelStatus.UNSUPPORTED_GRAVITONIC,
             evidence=evidence,
@@ -237,19 +325,21 @@ def resolve_waypoint_fuel(
             reason="Insufficient-fuel proration for Gravitonic movement is not yet validated in production.",
         )
 
+    # Reachable routes use the waypoint distance. For true-partial routes the
+    # requested movement this turn is the continuous nominal one-turn leg.
+    proration_distance = geometric_max_distance if true_partial else requested_distance
     proration = prorate_waypoint_distance(
-        requested_distance=requested_distance,
+        requested_distance=proration_distance,
         fuel_available=fuel_available,
         fuel_required=fuel_required,
     )
-    destination_x, destination_y = project_toward_waypoint(
-        x=origin_x,
-        y=origin_y,
+    destination_x, destination_y, actual_distance = _projected_endpoint(
+        origin_x=origin_x,
+        origin_y=origin_y,
         target_x=target_x,
         target_y=target_y,
         distance=proration.distance,
     )
-    actual_distance = hypot(destination_x - origin_x, destination_y - origin_y)
     return _base(
         status=WaypointFuelStatus.LIMITED,
         evidence=evidence,
@@ -259,8 +349,14 @@ def resolve_waypoint_fuel(
         fuel_limited=True,
         certain=True,
         reason=(
-            "Positive insufficient fuel applies the verified Nu waypoint-distance "
-            "proration and Host major/minor-axis projection."
+            "Positive insufficient fuel applies the verified continuous nominal "
+            "one-turn proration and Host major/minor-axis projection for this "
+            "true-partial normal route."
+            if true_partial
+            else (
+                "Positive insufficient fuel applies the verified Nu waypoint-distance "
+                "proration and Host major/minor-axis projection."
+            )
         ),
         override_x=destination_x,
         override_y=destination_y,
