@@ -425,6 +425,14 @@ export function DashboardApp({
         return result;
     }, [history]);
 
+    const privateIntelTurnMismatch =
+        game !== null &&
+        privateIntel !== null &&
+        privateIntel.turn !== game.game.turn;
+    const dashboardPrivateIntel = privateIntelTurnMismatch
+        ? null
+        : privateIntel;
+
     async function handlePrivateIntelRefresh() {
         await refreshDashboardData();
     }
@@ -578,12 +586,34 @@ export function DashboardApp({
                 </div>
             ) : (
                 <>
+                    {privateIntelTurnMismatch && privateIntel !== null && (
+                        <section
+                            className="panel"
+                            role="alert"
+                            style={{
+                                border: "1px solid rgba(255, 204, 115, 0.62)",
+                                background: "rgba(75, 61, 32, 0.36)",
+                                marginBottom: 12,
+                            }}
+                        >
+                            <div className="eyebrow">Private intel turn mismatch</div>
+                            <h2 style={{ marginTop: 4 }}>
+                                Game T{game.game.turn} · factual private snapshot T{privateIntel.turn}
+                            </h2>
+                            <p style={{ marginBottom: 0 }}>
+                                Current-turn private fact tables are withheld so T{privateIntel.turn}
+                                {" data cannot be relabelled as T"}{game.game.turn}. The map below remains
+                                available and identifies its factual snapshot turn explicitly.
+                            </p>
+                        </section>
+                    )}
+
                     <GameDashboard
                         game={game}
                         history={history}
                         latestScores={latestScores}
                         onRefresh={() => void handlePrivateIntelRefresh()}
-                        privateIntel={privateIntel}
+                        privateIntel={dashboardPrivateIntel}
                         refreshing={privateIntelLoading}
                         selectedAccount={selectedAccount}
                     />
