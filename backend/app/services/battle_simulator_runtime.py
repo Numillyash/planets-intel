@@ -3,6 +3,11 @@ from __future__ import annotations
 from typing import Any, Mapping
 
 from app.services import battle_simulator as _implementation
+from app.services import battle_simulator_planet as _planet_implementation
+from app.services.battle_simulator_verified_rules import (
+    federation_recover_shields,
+    planet_native_beam_tech,
+)
 from app.services.vcr_replay import ReplayUnsupported
 
 
@@ -43,11 +48,13 @@ def _build_payload(
     }
 
 
-# The implementation's run functions resolve ``_build_payload`` from their
-# module globals at call time. Install the authoritative builder once when this
-# service facade is imported, then export the normal service API. This keeps a
-# single runtime path while the large simulator service is being decomposed.
+# The implementation's run functions resolve these helpers from their module
+# globals at call time. Install the authoritative runtime rules once when this
+# facade is imported. This keeps one production path while the large simulator
+# service continues to be decomposed into smaller mechanics modules.
 _implementation._build_payload = _build_payload
+_implementation._fed_recover_shields = federation_recover_shields
+_planet_implementation.planet_native_beam_tech = planet_native_beam_tech
 
 run_battle_simulator_once = _implementation.run_battle_simulator_once
 run_battle_simulator_odds = _implementation.run_battle_simulator_odds
