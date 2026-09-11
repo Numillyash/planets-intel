@@ -37,12 +37,14 @@ import { MilitaryAttributionPanel } from "./MilitaryAttributionPanel";
 import { StarbaseListPanel } from "./StarbaseListPanel";
 import { StarshipListPanel } from "./StarshipListPanel";
 import { TimeMachinePanel } from "./TimeMachinePanel";
+import { TurnReviewPanel } from "./TurnReviewPanel";
 import { VcrDashboardPanel } from "./VcrDashboardPanel";
 import "./game-dashboard.css";
 import "./military-attribution.css";
 
 type GameDashboardTab =
     | "dashboard"
+    | "turn-review"
     | "vcr"
     | "battle-planner"
     | "reports"
@@ -60,6 +62,7 @@ type GameDashboardTab =
 
 const TABS: Array<{ id: GameDashboardTab; label: string }> = [
     { id: "dashboard", label: "Dashboard" },
+    { id: "turn-review", label: "Turn Review" },
     { id: "vcr", label: "VCR" },
     { id: "battle-planner", label: "Battle Planner" },
     { id: "reports", label: "Reports" },
@@ -411,6 +414,23 @@ export function GameDashboard({
                             </div>
                         </section>
                     </>
+                )}
+
+                {activeTab === "turn-review" && (
+                    historicalMode ? (
+                        <HistoricalUnavailable title="Turn Review is a current planning surface" turn={dashboardTurn}>
+                            Historical snapshots remain factual evidence. Current local drafts and
+                            derived movement predictions are intentionally not projected backward
+                            onto a historical turn.
+                        </HistoricalUnavailable>
+                    ) : (
+                        <TurnReviewPanel
+                            gameId={game.game.id}
+                            intel={privateIntel}
+                            linkedAccountId={selectedAccount.id}
+                            turn={dashboardTurn}
+                        />
+                    )
                 )}
 
                 {activeTab === "vcr" && (
