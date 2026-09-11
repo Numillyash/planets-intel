@@ -6,6 +6,14 @@ from pydantic import BaseModel
 PredictionPhase = Literal["tow", "move_most", "intercept"]
 PredictionMode = Literal["tow", "waypoint", "intercept"]
 TowRole = Literal["tower", "target"]
+PredictionBlockerClass = Literal[
+    "phase_state_required",
+    "implementation_gap",
+    "missing_fact",
+    "dependency_unresolved",
+    "order_ambiguity",
+    "unsupported_host_rule",
+]
 
 
 class ShipMovementPrediction(BaseModel):
@@ -51,6 +59,8 @@ class ShipMovementPrediction(BaseModel):
     tow_tower_ship_id: int | None = None
     tow_target_ship_id: int | None = None
     tow_lock_status: str | None = None
+    blocker_class: PredictionBlockerClass | None = None
+    blocker_reason: str | None = None
     reason: str
     warnings: list[str]
 
