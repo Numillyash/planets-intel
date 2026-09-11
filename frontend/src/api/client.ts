@@ -18,6 +18,29 @@ import type {
     DashboardIntelSharesResponse,
 } from "../types/intel";
 
+export interface AccessiblePrivateIntelRefreshResult {
+    linked_account_id: number;
+    planets_username: string;
+    status: "refreshed" | "cached" | "skipped" | "failed";
+    detail: string | null;
+}
+
+export interface AccessiblePrivateIntelRefreshResponse {
+    game_id: number;
+    turn: number;
+    public_sync: {
+        status: string;
+        source: string;
+        detail: string | null;
+    };
+    accounts: number;
+    refreshed: number;
+    cached: number;
+    skipped: number;
+    failed: number;
+    results: AccessiblePrivateIntelRefreshResult[];
+}
+
 async function parseErrorMessage(
     response: Response,
 ): Promise<string> {
@@ -383,7 +406,7 @@ export async function refreshPrivateIntel(
 
 export async function refreshAccessiblePrivateIntel(
     gameId: number,
-): Promise<void> {
+): Promise<AccessiblePrivateIntelRefreshResponse> {
     const response = await fetch(
         `/api/games/${gameId}/private-intel/refresh-accessible`,
         {
@@ -401,7 +424,27 @@ export async function refreshAccessiblePrivateIntel(
         );
     }
 
-    await response.json();
+    const payload = await response.json() as AccessiblePrivateIntelRefreshResponse;
+    const eligibleAccounts = Math.max(0, payload.accounts - payload.skipped);
+    const noFreshOrCachedResult = payload.refreshed === 0 && payload.cached === 0;
+
+    if (
+        eligibleAccounts > 0 &&
+        payload.failed >= eligibleAccounts &&
+        noFreshOrCachedResult
+    ) {
+        const failureDetails = payload.results
+            .filter((item) => item.status === "failed")
+            .map((item) =>
+                `${item.planets_username}: ${item.detail ?? "private synchronization failed"}`,
+            )
+            .join("; ");
+        throw new Error(
+            `Private intel auto-refresh failed for all accessible observers${failureDetails ? `: ${failureDetails}` : ""}`,
+        );
+    }
+
+    return payload;
 }
 
 export function getCombinedPrivateIntel(
