@@ -1,6 +1,6 @@
 # Planets Intel — Current Handoff
 
-Updated: 2026-09-11
+Updated: 2026-09-12
 
 GitHub is the source of truth. Active development remains on `feature/operational-ui`. A fresh chat must inspect the actual branch HEAD before making current-code claims or writes, then read this file together with `NEW_CHAT_START.md`, `PROJECT_STATE.md` and the newest dated handoff under `docs/handoff/`.
 
@@ -18,22 +18,22 @@ Source/runtime checkpoint at this handoff:
 
 ```text
 feature/operational-ui
-d93fce4df17d25376f7c98ac98eed02253ce68f4
+f5c9ab9bfcc3c9c5bb32f2bbf7a5f0f3340e0ced
 ```
 
 Production was deployed successfully at that exact SHA on 2026-09-11:
 
 ```text
 Build: OK
-Backend tests: OK (289)
+Backend tests: OK (296)
 DB: 0018_tow_target_ship_id (head)
 Backend recreate: OK
 Health: {"status":"ok","service":"planets-intel-backend"}
 DEPLOY OK
-Log: /opt/planets-intel/logs/deploy/20260911-223653-production.log
+Log: /opt/planets-intel/logs/deploy/20260911-233730-production.log
 ```
 
-Detailed checkpoint: `docs/handoff/2026-09-11-turn-review-blockers-production.md`.
+Detailed checkpoint: `docs/handoff/2026-09-12-true-partial-move-most-production.md`.
 
 ## Current product state
 
@@ -70,10 +70,10 @@ Communications are considered CLOSED absent regression:
 
 The first production Turn Review / evidence ledger is deployed. It uses the existing unified movement pipeline rather than a parallel simulator and keeps factual observations, local planning state and derived movement output separate.
 
-Movement rows now expose why an endpoint is UNKNOWN through structured blocker provenance:
+Movement rows expose why an endpoint is UNKNOWN through structured blocker provenance:
 
 - `phase_state_required` — the formula is supported, but the factual state at that Host phase is not available;
-- `implementation_gap` — the rule is supported by the lab evidence but has not yet been integrated safely into this production path;
+- `implementation_gap` — the rule is supported by the lab evidence but has not yet been integrated safely into that production path;
 - `missing_fact` — a required factual input is missing or unknown;
 - `dependency_unresolved` — the row depends on an earlier unresolved movement result;
 - `order_ambiguity` — Host ordering/target selection is ambiguous;
@@ -107,13 +107,7 @@ Tow draft browser acceptance is still pending for:
 
 ### Movement research reconciliation
 
-The adjacent research repository `Numillyash/planets-lab` is the evidence source for reconstructed Host mechanics. At this checkpoint its `main` was:
-
-```text
-2cfad9f5de83e052afc420179f45ab22557cec4f
-```
-
-The latest compiled-corpus checkpoint records two production-relevant movement conclusions.
+The adjacent research repository `Numillyash/planets-lab` is the evidence source for reconstructed Host mechanics. Always inspect its actual `main` before relying on a checkpoint SHA from documentation.
 
 Base finite-fuel Tow movement in ordinary Classic/Nu scope is supported as:
 
@@ -123,11 +117,21 @@ The cleaned historical discriminator supports post-Alchemy combined tower+towed 
 
 Important production boundary: this does **not** automatically make every finite-fuel Tow prediction safe in IntelBoard. The product still must know the actual Tow-phase fuel state. Snapshot neutronium is not automatically movement-phase neutronium. Finite-fuel Tow therefore remains fail-closed when that phase-aligned state is unavailable.
 
-For normal movement, the lab evidence also supports the continuous nominal one-turn fuel basis for true-partial Move Most / Intercept as:
+For normal movement, the lab evidence supports the continuous nominal one-turn fuel basis for true-partial Move Most / Intercept as:
 
 `CORPUS_OBSERVED + TESTED + DIFF_VERIFIED`.
 
-Production still keeps the old true-partial shortage guard. It is now classified as an `implementation_gap`, not as an unknown formula. Do not remove the guard until the production path preserves the exact Host major/minor projection and the verified continuous one-turn fuel leg without weakening phase-state safety.
+The true-partial **normal-speed Move Most** production path is now integrated and deployed. For a waypoint beyond one-turn range it:
+
+- uses the Host major/minor-axis integer endpoint projection;
+- charges fuel for the continuous nominal one-turn leg before endpoint rasterization;
+- under positive insufficient fuel, prorates that nominal one-turn leg and then applies the same Host projection;
+- keeps missing movement-mass/engine facts fail-closed;
+- keeps zero-fuel and insufficient-fuel Gravitonic movement outside the supported subset.
+
+The historical `360690/T164/ship41` discriminator is locked in production regression coverage: origin `(1949,2950)`, waypoint `(2008,3067)`, W9, movement mass 517 KT, snapshot fuel 11 KT, nominal 81-ly fuel cost 41 KT -> endpoint `(1959,2969)`.
+
+`unsupported_partial_waypoint` remains only as a compatibility enum/classifier value for older rows. The supported normal-speed Move Most path no longer emits it.
 
 Finite-fuel Intercept likewise has a supported fuel formula, but snapshot neutronium is not automatically Intercept-phase fuel. Those withheld endpoints are `phase_state_required` rather than evidence that the formula is unknown.
 
@@ -164,9 +168,9 @@ Inference must remain visibly distinct from facts.
 
 ## Immediate product priorities
 
-1. Use the deployed Turn Review blocker classes to identify and close the highest-value `implementation_gap` cases without weakening fail-closed behavior.
-2. Integrate the lab-verified true-partial normal-movement fuel path only with the exact Host major/minor projection and verified continuous nominal one-turn fuel basis; preserve missing/phase-state boundaries.
-3. Complete the pending Tow draft browser acceptance.
+1. Complete the pending Tow draft browser acceptance and record the runtime result durably.
+2. Use Turn Review blocker provenance on real current rows to inventory the remaining `implementation_gap`, `phase_state_required` and `unsupported_host_rule` populations before choosing the next movement transfer.
+3. Keep finite-fuel Tow and Intercept fail-closed where the necessary phase-aligned fuel state is not factual.
 4. Extend analyst/threat UX using existing provenance and prediction layers rather than inventing new factual state.
 5. Keep product work independent from ongoing `planets-lab` Host combat-order reverse. Do not wait for full NuHost reconstruction before improving provenance, review and analyst UX.
 
