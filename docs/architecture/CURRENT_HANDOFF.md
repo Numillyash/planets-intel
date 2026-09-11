@@ -1,8 +1,8 @@
 # Planets Intel — Current Handoff
 
-Updated: 2026-09-10
+Updated: 2026-09-11
 
-GitHub is the source of truth. Active development remains on `feature/operational-ui`. A fresh chat must read this file together with `NEW_CHAT_START.md`, `PROJECT_STATE.md` and `BATTLE_PLANNER_HANDOFF_2026-08-25.md`, then inspect the actual branch HEAD and `/opt/planets-intel` before deploying.
+GitHub is the source of truth. Active development remains on `feature/operational-ui`. A fresh chat must inspect the actual branch HEAD before making current-code claims or writes, then read this file together with `NEW_CHAT_START.md`, `PROJECT_STATE.md` and the newest dated handoff under `docs/handoff/`.
 
 ## Repository / runtime
 
@@ -11,236 +11,146 @@ GitHub is the source of truth. Active development remains on `feature/operationa
 - Server checkout: `/opt/planets-intel`
 - Health endpoint: `http://127.0.0.1:18080/api/health`
 - Production backend image embeds the React/Vite frontend.
-- Never infer server HEAD from chat history; inspect it before every deploy.
+- Deployment entrypoint: `/opt/planets-intel/scripts/deploy/production.sh`
+- Never infer production HEAD from chat history; inspect it before every deploy.
 
-GitHub source inspected for this update:
-
-```text
-dc5a897743a5fde844e7d73f5308d2799a7914d0
-docs: record private refresh proxy incident runtime
-```
-
-The latest private-refresh runtime evidence is preserved in `docs/handoff/2026-09-10-private-refresh-proxy-runtime.md`. Earlier communications/Tow runtime evidence remains in `docs/handoff/2026-09-08-chat-handoff.md`.
-
-Last explicitly runtime-confirmed production code deploy with full deploy output remains:
+Source/runtime checkpoint at this handoff:
 
 ```text
-HEAD:       f3d807faef4ef763d4898f91d3b27faaa319d52e
-BUILD:      OK
-TESTS:      OK — 289
-MIGRATIONS: 0018_tow_target_ship_id (head)
-HEALTH:     OK
+feature/operational-ui
+9f40b63677e1f73a5d70f10e043ede2115d38aa1
 ```
 
-On 2026-09-10 the production `.env` was repaired in place without changing the server code SHA: `PLANETSNU_PROXY_URL` was updated from obsolete `http://10.147.17.166:18088` to runtime-verified `http://10.147.17.198:18088`, the backend was recreated, and private sync for Beta Auriga game `684653` succeeded at turn 20 for both `helping die` and `mussoleni ii`. This is a runtime configuration repair, not a new application-code deployment.
-
-Communications canonical grouping, race-first labels and unresolved-root reply safety were browser-accepted at `f3d807f...`. Later documentation commits are not presumed deployed. The Tow migration is deployed; a dedicated Tow draft save/render browser result is still not recorded.
-
-## Hard invariants
+Production was deployed successfully at that exact SHA on 2026-09-11:
 
 ```text
-known zero != unknown
-fact != inference != simulation
-combat-time evidence != current factual state
-missing data != zero
-hull capacity != factual installed weapons
+Build: OK
+Backend tests: OK (289)
+DB: 0018_tow_target_ship_id (head)
+Backend recreate: OK
+Health: {"status":"ok","service":"planets-intel-backend"}
+DEPLOY OK
+Log: /opt/planets-intel/logs/deploy/20260911-211534-production.log
 ```
 
-Deterministic replay is derived evidence, never a factual observation. Local order drafts and predictions are planning state, never canonical Planets.nu facts.
+Detailed checkpoint: `docs/handoff/2026-09-11-production-combat-rules-and-stale-intel.md`.
 
-## Battle Planner / combat checkpoint
+## Current product state
 
-Battle Planner picker/editor UX and combat regression work are materially closed on the available corpus. Do not reopen without new evidence.
+### Private intel ingestion / refresh
 
-Key unresolved combat evidence gaps remain explicit:
+The earlier stale-map incident was traced to a stale `PLANETSNU_PROXY_URL`, not to malformed historical requests from this project. Private sync was restored after the proxy was corrected.
 
-- Federation damaged-start weapon continuity;
-- Federation 25% between-fight shield recovery;
-- no-starbase multi-wave planet carry;
-- hidden starbase persistent state after hull damage;
-- right-side carrier +360 probabilistic balance rule.
+Current safety behavior:
 
-One old screenshot showed `Battle sequence odds failed: 502 Proxy Error` with 10,000 battles selected. It has not been reproduced or causally tied to trial count and remains deferred.
+- total accessible-private refresh failure is surfaced to the frontend even when the refresh endpoint itself returns HTTP 200;
+- concrete server failure detail is retained for the user-facing warning;
+- if canonical game turn and factual private snapshot turn differ, current-turn private fact tables fail closed instead of relabelling stale facts as current;
+- the mismatch warning names both turns;
+- the map may still show the factual stale snapshot because the map labels its snapshot turn explicitly.
 
-## Game chooser checkpoint
+The stale-turn warning is deployed. An intentionally reproduced browser mismatch has not yet been recorded as separate visual acceptance.
 
-The chooser is game-centric rather than account-centric and browser-accepted. New games are also discovered by the background private-refresh loop rather than waiting for canonical scheduler membership. Runtime logs confirmed live discovery and private refresh for a newly appearing game. Do not reopen chooser/refresh without new evidence.
+### Historical / provenance behavior
 
-## Private refresh / stale-map incident — runtime repaired 2026-09-10
+Historical mode is read-only and uses stored turn-indexed evidence. Current mutable metadata is not silently substituted for historical state where a historical snapshot does not exist.
 
-Beta Auriga Sector advanced to canonical turn 20 while the map remained on an older private snapshot around turn 16. Scheduler diagnostics proved that public synchronization and target discovery were healthy, but every eligible private observer failed. A direct private sync exposed:
+Combined intel preserves source/batch/turn provenance and uses the freshest-known factual value per field. Visual aggregation must never rewrite factual recipient or observer provenance.
+
+### Communications
+
+Communications are considered CLOSED absent regression:
+
+- canonical private grouping and race-first labels were browser/runtime-confirmed;
+- Robots (`spaceshepherd`) showed 3 messages in the acceptance case;
+- unresolved root `#7649938` renders as `Message`, not `Reply`;
+- visual thread merge must not change factual recipient provenance.
+
+### Movement / local order drafts
+
+A unified movement-prediction pipeline already exists. Do not rebuild it from scratch.
+
+Relevant implementation includes:
+
+- `movement_turn_state.py`
+- `movement_prediction.py`
+- `movement_prediction_runtime.py`
+- `movement_prediction_unified_runtime.py`
+- Tow / Move Most / Intercept phase services
+- local ship / planet / starbase order drafts
+- frontend movement-prediction API, map hook, prediction state and draft panels.
+
+Facts, local drafts and derived predictions remain separate. Prediction output is explicitly non-Host-final.
+
+Tow draft browser acceptance is still pending for:
+
+1. save an explicit Tow target;
+2. confirm drafted target precedence over factual `mission1target`;
+3. confirm `PREDICTED TOW` / `PREDICTED TOWED` rendering;
+4. confirm switching away from Tow clears the local Tow target and that Tow + Intercept remains rejected.
+
+### Movement research reconciliation
+
+The adjacent research repository `Numillyash/planets-lab` is the evidence source for reconstructed Host mechanics. At this checkpoint its `main` was:
 
 ```text
-Planets.nu request failed: proxy ConnectError; direct ReadTimeout
+2cfad9f5de83e052afc420179f45ab22557cec4f
 ```
 
-Production `.env` still pointed to obsolete proxy address `10.147.17.166:18088`. After changing it to `10.147.17.198:18088` and recreating the backend, explicit private syncs for linked accounts 2 and 3 both returned turn 20 with two combat reports, matching the official Planets.nu turn-20 VCR count. The user then confirmed the dashboard appeared to work again.
+Base finite-fuel Tow movement in ordinary Classic/Nu scope is no longer an open formula question there. It is supported as:
 
-Do not misdiagnose a future stale map as Pixi rendering until comparing canonical game turn with the latest private snapshot turn and checking private-sync transport. The application still needs two robustness improvements: explicit stale-intel UI when the displayed private snapshot lags canonical turn, and preservation of concrete per-account private-sync errors in aggregate refresh diagnostics. Full incident details are in `docs/handoff/2026-09-10-private-refresh-proxy-runtime.md`.
+`DOCUMENTED + CORPUS_OBSERVED + TESTED + DIFF_VERIFIED`.
 
-## Movement fuel — closed verified subset
+The cleaned historical discriminator supports post-Alchemy combined tower+towed movement mass and proportional insufficient-fuel movement.
 
-Fuel mechanics were transferred from `Numillyash/planets-lab`, not reconstructed from memory.
+Important production boundary: this does **not** automatically make every finite-fuel Tow prediction safe in IntelBoard. The product still must know the actual Tow-phase fuel state. Snapshot neutronium is not automatically movement-phase neutronium. Keep unsupported cases fail-closed until the data boundary is explicitly reconciled.
 
-Documented normal movement formula:
+### Battle Planner / combat rules
 
-```text
-Fuel Use = TRUNC(
-    Fuel Factor
-    * TRUNC(Total Mass / 10)
-    * TRUNC(Distance Traveled)
-    / Max Distance Per Turn
-    / 10000
-)
-```
+Two previously stale IntelBoard formulas were independently rechecked against immutable downloaded historical games in `planets-lab`, then corrected and deployed:
 
-`Max Distance Per Turn` is `warp²`, doubled for Gravitonic movement.
+- Federation recovery: `min(100 - damage, shield + 25)`;
+- native planet beam tech: nearest-integer `ROUND(SQRT(DP / 2))`.
 
-Movement mass is reconstructed from factual physical components. Do not use raw Planets.nu `ship.mass` as Host movement mass and do not substitute hull weapon capacity for fitted equipment.
+Cross-repo corpus recheck:
 
-Positive insufficient-fuel normal movement uses the Nu proportional-distance rule and Host integer major/minor-axis projection. The historical 12-game `planets-lab` corpus differential remains the finite-fuel evidence source:
+- Federation: corrected 48/48 vs old 38/48; 10 corrected-only discriminators; 0 old-only;
+- native beam tech: corrected 1036/1036 vs old 712/1036; 324 corrected-only discriminators; 0 old-only.
 
-```text
-fuel_proration_explained = 6
-Nu exact Host matches = 6
-Nu-only discriminating matches = 3
-VGAP3-style control matches = 0
-```
+The corrected rules are isolated in `battle_simulator_verified_rules.py` and exercised by dedicated regression tests.
 
-The production DB currently contains only unlimited-fuel factual groups, so no additional finite-fuel runtime sample exists there. Do not keep requesting one from current games.
+Do not infer that the whole Host combat orchestration is solved. Low-level combat resolution is materially advanced, while engagement selection/order/side assignment and several Host-order interactions remain research work in `planets-lab`.
 
-## Tow — strict unlimited-fuel runtime checkpoint closed
+### Threat / military intelligence
 
-Host movement phase order used by prediction is:
+The existing product already contains useful intelligence infrastructure and should be extended rather than replaced:
 
-```text
-Tow -> Move Most -> Intercept
-```
+- threat analysis from historical mass, VCR-revealed weapons and constrained loadout hypotheses;
+- attack-group / target-planet context;
+- defender and starbase context;
+- military score attribution;
+- deterministic post-combat replay state where inputs are sufficient;
+- analyst-confirmed state layered separately from factual observations.
 
-Historical route-equivalent visible Tow remains `TESTED + DIFF_VERIFIED` in `planets-lab`.
+Inference must remain visibly distinct from facts.
 
-The production strict resolver preserves these boundaries:
+## Immediate product priorities
 
-- Tow mission ID `6` / `mission1target` from factual private state;
-- valid visible target;
-- tower requires at least two engines;
-- exact colocation required;
-- Four Fingers is evaluated only from known non-fuel inputs;
-- same-target contests remain ambiguous;
-- Tow chains/cycles fail closed only inside the affected connected component;
-- finite-fuel Tow remains unresolved because Tow-phase fuel and combined tower+target physical mass are not yet reconstructed at that Host boundary;
-- Tow + planetary warp-well interaction remains fail-closed;
-- no arbitrary winner is inferred from ship ID ordering.
+1. Build a bounded **Turn Review / provenance** surface on top of existing data and movement prediction. The first slice should visibly separate `CURRENT FACT`, local `DRAFT`, `PREDICTED`, and `UNKNOWN` rather than invent another simulator.
+2. Reconcile old movement fail-closed messages with the latest `planets-lab` evidence. Promote only rules for which the required phase-state data is actually available.
+3. Complete the pending Tow draft browser acceptance.
+4. Continue stale-data / refresh diagnostics only on concrete regressions; the proxy incident itself is resolved.
+5. Keep product work independent from ongoing `planets-lab` Host combat-order reverse. Do not wait for full NuHost reconstruction before improving provenance, review and analyst UX.
 
-The movement runtime resolves the supported Tow subset before ordinary Move Most / Intercept, reserves known post-Tow positions for later Intercept, suppresses false ordinary movement for unresolved Tow participants, and exposes Tow metadata in movement-prediction responses. Map vectors distinguish `PREDICTED TOW` / `PREDICTED TOWED`.
+## Working rules
 
-### Runtime Tow audit — 2026-09-07
-
-Read-only production diagnostic on deployed HEAD `de16e15d...` reported:
-
-```text
-latest_factual_groups:       29
-catalog_missing_groups:       0
-unlimited_fuel_groups:       29
-fuel_enabled_groups:          0
-owner_ships:                385
-groups_with_tow:             13
-factual_tow_missions:        25
-tow_missions_missing_target:  0
-tow_targets_visible:         25
-tow_targets_not_visible:      0
-same_target_contest_groups:    0
-tow_chain_groups:              0
-tow_attempts_evaluated:       25
-strict_locked_candidates:     25
-uncertain_attempts:            0
-status_counts: locked=25
-```
-
-This closes the current factual unlimited-fuel Tow lock checkpoint: every currently observed Tow attempt is inside the strict supported subset. It does **not** validate finite-fuel Tow.
-
-## Explicit local Tow target — deployed, dedicated browser validation pending
-
-Commits:
-
-```text
-1018bd5d5b0e3541855d0d1a0f319e6e3a17ac9f feat: add explicit Tow target drafts
-1c42770101472e5605c26ee4f6ac504907bd7caa fix: use literal Alembic Tow revision id
-```
-
-Implemented end-to-end:
-
-```text
-Alembic 0018_tow_target_ship_id
--> ShipOrderDraft.tow_target_ship_id
--> Pydantic request/response
--> service validation/serialization
--> API route forwarding
--> frontend draft types
--> colocated visible Tow-target picker
--> movement runtime consumes drafted target before Move Most/Intercept
-```
-
-Semantics:
-
-- `movement_mode` remains only `waypoint | intercept`; Tow is a mission, not a fake movement mode in the draft model;
-- `intercept_target_ship_id` is not reused for Tow;
-- newly drafted Tow requires an explicit target;
-- target must be visible and exactly colocated in the latest factual snapshot;
-- self-Tow is rejected;
-- Tow + Intercept draft combination is rejected;
-- switching away from Tow clears the stored Tow target;
-- an explicit drafted Tow target overrides factual `mission1target` for prediction;
-- existing factual Tow can continue to use its factual target when another local order field is changed;
-- stale factual `mission1target` from a non-Tow order is never silently inherited.
-
-CI initially exposed only an Alembic parser compatibility issue (`revision: str = ...` was not accepted by the repository guard); commit `1c427701...` changed it to a literal assignment and the full CI then passed.
-
-Migration `0018_tow_target_ship_id (head)` and the containing code passed the recorded `f3d807f...` production deploy. That does not establish that the explicit Tow target picker, saved draft precedence and map rendering were exercised in the browser. Those specific acceptance checks remain pending.
-
-## Immediate development order
-
-```text
-1. Continue the bounded finite-fuel Tow evidence work in planets-lab from the current post-classic-storm / Chunnel-context checkpoint.
-2. At the next planets-intel product-hardening pass, add an explicit stale-private-intel warning when canonical turn is newer than the displayed private snapshot and preserve concrete per-account refresh failure details.
-3. At the next product browser checkpoint, validate saved Tow target precedence and PREDICTED TOW / PREDICTED TOWED rendering; do not redeploy an obsolete SHA.
-4. Keep any lab Tow-fuel candidate out of production until the separate Tow evidence gate is satisfied.
-5. Consolidate Tow / Move Most / Intercept into a unified movement prediction / turn-review model.
-6. Continue broader draftable missions/cargo/planet/starbase orders and explicit reviewed upstream write-back.
-```
-
-## Communications status
-
-Canonical grouping and race-first labels are runtime/browser confirmed at `f3d807f...`: `Robots (spaceshepherd)` contains 3 messages. Root `7649938` still offers **Message**, not **Reply**. Visual identity never promotes factual recipient provenance between roots. Do not reopen this closed UX check absent a regression; full evidence is in `docs/handoff/2026-09-08-chat-handoff.md`.
-
-True Planets.nu threaded replies remain validated and working through:
-
-```text
-POST /game/sendmessage
-parentid=<factual thread root activity id>
-```
-
-Do not reopen Communications without new evidence. See `docs/architecture/COMMUNICATIONS_REPLY_CONTRACT.md`.
-
-## Server preflight / deploy
-
-```bash
-cd /opt/planets-intel
-
-git fetch origin
-printf 'BRANCH: '; git symbolic-ref --quiet --short HEAD || true
-printf 'HEAD:   '; git log -1 --oneline
-printf 'DIVERGENCE HEAD...origin: '; git rev-list --left-right --count HEAD...origin/feature/operational-ui
-git status --short
-
-docker compose ps
-curl -fsS http://127.0.0.1:18080/api/health && echo
-```
-
-If clean and behind:
-
-```bash
-bash /opt/planets-intel/scripts/deploy/production.sh
-```
-
-Do not claim runtime validation from static code or CI alone. Runtime claims require actual server/browser/diagnostic output.
+- GitHub branch state is authoritative; documentation SHA examples are checkpoints, not permission to skip inspection.
+- A successful HTTP request is not proof that all per-account sync work succeeded.
+- Known zero != unknown; missing != zero.
+- Fact != inference != simulation != local draft.
+- Current fact != historical fact.
+- Combat-time evidence != current ship state.
+- Hull capacity != factual current weapons.
+- Snapshot fuel != automatically movement-phase fuel.
+- Unsupported Host behavior fails closed.
+- Do not deploy documentation-only commits merely to make production match docs.
