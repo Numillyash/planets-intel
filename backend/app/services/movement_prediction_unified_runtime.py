@@ -13,16 +13,18 @@ from app.services.movement_intercept import (
     InterceptStatus,
     Point,
 )
+from app.services.movement_prediction_blockers import annotate_prediction_blocker
 from app.services.movement_turn_state import MovementPhase, MovementTurnState
 
 
-# This layer is deliberately separate from the verified waypoint fuel policy.
-# Historical finite-fuel Intercept semantics have not yet been differential-
-# verified, so a moving Intercept must not expose the geometry-only endpoint as
-# if it were a supported prediction.
+# The finite-fuel Intercept formula is supported by historical differential
+# evidence in planets-lab. Production still fails closed because the current
+# private snapshot is not automatically the factual fuel state at the Intercept
+# Host phase, especially when earlier movement phases may have changed it.
 _FINITE_INTERCEPT_REASON = (
-    "Finite-fuel Intercept endpoint is withheld until Intercept fuel semantics "
-    "and Host phase ordering are corpus-verified."
+    "Finite-fuel Intercept endpoint is withheld because a phase-aligned "
+    "Intercept fuel state is unavailable; snapshot neutronium is not "
+    "automatically Intercept-phase fuel."
 )
 
 _TURN_STATE: ContextVar[MovementTurnState | None] = ContextVar(
@@ -94,7 +96,7 @@ def _finite_intercept_needs_fail_closed(
         return False
 
     # Invalid target locks fail without Intercept movement and therefore do not
-    # depend on the unverified fuel calculation.
+    # depend on the phase-aligned fuel state.
     if result.status == InterceptStatus.FAILED_INVALID_TARGET:
         return False
 
@@ -185,15 +187,15 @@ def _serialize_intercept(*args: Any, **kwargs: Any) -> dict[str, Any]:
 
     warnings = list(result.get("warnings") or [])
     warning = (
-        "Finite-fuel Intercept geometry is intentionally hidden: the endpoint "
-        "is not emitted until the fuel/phase rule is historically verified."
+        "Finite-fuel Intercept formula is supported, but the endpoint is "
+        "intentionally hidden until phase-aligned Intercept fuel is available."
     )
     if warning not in warnings:
         warnings.append(warning)
 
     # Do not leave a geometry-only line in the API after certainty was removed.
     # Factual start/target fields remain available; only derived movement output
-    # that depends on the unsupported Intercept fuel phase is withheld.
+    # that depends on unavailable Intercept-phase state is withheld.
     result.update(
         {
             "status": InterceptStatus.UNRESOLVED_POST_MOVE.value,
@@ -213,7 +215,7 @@ def _serialize_intercept(*args: Any, **kwargs: Any) -> dict[str, Any]:
             "warnings": warnings,
             "fuel_status": "unresolved_intercept",
             "fuel_limited": None,
-            "fuel_basis": "deferred_until_intercept_fuel_corpus_validation",
+            "fuel_basis": "deferred_until_intercept_phase_fuel",
             "fuel_reason": _FINITE_INTERCEPT_REASON,
         }
     )
@@ -234,12 +236,22 @@ def get_draft_movement_prediction(
 ) -> dict[str, Any]:
     token = _TURN_STATE.set(MovementTurnState())
     try:
-        return _runtime.get_draft_movement_prediction(
+        result = _runtime.get_draft_movement_prediction(
             user_id=user_id,
             linked_account_id=linked_account_id,
             game_id=game_id,
             turn=turn,
         )
+        items = result.get("items")
+        if isinstance(items, list):
+            result = dict(result)
+            result["items"] = [
+                annotate_prediction_blocker(item)
+                if isinstance(item, Mapping)
+                else item
+                for item in items
+            ]
+        return result
     finally:
         _TURN_STATE.reset(token)
 

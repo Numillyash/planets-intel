@@ -98,12 +98,14 @@ def resolve_waypoint_fuel(
     geometric_moved_distance: float | None,
     geometric_max_distance: float,
 ) -> WaypointFuelResolution:
-    """Resolve the verified production subset of normal waypoint fuel.
+    """Resolve the supported production subset of normal waypoint fuel.
 
-    Sufficient-fuel arithmetic is documented. Positive insufficient fuel is
-    applied only to the differential-verified subset: a reachable, normal-speed
-    waypoint. Zero-fuel movement, shortage on a partial waypoint and shortage
-    on a Gravitonic move remain fail-closed until separately validated.
+    Sufficient-fuel arithmetic and positive insufficient-fuel proration are
+    historically supported for the integrated reachable normal-speed subset.
+    True-partial normal-movement semantics are also supported by planets-lab,
+    but this production path still withholds them until their phase-aligned
+    application is integrated. Zero-fuel movement and shortage on a Gravitonic
+    move remain separate unsupported Host cases.
     """
 
     if unlimited_fuel:
@@ -216,7 +218,11 @@ def resolve_waypoint_fuel(
             fuel_used=None,
             fuel_limited=True,
             certain=False,
-            reason="Insufficient-fuel proration for a waypoint already beyond one-turn range is not yet validated.",
+            reason=(
+                "True-partial normal-movement fuel semantics are historically supported, "
+                "but this production path has not yet integrated their phase-aligned "
+                "application safely."
+            ),
         )
 
     if abs(speed_multiplier - 1.0) > 1e-9:

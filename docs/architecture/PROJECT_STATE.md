@@ -13,10 +13,10 @@ This is the durable architectural state for `Numillyash/planets-intel`. Git hist
 
 ## Production checkpoint
 
-As of the 2026-09-11 handoff, production was successfully deployed at:
+On 2026-09-11 production was successfully deployed at:
 
 ```text
-9f40b63677e1f73a5d70f10e043ede2115d38aa1
+a59d9897b018d40ad6214c03f0d815b5edcb6551
 ```
 
 with 289 backend tests passing, DB head `0018_tow_target_ship_id`, successful backend recreation and healthy `/api/health`.
@@ -26,7 +26,8 @@ This checkpoint includes:
 - corpus-reconciled Federation shield recovery;
 - corpus-reconciled native planet beam-tech rounding;
 - total private-refresh failure surfacing;
-- fail-closed current dashboard behavior when the factual private snapshot turn differs from the canonical game turn.
+- fail-closed current dashboard behavior when the factual private snapshot turn differs from the canonical game turn;
+- the first production Turn Review / evidence ledger using the existing unified movement prediction stack.
 
 ## Stable baseline
 
@@ -43,6 +44,7 @@ This checkpoint includes:
 - Local ship, planet and starbase order drafts.
 - Unified movement-turn state and movement prediction across Tow, Move Most and Intercept.
 - Explicit Tow target draft field and related prediction plumbing.
+- Provenance-safe Turn Review separating current facts, prediction and UNKNOWN output.
 - Production deployment script with build/test/migration/health gates.
 
 ## Evidence architecture
@@ -80,6 +82,7 @@ Core concepts/files include:
 - `movement_prediction.py`
 - `movement_prediction_runtime.py`
 - `movement_prediction_unified_runtime.py`
+- `movement_prediction_blockers.py`
 - `movement_tow.py`
 - `movement_move_most.py`
 - `movement_intercept.py`
@@ -87,6 +90,8 @@ Core concepts/files include:
 - frontend movement-prediction API/hook/state and order-vector scenes.
 
 The response contract explicitly marks movement output as derived and `host_final: false`.
+
+UNKNOWN movement output must preserve the reason boundary. The product distinguishes a missing phase-state input, a missing factual field, an unresolved dependency/order ambiguity, a lab-verified rule that has not yet been integrated safely, and a genuinely unsupported Host rule. This classification is provenance metadata only; it must never increase endpoint certainty by itself.
 
 ### Research status imported from planets-lab
 
@@ -103,6 +108,10 @@ The cleaned historical discriminator supports:
 - proportional distance reduction under insufficient Tow fuel.
 
 Production caveat: knowing the formula does not mean the product knows the Tow-phase fuel value. IntelBoard must continue to fail closed where only a non-phase-aligned snapshot is available.
+
+Finite-fuel Intercept likewise has a supported fuel formula in the lab evidence, but the production client must not treat snapshot neutronium as Intercept-phase fuel. A withheld endpoint in this case is a `phase_state_required` blocker, not evidence that the formula itself is unknown.
+
+True-partial normal-movement fuel semantics are supported by the lab evidence. The older production `unsupported_partial_waypoint` guard therefore represents an `implementation_gap` until the phase-aligned path is integrated and regression-tested; the guard remains in place meanwhile.
 
 Tow contests/chains/cycles, web-hit interruption details and other special interactions remain separately scoped and must not be smuggled into the base rule.
 
@@ -166,8 +175,8 @@ Deterministic post-combat replay state and analyst-confirmed state may enrich an
 
 ## Current next priorities
 
-1. Add a bounded **Turn Review / evidence ledger** using existing private observations, local drafts and movement prediction. Make `CURRENT FACT`, `DRAFT`, `PREDICTED` and `UNKNOWN` visually explicit.
-2. Reconcile each older movement fail-closed reason against current `planets-lab` evidence and the actual data available at that phase. Do not remove guards merely because the mathematical rule is now known.
+1. Reconcile each older movement fail-closed reason against current `planets-lab` evidence and the actual data available at that phase. Keep certainty unchanged while exposing why each UNKNOWN is blocked.
+2. Integrate lab-verified true-partial normal-movement fuel semantics only after the production path can prove the required phase-aligned inputs; do not simply delete the old guard.
 3. Complete Tow-target browser acceptance.
 4. Extend analyst/threat UX using existing provenance and prediction layers rather than inventing new factual state.
 5. Let `planets-lab` continue Host combat ordering research independently; product work should not block on a complete NuHost reconstruction.

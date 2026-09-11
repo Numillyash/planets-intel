@@ -4,6 +4,7 @@ import { getDraftMovementPrediction } from "../../api/movementPrediction";
 import type { LatestPrivateIntelResponse } from "../../types/api";
 import type {
     DraftMovementPredictionResponse,
+    PredictionBlockerClass,
     ShipMovementPrediction,
 } from "../../types/movementPrediction";
 
@@ -34,6 +35,16 @@ function phaseLabel(item: ShipMovementPrediction): string {
     }
     if (item.phase === "move_most") return "Move Most";
     return "Intercept";
+}
+
+
+function blockerLabel(value: PredictionBlockerClass): string {
+    if (value === "phase_state_required") return "Phase state required";
+    if (value === "implementation_gap") return "Verified · not integrated";
+    if (value === "missing_fact") return "Missing fact";
+    if (value === "dependency_unresolved") return "Dependency unresolved";
+    if (value === "order_ambiguity") return "Order ambiguity";
+    return "Unsupported Host rule";
 }
 
 
@@ -119,9 +130,16 @@ export function TurnReviewPanel({
             0,
         );
         const phases = new Map<string, number>();
+        const blockers = new Map<PredictionBlockerClass, number>();
         for (const item of items) {
             const label = phaseLabel(item);
             phases.set(label, (phases.get(label) ?? 0) + 1);
+            if (item.blocker_class !== null) {
+                blockers.set(
+                    item.blocker_class,
+                    (blockers.get(item.blocker_class) ?? 0) + 1,
+                );
+            }
         }
         return {
             items,
@@ -129,6 +147,7 @@ export function TurnReviewPanel({
             unknown,
             warnings,
             phases: [...phases.entries()],
+            blockers: [...blockers.entries()],
         };
     }, [prediction]);
 
@@ -248,6 +267,12 @@ export function TurnReviewPanel({
                                     <strong>{count}</strong>
                                 </div>
                             ))}
+                            {review.blockers.map(([blocker, count]) => (
+                                <div className="summary-card" key={blocker}>
+                                    <span>{blockerLabel(blocker)}</span>
+                                    <strong>{count}</strong>
+                                </div>
+                            ))}
                         </div>
 
                         <div className="table-wrapper" style={{ marginTop: 12 }}>
@@ -260,6 +285,7 @@ export function TurnReviewPanel({
                                         <th>From</th>
                                         <th>Predicted</th>
                                         <th>Fuel</th>
+                                        <th>Blocker</th>
                                         <th>Status / reason</th>
                                     </tr>
                                 </thead>
@@ -286,6 +312,18 @@ export function TurnReviewPanel({
                                                         : ""}
                                                 </td>
                                                 <td>
+                                                    {item.blocker_class === null ? (
+                                                        "—"
+                                                    ) : (
+                                                        <>
+                                                            <strong>{blockerLabel(item.blocker_class)}</strong>
+                                                            {item.blocker_reason
+                                                                ? ` · ${item.blocker_reason}`
+                                                                : ""}
+                                                        </>
+                                                    )}
+                                                </td>
+                                                <td>
                                                     <strong>{item.status}</strong>
                                                     {item.reason ? ` · ${item.reason}` : ""}
                                                     {item.warnings.length > 0
@@ -309,8 +347,10 @@ export function TurnReviewPanel({
                     <strong>CURRENT FACT</strong> is stored private observation evidence for T{turn}.
                     {" "}<strong>PREDICTED</strong> is deterministic derived output from the supported
                     movement model and current local planning inputs. <strong>UNKNOWN</strong> means the
-                    model deliberately cannot produce a trustworthy endpoint. Local order drafts are
-                    planning state and never overwrite factual observations.
+                    model deliberately cannot produce a trustworthy endpoint. UNKNOWN rows now state
+                    whether the blocker is missing phase state, a missing fact, an unresolved dependency,
+                    ordering ambiguity, a verified-but-not-integrated rule, or an unsupported Host rule.
+                    Local order drafts are planning state and never overwrite factual observations.
                 </p>
             </section>
         </div>

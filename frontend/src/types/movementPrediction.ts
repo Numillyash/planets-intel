@@ -1,6 +1,13 @@
 export type PredictionPhase = "tow" | "move_most" | "intercept";
 export type PredictionMode = "tow" | "waypoint" | "intercept";
 export type TowRole = "tower" | "target";
+export type PredictionBlockerClass =
+    | "phase_state_required"
+    | "implementation_gap"
+    | "missing_fact"
+    | "dependency_unresolved"
+    | "order_ambiguity"
+    | "unsupported_host_rule";
 
 
 export interface ShipMovementPrediction {
@@ -46,6 +53,8 @@ export interface ShipMovementPrediction {
     tow_tower_ship_id: number | null;
     tow_target_ship_id: number | null;
     tow_lock_status: string | null;
+    blocker_class: PredictionBlockerClass | null;
+    blocker_reason: string | null;
     reason: string;
     warnings: string[];
 }
