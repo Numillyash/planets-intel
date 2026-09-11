@@ -9,5 +9,8 @@ fi
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$repo_root"
 
-docker compose exec -T backend \
-    python -m app.scripts.tow_order_runtime_diagnostic "$@"
+# Feed the diagnostic from the checked-out host tree into the already-running
+# backend container. This keeps the probe read-only and avoids rebuilding or
+# redeploying production merely to inspect current persisted state.
+docker compose exec -T backend python - "$@" \
+    < backend/app/scripts/tow_order_runtime_diagnostic.py
