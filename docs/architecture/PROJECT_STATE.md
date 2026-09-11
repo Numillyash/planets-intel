@@ -1,217 +1,183 @@
 # Planets Intel — Project State
 
-This is the durable architectural handoff for `Numillyash/planets-intel`. Git history is the detailed implementation log. For the exact latest runtime/deploy state, also read `docs/architecture/CURRENT_HANDOFF.md`.
+This is the durable architectural state for `Numillyash/planets-intel`. Git history is the detailed implementation log. For the exact latest runtime/deploy checkpoint, also read `docs/architecture/CURRENT_HANDOFF.md` and the newest dated file under `docs/handoff/`.
 
 ## Active development
 
 - Branch: `feature/operational-ui`
-- Product direction: private Planets.nu operational client with factual intel, read-time inference, historical analysis, order drafting, simulation and eventually explicit reviewed upstream turn submission.
-- UI direction: Planets-style fullscreen starmap + operational dashboard; map-first workflow, not the old card-heavy UI.
-- Source of truth across chats: GitHub repository + these handoff docs. Do not reconstruct current implementation from chat memory.
-- Current implementation focus: bounded historical finite-fuel validation in `planets-lab`, then unified turn movement prediction. Explicit local Tow-target drafting is deployed but still needs a dedicated browser acceptance check.
+- Product direction: private Planets.nu operational client with factual intel, historical evidence, explicit read-time inference, local order drafting, bounded simulation/prediction and eventually reviewed upstream turn submission.
+- UI direction: Planets-style operational dashboard + Pixi starmap; facts and provenance stay first-class.
+- Source of truth across chats: GitHub repository and durable handoff docs. Never reconstruct current implementation from chat memory.
+- Current product focus: provenance-safe Turn Review and reconciliation of proven `planets-lab` mechanics into the existing prediction/Battle Planner stack.
+- Current research focus is separate: `planets-lab` continues Host combat ordering/orchestration and other unresolved Host mechanics.
+
+## Production checkpoint
+
+As of the 2026-09-11 handoff, production was successfully deployed at:
+
+```text
+9f40b63677e1f73a5d70f10e043ede2115d38aa1
+```
+
+with 289 backend tests passing, DB head `0018_tow_target_ship_id`, successful backend recreation and healthy `/api/health`.
+
+This checkpoint includes:
+
+- corpus-reconciled Federation shield recovery;
+- corpus-reconciled native planet beam-tech rounding;
+- total private-refresh failure surfacing;
+- fail-closed current dashboard behavior when the factual private snapshot turn differs from the canonical game turn.
 
 ## Stable baseline
 
 - Linked Planets.nu accounts and game-centric chooser with deep-linked `/intelboard/<observer>/<game>` routes.
-- Automatic discovery/private refresh for newly appearing active games.
-- Public loadinfo/loadscores ingestion, score history, scoreboard and activity tracking.
-- Private loadturn ingestion and combined multi-account intel with provenance.
+- Automatic discovery/private refresh for active games.
+- Public `loadinfo` / `loadscores` ingestion, score history, scoreboard and activity tracking.
+- Private `loadturn` ingestion and combined multi-account intel with provenance.
 - Fullscreen Pixi starmap with operational entity panes and cached Planets.nu hull/planet artwork.
+- Historical private snapshots and Time Machine / historical mode.
 - Historical ship tracks with lifecycle splitting for reused numeric ship IDs.
-- VCR storage, deterministic NuHost Classic replay and visual replay UI.
-- Post-combat factual/replay state propagation and host-event enrichment.
+- VCR ingestion, combat evidence and Battle Planner infrastructure.
+- Threat analysis and military attribution/read-time inference layers.
+- Communications with accepted private grouping / race-first display behavior.
 - Local ship, planet and starbase order drafts.
-- Move Most, chained Intercept, persistent order vectors and uncertainty rendering.
-- Planet warp-well movement substep, including post-intercept warp wells.
-- Fuel-aware ordinary movement with factual movement-mass reconstruction and verified Nu proportional insufficient-fuel rule.
-- Strict owner-visible Tow resolution integrated ahead of Move Most / Intercept for the supported unlimited-fuel subset.
-- Explicit local `tow_target_ship_id` draft contract and colocated visible Tow-target picker deployed with migration `0018`; dedicated browser acceptance remains pending.
-- Planets.nu communications UI with verified true threaded replies using `/game/sendmessage` + factual `parentid`.
-- Battle Planner with separate combatant sources, editable simulation loadouts, deterministic replay, odds and sequential-wave queues.
+- Unified movement-turn state and movement prediction across Tow, Move Most and Intercept.
+- Explicit Tow target draft field and related prediction plumbing.
+- Production deployment script with build/test/migration/health gates.
 
-## Hard semantic invariants
+## Evidence architecture
+
+The product must preserve these separations:
 
 ```text
-known zero != unknown
-fact != inference != simulation
-combat-time evidence != current factual state
-missing data != zero
-hull capacity != factual installed weapons
+factual observation
+    != historical observation merely because an ID matches
+    != analyst confirmation
+    != inference
+    != local order draft
+    != simulation / prediction
 ```
 
-Additional operational rules:
+Additional invariants:
 
-- deterministic replay is derived evidence, never a factual observation;
-- local drafts never mutate canonical observations;
-- unsupported Host behavior fails closed rather than leaking a plausible-looking deterministic endpoint;
-- reused numeric ship IDs are not sufficient identity without factual lifecycle evidence;
-- picker filtering never deletes or reinterprets stored intel.
+- known zero != unknown;
+- missing != zero;
+- current fact != historical fact;
+- combat-time evidence != current object state;
+- hull capacity != factual current weapons;
+- snapshot neutronium != automatically movement-phase neutronium;
+- unsupported Host behavior fails closed.
 
-## Availability / offline-read architecture
-
-IntelBoard must remain usable when Planets.nu public endpoints or the configured proxy are temporarily unavailable.
-
-Implemented:
-
-- public Planets.nu GET requests honor the configured proxy and classify transport failures;
-- account game list falls back to canonical DB membership;
-- `/games/{id}` falls back to canonical `Game`, `GameRuleCatalog`, slots and latest score/turn activity observations;
-- cached responses are marked as `canonical-cache`;
-- missing cached facts remain unavailable/null rather than manufactured zeroes.
-
-## Combat / Battle Planner
-
-The current deterministic combat checkpoint is materially closed on the available corpus. Runtime/UI support includes ship-vs-ship, planet/starbase scenarios, sequential waves, visual replay, odds, editable assumptions and explicit evidence-source precedence.
-
-Known evidence gaps remain explicit and must not be guessed:
-
-- Federation damaged-start weapon continuity;
-- Federation 25% between-fight shield recovery;
-- repeated no-starbase planet carry;
-- hidden starbase persistent state after hull damage;
-- right-side carrier +360 probabilistic balance rule.
-
-Do not reopen the Battle Planner picker/editor UX without new evidence.
-
-## Ammo / loadout semantics
-
-- Generic Nu `ammo` is factual for an observer's own ship.
-- Enemy private rows can contain hidden zero placeholders; those values must not become factual ammo/fighter zero.
-- Interpret generic `ammo` as fighters or torpedoes only when hull/equipment knowledge proves the ammunition type.
-- VCR equipment is factual at combat time only and does not automatically become current ship state.
-- Hull weapon capacity is simulation capability, not factual fitted loadout.
+Combined intel is a factual aggregation layer. It may select the freshest known factual value per field while retaining source provenance; it must not silently turn inference or prediction into facts.
 
 ## Movement state
 
-### Implemented
+The unified movement implementation is already present; do not create a parallel prediction subsystem.
 
-- Move Most geometry.
-- Classic and chained Intercept.
-- Unresolved Intercept range envelope instead of a false deterministic line.
-- Standard target movement envelope from observed Warp.
-- Planetary warp-well post-transform with ambiguous multi-well fail-closed behavior.
-- Factual movement-mass reconstruction from hull/equipment/cargo components.
-- Nu movement fuel factor + documented truncation formula.
-- Verified proportional insufficient-fuel distance and Host integer coordinate projection for the supported normal-movement subset.
-- Strict factual Tow lock primitives.
-- Tow chain isolation so unrelated Tow components remain independently decidable.
-- Tow integrated ahead of Move Most / Intercept in the request-local runtime.
-- Known post-Tow target positions are visible to later Intercept.
-- Tow participants with unresolved outcomes are withheld from later movement instead of receiving false ordinary endpoints.
-- Movement-prediction API/frontend types expose `phase: tow` and Tow metadata.
-- Map rendering labels known Tow routes as `PREDICTED TOW` / `PREDICTED TOWED`.
-- Local ship drafts now have a separate `tow_target_ship_id` field; `intercept_target_ship_id` is not overloaded.
-- Local Tow target validation requires a visible, non-self, exactly colocated target in the latest factual snapshot.
-- Explicit drafted Tow target has precedence over factual `mission1target` in prediction; stale factual target state from a non-Tow order is never silently inherited.
+Core concepts/files include:
 
-### Runtime Tow checkpoint
+- `movement_turn_state.py`
+- `movement_prediction.py`
+- `movement_prediction_runtime.py`
+- `movement_prediction_unified_runtime.py`
+- `movement_tow.py`
+- `movement_move_most.py`
+- `movement_intercept.py`
+- `movement_fuel.py` / `movement_fuel_policy.py`
+- frontend movement-prediction API/hook/state and order-vector scenes.
 
-Production read-only audit on the deployed strict factual integration found:
+The response contract explicitly marks movement output as derived and `host_final: false`.
 
-```text
-29 latest factual observer/game groups
-29 unlimited-fuel groups
-25 factual owner Tow missions
-25 targets visible
-25/25 strict locked
-0 uncertain
-0 same-target contest groups
-0 Tow chain groups
-```
+### Research status imported from planets-lab
 
-This validates the present factual unlimited-fuel Tow population against the strict production lock subset. It does not validate finite-fuel Tow.
+Ordinary Classic movement is now a comparatively mature research area. Historical differential work has supported true-partial normal movement geometry/fuel semantics and base finite-fuel Tow movement.
 
-The explicit local Tow-target draft feature and migration are included in the recorded `f3d807f...` production deploy. Dedicated Tow draft save/render browser validation is still pending; see `CURRENT_HANDOFF.md`.
+Base finite-fuel Tow movement is supported in `planets-lab` as:
 
-### Deliberate fail-closed boundaries
+`DOCUMENTED + CORPUS_OBSERVED + TESTED + DIFF_VERIFIED`.
 
-Remain unresolved unless stronger evidence is added:
+The cleaned historical discriminator supports:
 
-- finite-fuel Tow: Tow-phase neutronium + combined tower/target physical mass and ordering;
-- Tow + planetary warp-well propagation;
-- same-target Tow winner identity;
-- Tow chains/cycles ordering;
-- zero-fuel and unsupported Gravitonic shortage combinations outside the verified normal-fuel subset;
-- finite-fuel Intercept ordering/consumption;
-- HYP/Chunnel/mine/web/storm interactions in the production turn predictor unless explicitly modeled.
+- post-Alchemy movement mass;
+- combined tower + towed-ship mass;
+- proportional distance reduction under insufficient Tow fuel.
 
-## Explicit Tow draft contract
+Production caveat: knowing the formula does not mean the product knows the Tow-phase fuel value. IntelBoard must continue to fail closed where only a non-phase-aligned snapshot is available.
 
-The local ship draft model now deliberately separates:
+Tow contests/chains/cycles, web-hit interruption details and other special interactions remain separately scoped and must not be smuggled into the base rule.
+
+### Pending movement acceptance
+
+Dedicated browser acceptance is still required for the explicit Tow draft path:
+
+- save target;
+- drafted-target precedence;
+- `PREDICTED TOW` / `PREDICTED TOWED` rendering;
+- clearing/validation when switching missions or combining Tow with Intercept.
+
+## Combat / Battle Planner
+
+The low-level combat simulation and historical replay stack is materially advanced, but this is not yet a complete reconstructed Host combat phase.
+
+Two previously stale production formulas were independently rechecked against immutable downloaded historical games in `planets-lab` and corrected:
+
+### Federation recovery
 
 ```text
-movement_mode = waypoint | intercept
-intercept_target_ship_id
-mission = Try to Tow
-tow_target_ship_id
+next_shield = min(100 - damage, shield + 25)
 ```
 
-Tow remains a mission layered ahead of ordinary movement; it is not represented as a fake third draft `movement_mode`.
+Corpus recheck: 48/48 corrected vs 38/48 old formula; 10 corrected-only discriminators and no old-only counterexample.
 
-End-to-end support includes:
+### Native planet beam tech
 
 ```text
-Alembic 0018_tow_target_ship_id
--> ShipOrderDraft model
--> Pydantic request/response
--> service validation/serialization
--> API route
--> frontend type/state
--> colocated visible Tow target picker
--> movement runtime drafted-target precedence
+ROUND(SQRT(DP / 2))
 ```
 
-Changing away from Tow clears the stored Tow target. Tow + Intercept is rejected. Newly drafted Tow requires an explicit target rather than reusing stale factual `mission1target`.
+Corpus recheck: 1036/1036 corrected vs 712/1036 old truncation; 324 corrected-only discriminators and no old-only counterexample in the ordinary Classic scope.
 
-## Communications write semantics
+Both corrected rules are deployed and have dedicated IntelBoard regression tests.
 
-Verified true threaded reply contract:
+Remaining Host-combat research is mostly orchestration rather than these formulas: engagement eligibility, opponent/queue selection, side assignment, priority/mission/diplomacy interactions, capture continuation, repair boundaries and planet/base participation order.
 
-```text
-POST /game/sendmessage
-parentid=<factual thread root activity id>
-```
+## Private refresh / stale-state safety
 
-Reply-to-reply remains attached to the same factual root. Do not reopen Communications without new evidence.
+The production client refreshes running games automatically. A successful transport-level HTTP response is not considered proof that all private observers refreshed successfully.
 
-## Artwork cache
+Current behavior:
 
-- Preferred hull portrait source is Planets.nu `hulls3d/<id>_p.png`, classic hull artwork fallback.
-- Artwork fetching does not make the API proxy a hard dependency.
-- Missing artwork attempts are concurrency-limited.
+- total per-observer refresh failure is surfaced as a user-visible warning with concrete detail;
+- stale private snapshots are not fed into current-turn fact tables when their turn differs from canonical game turn;
+- an explicit mismatch warning shows canonical and factual turns;
+- map display of the stale factual snapshot remains allowed because the map identifies its own factual turn.
 
-## Next priorities
+The earlier stale-map incident caused by a stale proxy endpoint is considered operationally resolved. Reopen it only on a concrete regression.
 
-The exact first action is always taken from `CURRENT_HANDOFF.md`. Current order:
+## Communications
 
-1. Complete the lab-only nominal-leg candidate historical differential; Communications canonical grouping and labels are already runtime/browser accepted.
-2. Browser-validate explicit `tow_target_ship_id` drafting and movement prediction at the next product checkpoint. Research finite-fuel Intercept on the unified post-Tow state only where evidence is sufficient; Tow fuel semantics require separate empirical evidence.
-3. Consolidate Tow / Move Most / Intercept into unified `ShipPrediction` / turn-review output.
-4. Expand draftable missions/cargo/planet/starbase orders.
-5. Continue explicit reviewed Planets.nu write adapters with post-write reconciliation.
+Communications remain closed absent regression. Accepted runtime/browser behavior includes canonical private grouping, race-first labels, the Robots three-message case and correct Message-vs-Reply handling for the historical unresolved root. Visual grouping never changes factual recipient provenance.
 
-## New-chat bootstrap
+## Threat / inference layer
 
-A fresh chat starts by reading:
+Existing threat analysis is useful product infrastructure and should be developed in place. It can combine historical mass observations, VCR-revealed weapons, constrained loadout possibilities, likely target/attack-group context, defender/base context, ETA and military-score evidence.
 
-1. `docs/architecture/NEW_CHAT_START.md`
-2. `docs/architecture/PROJECT_STATE.md`
-3. `docs/architecture/CURRENT_HANDOFF.md`
-4. `docs/architecture/BATTLE_PLANNER_HANDOFF_2026-08-25.md`
+Deterministic post-combat replay state and analyst-confirmed state may enrich analysis, but both remain separate from factual observations and must be labelled accordingly.
 
-Then inspect `feature/operational-ui` HEAD and server divergence before any change.
+## Current next priorities
 
-## Validation protocol
+1. Add a bounded **Turn Review / evidence ledger** using existing private observations, local drafts and movement prediction. Make `CURRENT FACT`, `DRAFT`, `PREDICTED` and `UNKNOWN` visually explicit.
+2. Reconcile each older movement fail-closed reason against current `planets-lab` evidence and the actual data available at that phase. Do not remove guards merely because the mathematical rule is now known.
+3. Complete Tow-target browser acceptance.
+4. Extend analyst/threat UX using existing provenance and prediction layers rather than inventing new factual state.
+5. Let `planets-lab` continue Host combat ordering research independently; product work should not block on a complete NuHost reconstruction.
 
-For routine deploys:
+## Deliberately not claimed
 
-```text
-HEAD: <commit>
-BUILD: OK
-TESTS: OK
-MIGRATIONS: OK / N/A
-HEALTH: OK
-RESULT: <brief runtime/UI/diagnostic observation>
-```
-
-On failure, preserve the full log on the host and paste the failing command plus roughly the final 30–80 relevant lines.
+- Full Host combat ordering is not reconstructed end-to-end.
+- Every race-specific ability is not reconstructed.
+- Full minefield lifecycle / RNG is not reconstructed.
+- Every Tow contest/chain/cycle interaction is not reconstructed.
+- A prediction is not factual just because it is deterministic.
+- A snapshot field is not assumed to be a phase-state field without evidence.
+- Upstream turn submission is not considered complete until an explicit review/write/reconciliation workflow is implemented and accepted.
