@@ -232,7 +232,10 @@ function drawUnresolvedTowLock(
         return true;
     }
 
-    const point = rendered({ x: item.start_x, y: item.start_y }, bounds);
+    const point = rendered({
+        x: item.start_x as number,
+        y: item.start_y as number,
+    }, bounds);
     const color = predictionColor(item);
     const marker = new Graphics()
         .circle(point.x, point.y, 7)
