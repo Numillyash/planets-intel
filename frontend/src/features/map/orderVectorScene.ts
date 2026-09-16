@@ -200,63 +200,47 @@ function predictionLabelOffsetY(item: ShipMovementPrediction): number {
 }
 
 
+function isUnresolvedTowLock(
+    item: ShipMovementPrediction | undefined,
+): item is ShipMovementPrediction {
+    return item !== undefined
+        && item.phase === "tow"
+        && item.tow_lock_status === "unknown"
+        && item.start_x !== null
+        && item.start_y !== null
+        && item.predicted_x === null
+        && item.predicted_y === null
+        && item.pre_well_x === null
+        && item.pre_well_y === null;
+}
+
+
 function drawUnresolvedTowLock(
     world: Container,
     bounds: MapBounds,
     item: ShipMovementPrediction,
-    labelOffsetY = 0,
 ): boolean {
-    if (
-        item.phase !== "tow"
-        || item.tow_lock_status !== "unknown"
-        || item.start_x === null
-        || item.start_y === null
-        || item.predicted_x !== null
-        || item.predicted_y !== null
-        || item.pre_well_x !== null
-        || item.pre_well_y !== null
-    ) {
+    if (!isUnresolvedTowLock(item)) {
         return false;
     }
 
-    const point = rendered({ x: item.start_x, y: item.start_y }, bounds);
-    const color = predictionColor(item);
-    const isTarget = item.tow_role === "target";
-
-    const marker = new Graphics()
-        .circle(point.x, point.y, isTarget ? 7.5 : 9)
-        .stroke({ color, alpha: 0.9, width: isTarget ? 1.2 : 1.6 });
-    world.addChild(marker);
-
-    if (!isTarget) {
-        const innerMarker = new Graphics()
-            .circle(point.x, point.y, 3.2)
-            .fill({ color, alpha: 0.18 })
-            .stroke({ color, alpha: 0.95, width: 1.05 });
-        world.addChild(innerMarker);
+    // Keep unresolved Tow visible without turning the map into a diagnostic
+    // console. The tower gets a small amber halo; the actual planned vector is
+    // recolored below when it comes from a local draft. The paired target row
+    // intentionally adds no duplicate marker or text at the same coordinates.
+    if (item.tow_role === "target") {
+        return true;
     }
 
-    const targetId = item.tow_target_ship_id ?? item.target_ship_id;
-    const roleLabel = isTarget ? "TOWED ?" : "TOW LOCK ?";
-    const blocker = item.blocker_class?.replaceAll("_", " ").toUpperCase() ?? "UNRESOLVED";
-    const targetLabel = targetId !== null ? ` · #${targetId}` : "";
-    const label = new Text({
-        text: `${roleLabel}${targetLabel} · ${blocker}`,
-        style: {
-            fill: color,
-            fontFamily: "Inter, Arial, sans-serif",
-            fontSize: 8.5,
-            fontWeight: "700",
-            stroke: { color: 0x060a10, width: 2.8 },
-        },
-        resolution: 2,
-    });
-    label.anchor.set(0.5, 1);
-    label.position.set(
-        point.x,
-        point.y - 11 + labelOffsetY,
-    );
-    world.addChild(label);
+    const point = rendered({
+        x: item.start_x as number,
+        y: item.start_y as number,
+    }, bounds);
+    const color = predictionColor(item);
+    const marker = new Graphics()
+        .circle(point.x, point.y, 7)
+        .stroke({ color, alpha: 0.78, width: 1.25 });
+    world.addChild(marker);
 
     return true;
 }
@@ -272,7 +256,7 @@ function drawPrediction(
         return;
     }
 
-    if (drawUnresolvedTowLock(world, bounds, item, labelOffsetY)) {
+    if (drawUnresolvedTowLock(world, bounds, item)) {
         return;
     }
 
@@ -451,7 +435,13 @@ export function drawOrderVectors({
             ];
             const distance = routeDistance(draftRoute);
             if (distance >= 0.5) {
-                const color = draft.stale ? 0xffc766 : 0xa8eaff;
+                const unresolvedTowTower = isUnresolvedTowLock(predicted)
+                    && predicted.tow_role !== "target";
+                const color = draft.stale
+                    ? 0xffc766
+                    : unresolvedTowTower
+                        ? predictionColor(predicted)
+                        : 0xa8eaff;
                 drawVector({
                     world,
                     route: draftRoute,
