@@ -11,7 +11,7 @@ from app.models.planets_account import PlanetsAccount
 from app.models.private_observation_batch import PrivateObservationBatch
 from app.models.ship_observation import ShipObservation
 from app.models.ship_order_draft import ShipOrderDraft
-from app.services.movement_prediction_unified_runtime import get_draft_movement_prediction
+from app.services.movement_prediction_effective import get_effective_movement_prediction
 from app.services.movement_tow import payload_integer, payload_tow_target_id
 
 
@@ -145,7 +145,7 @@ def run(ship_ids: set[int]) -> dict[str, Any]:
         prediction_error: str | None = None
         prediction_items: list[dict[str, Any]] = []
         try:
-            prediction = get_draft_movement_prediction(
+            prediction = get_effective_movement_prediction(
                 user_id=int(account.user_id),
                 linked_account_id=int(account.id),
                 game_id=int(batch.game_id),
@@ -159,7 +159,7 @@ def run(ship_ids: set[int]) -> dict[str, Any]:
                     if isinstance(item, dict)
                     and (
                         item.get("ship_id") in ship_ids
-                        or item.get("tower_ship_id") in ship_ids
+                        or item.get("tow_tower_ship_id") in ship_ids
                         or item.get("tow_target_ship_id") in ship_ids
                         or item.get("target_ship_id") in ship_ids
                     )
@@ -194,8 +194,8 @@ def run(ship_ids: set[int]) -> dict[str, Any]:
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
-            "Inspect raw factual mission/target fields, local drafts and movement "
-            "prediction rows for selected ship ids in every latest active snapshot."
+            "Inspect raw factual mission/target fields, local drafts and effective "
+            "movement prediction rows for selected ship ids in every latest active snapshot."
         )
     )
     parser.add_argument(
