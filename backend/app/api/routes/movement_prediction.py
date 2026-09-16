@@ -3,10 +3,10 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from app.api.dependencies.auth import require_user
 from app.models.user import AppUser
 from app.schemas.movement_prediction import DraftMovementPredictionResponse
-from app.services.movement_prediction_unified_runtime import (
+from app.services.movement_prediction_effective import (
     MovementPredictionAccessError,
     MovementPredictionNotFound,
-    get_draft_movement_prediction,
+    get_effective_movement_prediction,
 )
 
 
@@ -24,7 +24,7 @@ def movement_prediction(
     user: AppUser = Depends(require_user),
 ) -> DraftMovementPredictionResponse:
     try:
-        result = get_draft_movement_prediction(
+        result = get_effective_movement_prediction(
             user_id=user.id,
             linked_account_id=linked_account_id,
             game_id=game_id,
