@@ -200,6 +200,68 @@ function predictionLabelOffsetY(item: ShipMovementPrediction): number {
 }
 
 
+function drawUnresolvedTowLock(
+    world: Container,
+    bounds: MapBounds,
+    item: ShipMovementPrediction,
+    labelOffsetY = 0,
+): boolean {
+    if (
+        item.phase !== "tow"
+        || item.tow_lock_status !== "unknown"
+        || item.start_x === null
+        || item.start_y === null
+        || item.predicted_x !== null
+        || item.predicted_y !== null
+        || item.pre_well_x !== null
+        || item.pre_well_y !== null
+    ) {
+        return false;
+    }
+
+    const point = rendered({ x: item.start_x, y: item.start_y }, bounds);
+    const color = predictionColor(item);
+    const isTarget = item.tow_role === "target";
+
+    const marker = new Graphics()
+        .circle(point.x, point.y, isTarget ? 7.5 : 9)
+        .stroke({ color, alpha: 0.9, width: isTarget ? 1.2 : 1.6 });
+    world.addChild(marker);
+
+    if (!isTarget) {
+        const innerMarker = new Graphics()
+            .circle(point.x, point.y, 3.2)
+            .fill({ color, alpha: 0.18 })
+            .stroke({ color, alpha: 0.95, width: 1.05 });
+        world.addChild(innerMarker);
+    }
+
+    const targetId = item.tow_target_ship_id ?? item.target_ship_id;
+    const roleLabel = isTarget ? "TOWED ?" : "TOW LOCK ?";
+    const blocker = item.blocker_class?.replaceAll("_", " ").toUpperCase() ?? "UNRESOLVED";
+    const targetLabel = targetId !== null ? ` · #${targetId}` : "";
+    const label = new Text({
+        text: `${roleLabel}${targetLabel} · ${blocker}`,
+        style: {
+            fill: color,
+            fontFamily: "Inter, Arial, sans-serif",
+            fontSize: 8.5,
+            fontWeight: "700",
+            stroke: { color: 0x060a10, width: 2.8 },
+        },
+        resolution: 2,
+    });
+    label.anchor.set(0.5, 1);
+    label.position.set(
+        point.x,
+        point.y - 11 + labelOffsetY,
+    );
+    world.addChild(label);
+
+    return true;
+}
+
+
 function drawPrediction(
     world: Container,
     bounds: MapBounds,
@@ -207,6 +269,10 @@ function drawPrediction(
     labelOffsetY = 0,
 ) {
     if (drawWarpWellPrediction({ world, bounds, item })) {
+        return;
+    }
+
+    if (drawUnresolvedTowLock(world, bounds, item, labelOffsetY)) {
         return;
     }
 
