@@ -4,8 +4,9 @@ import unittest
 
 class TowOrderRuntimeDiagnosticContractTests(unittest.TestCase):
     def test_diagnostic_uses_effective_prediction_and_tow_tower_filter(self) -> None:
-        source = pathlib.Path(
-            "/app/app/scripts/tow_order_runtime_diagnostic.py"
+        backend_root = pathlib.Path(__file__).resolve().parents[1]
+        source = (
+            backend_root / "app" / "scripts" / "tow_order_runtime_diagnostic.py"
         ).read_text(encoding="utf-8")
 
         self.assertIn("movement_prediction_effective", source)
