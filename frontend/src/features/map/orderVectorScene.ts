@@ -174,11 +174,11 @@ function predictionColor(item: ShipMovementPrediction): number {
 }
 
 
-function predictionPhaseLabel(item: ShipMovementPrediction): string {
+function predictionPhaseLabel(item: ShipMovementPrediction): string | null {
     if (item.phase === "intercept") return "PREDICTED INTERCEPT";
     if (item.phase === "tow") {
         return item.tow_role === "target"
-            ? "PREDICTED TOWED"
+            ? null
             : "PREDICTED TOW";
     }
     return "PREDICTED MOVE";
@@ -191,12 +191,6 @@ function hasRenderablePrediction(item: ShipMovementPrediction | undefined): bool
         && item.start_y !== null
         && item.predicted_x !== null
         && item.predicted_y !== null;
-}
-
-
-function predictionLabelOffsetY(item: ShipMovementPrediction): number {
-    if (item.phase !== "tow") return 0;
-    return item.tow_role === "target" ? 10 : -10;
 }
 
 
@@ -250,7 +244,6 @@ function drawPrediction(
     world: Container,
     bounds: MapBounds,
     item: ShipMovementPrediction,
-    labelOffsetY = 0,
 ) {
     if (drawWarpWellPrediction({ world, bounds, item })) {
         return;
@@ -289,8 +282,10 @@ function drawPrediction(
         .stroke({ color, alpha: 0.96, width: 1.2 });
     world.addChild(endpoint);
 
-    const moved = item.moved_distance ?? distance;
     const phaseLabel = predictionPhaseLabel(item);
+    if (phaseLabel === null) return;
+
+    const moved = item.moved_distance ?? distance;
     const label = new Text({
         text: `${phaseLabel} · ${moved.toFixed(1)} ly · W${item.warp ?? "—"}`,
         style: {
@@ -305,7 +300,7 @@ function drawPrediction(
     label.anchor.set(0.5, 1);
     label.position.set(
         (from.x + to.x) / 2,
-        (from.y + to.y) / 2 - 5 + labelOffsetY,
+        (from.y + to.y) / 2 - 5,
     );
     world.addChild(label);
 }
@@ -460,17 +455,14 @@ export function drawOrderVectors({
     }
 
     // Prediction rows are derived outputs, not merely annotations for ships
-    // that happen to have their own local draft. In particular, a Tow target
-    // normally has no draft of its own but still receives a `tow_role=target`
-    // prediction row. Render the response independently so PREDICTED TOWED is
-    // not silently dropped. Offsetting the paired Tow labels also keeps the
-    // tower and target text legible when their routes coincide exactly.
+    // that happen to have their own local draft. A Tow target normally has no
+    // draft of its own, so render its geometry independently while suppressing
+    // the duplicate text label; the tower row carries the single Tow-pair label.
     for (const item of prediction?.items ?? []) {
         drawPrediction(
             world,
             bounds,
             item,
-            predictionLabelOffsetY(item),
         );
     }
 }
