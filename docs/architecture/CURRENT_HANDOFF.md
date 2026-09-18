@@ -1,6 +1,6 @@
 # Planets Intel — Current Handoff
 
-Updated: 2026-09-12
+Updated: 2026-09-18
 
 GitHub is the source of truth. Active development remains on `feature/operational-ui`. A fresh chat must inspect the actual branch HEAD before making current-code claims or writes, then read this file together with `NEW_CHAT_START.md`, `PROJECT_STATE.md` and the newest dated handoff under `docs/handoff/`.
 
@@ -18,22 +18,22 @@ Source/runtime checkpoint at this handoff:
 
 ```text
 feature/operational-ui
-f5c9ab9bfcc3c9c5bb32f2bbf7a5f0f3340e0ced
+fd3312e75756c416dee7d9febffad2149643d5c3
 ```
 
-Production was deployed successfully at that exact SHA on 2026-09-11:
+Production was deployed successfully at that exact SHA on 2026-09-18:
 
 ```text
 Build: OK
-Backend tests: OK (296)
+Backend tests: OK (300)
 DB: 0018_tow_target_ship_id (head)
 Backend recreate: OK
 Health: {"status":"ok","service":"planets-intel-backend"}
 DEPLOY OK
-Log: /opt/planets-intel/logs/deploy/20260911-233730-production.log
+Log: /opt/planets-intel/logs/deploy/20260918-023940-production.log
 ```
 
-Detailed checkpoint: `docs/handoff/2026-09-12-true-partial-move-most-production.md`.
+Detailed checkpoint: `docs/handoff/2026-09-18-tow-ux-production-acceptance.md`.
 
 ## Current product state
 
@@ -98,12 +98,12 @@ Relevant implementation includes:
 
 Facts, local drafts and derived predictions remain separate. Prediction output is explicitly non-Host-final.
 
-Tow draft browser acceptance is still pending for:
-
-1. save an explicit Tow target;
-2. confirm drafted target precedence over factual `mission1target`;
-3. confirm `PREDICTED TOW` / `PREDICTED TOWED` rendering;
-4. confirm switching away from Tow clears the local Tow target and that Tow + Intercept remains rejected.
+Tow draft/browser acceptance is now closed for the currently scoped workflow.
+Target selection/save, drafted-target precedence, mission switching, Tow/Intercept
+mutual exclusion, factual Tow visibility and resolved pair rendering were all
+runtime/browser checked. The accepted map UX uses one `PREDICTED TOW` text
+label per resolved Tow pair while retaining the target prediction geometry;
+`PREDICTED TOWED` is intentionally suppressed as duplicate text.
 
 ### Movement research reconciliation
 
@@ -168,11 +168,10 @@ Inference must remain visibly distinct from facts.
 
 ## Immediate product priorities
 
-1. Complete the pending Tow draft browser acceptance and record the runtime result durably.
-2. Use Turn Review blocker provenance on real current rows to inventory the remaining `implementation_gap`, `phase_state_required` and `unsupported_host_rule` populations before choosing the next movement transfer.
-3. Keep finite-fuel Tow and Intercept fail-closed where the necessary phase-aligned fuel state is not factual.
-4. Extend analyst/threat UX using existing provenance and prediction layers rather than inventing new factual state.
-5. Keep product work independent from ongoing `planets-lab` Host combat-order reverse. Do not wait for full NuHost reconstruction before improving provenance, review and analyst UX.
+1. Run the read-only current-turn movement blocker inventory and use the real blocker populations to choose the next movement transfer.
+2. Keep finite-fuel Tow and Intercept fail-closed where the necessary phase-aligned fuel state is not factual.
+3. Extend analyst/threat UX using existing provenance and prediction layers rather than inventing new factual state.
+4. Keep product work independent from ongoing `planets-lab` Host combat-order reverse. Do not wait for full NuHost reconstruction before improving provenance, review and analyst UX.
 
 ## Working rules
 

@@ -13,13 +13,13 @@ This is the durable architectural state for `Numillyash/planets-intel`. Git hist
 
 ## Production checkpoint
 
-On 2026-09-11 production was successfully deployed at:
+On 2026-09-18 production was successfully deployed at:
 
 ```text
-f5c9ab9bfcc3c9c5bb32f2bbf7a5f0f3340e0ced
+fd3312e75756c416dee7d9febffad2149643d5c3
 ```
 
-with 296 backend tests passing, DB head `0018_tow_target_ship_id`, successful backend recreation and healthy `/api/health`.
+with 300 backend tests passing, DB head `0018_tow_target_ship_id`, successful backend recreation and healthy `/api/health`.
 
 This checkpoint includes:
 
@@ -29,12 +29,14 @@ This checkpoint includes:
 - fail-closed current dashboard behavior when the factual private snapshot turn differs from the canonical game turn;
 - the first production Turn Review / evidence ledger using the existing unified movement prediction stack;
 - structured provenance for UNKNOWN movement rows, distinguishing unavailable phase-state, implementation gaps, missing facts, unresolved dependencies, order ambiguity and unsupported Host rules;
-- lab-verified true-partial normal-speed Move Most fuel semantics with Host major/minor-axis endpoint projection and continuous nominal one-turn fuel basis.
+- lab-verified true-partial normal-speed Move Most fuel semantics with Host major/minor-axis endpoint projection and continuous nominal one-turn fuel basis;
+- accepted Tow runtime/rendering through the one-label-per-pair UX, with target geometry retained and duplicate `PREDICTED TOWED` text suppressed.
 
 Detailed runtime records:
 
 - `docs/handoff/2026-09-11-turn-review-blockers-production.md`
 - `docs/handoff/2026-09-12-true-partial-move-most-production.md`
+- `docs/handoff/2026-09-18-tow-ux-production-acceptance.md`
 
 ## Stable baseline
 
@@ -139,14 +141,14 @@ Zero-fuel normal movement and insufficient-fuel Gravitonic movement remain outsi
 
 Tow contests/chains/cycles, web-hit interruption details and other special interactions remain separately scoped and must not be smuggled into the base rule.
 
-### Pending movement acceptance
+### Movement acceptance
 
-Dedicated browser acceptance is still required for the explicit Tow draft path:
-
-- save target;
-- drafted-target precedence;
-- `PREDICTED TOW` / `PREDICTED TOWED` rendering;
-- clearing/validation when switching missions or combining Tow with Intercept.
+The explicit Tow draft path is accepted for the currently scoped product
+workflow: target save, drafted-target precedence, mission switching,
+Tow/Intercept mutual exclusion, factual Tow visibility and resolved pair
+rendering have all been checked. The accepted map presentation uses a single
+`PREDICTED TOW` text label per pair while still drawing the target prediction
+geometry.
 
 ## Combat / Battle Planner
 
@@ -199,11 +201,10 @@ Deterministic post-combat replay state and analyst-confirmed state may enrich an
 
 ## Current next priorities
 
-1. Complete Tow-target browser acceptance and record the observed runtime behavior.
-2. Use deployed blocker provenance on real current rows to inventory remaining `implementation_gap`, `phase_state_required` and `unsupported_host_rule` cases before selecting the next mechanics transfer.
-3. Preserve phase-state boundaries for finite-fuel Tow and Intercept; supported formulas do not justify substituting snapshot fuel.
-4. Extend analyst/threat UX using existing provenance and prediction layers rather than inventing new factual state.
-5. Let `planets-lab` continue Host combat ordering research independently; product work should not block on a complete NuHost reconstruction.
+1. Run the current-turn blocker inventory and use its real `implementation_gap`, `phase_state_required`, `unsupported_host_rule` and other populations before selecting the next mechanics transfer.
+2. Preserve phase-state boundaries for finite-fuel Tow and Intercept; supported formulas do not justify substituting snapshot fuel.
+3. Extend analyst/threat UX using existing provenance and prediction layers rather than inventing new factual state.
+4. Let `planets-lab` continue Host combat ordering research independently; product work should not block on a complete NuHost reconstruction.
 
 ## Deliberately not claimed
 
