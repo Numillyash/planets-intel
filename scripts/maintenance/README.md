@@ -38,6 +38,12 @@ Docker build stage.
 - `activity-thread.sh` — database-level activity/thread diagnostic using PostgreSQL container tools.
 - `activity-thread-api.sh` — application semantics diagnostic using backend Python 3.11.
 - `inspect-planets-reply-client.sh` — public Planets.nu client inspector; uses host Python and must stay Python 3.6 compatible.
+- `inspect-tow-orders.sh` — read-only factual Tow/draft/effective-prediction inspection for selected ship IDs.
+- `inspect-movement-blockers.sh` — read-only current-turn inventory of effective movement prediction blocker populations.
+
+The two movement inspectors stream the checked-out diagnostic source into the
+already-running backend container. They therefore do not require a production
+image rebuild merely to inspect persisted state after a fast-forward Git pull.
 
 ## Package mapping for CentOS-family hosts
 
