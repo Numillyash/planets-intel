@@ -1,6 +1,6 @@
 # Planets Intel — Current Handoff
 
-Updated: 2026-09-18
+Updated: 2026-09-20
 
 GitHub is the source of truth. Active development remains on `feature/operational-ui`. A fresh chat must inspect the actual branch HEAD before making current-code claims or writes, then read this file together with `NEW_CHAT_START.md`, `PROJECT_STATE.md` and the newest dated handoff under `docs/handoff/`.
 
@@ -105,6 +105,30 @@ runtime/browser checked. The accepted map UX uses one `PREDICTED TOW` text
 label per resolved Tow pair while retaining the target prediction geometry;
 `PREDICTED TOWED` is intentionally suppressed as duplicate text.
 
+### Current blocker inventory — 2026-09-20
+
+The read-only production blocker inventory was run after PR #20. It found 48
+effective prediction rows across the current factual groups: 34 PREDICTED and
+14 UNKNOWN. Every emitted row was Tow; every UNKNOWN row was one half of seven
+Tow pairs with the same `dependency_unresolved` cause: the production guard
+around Tow + planetary warp-well interaction. All 48 rows were unlimited-fuel.
+
+No `implementation_gap`, `phase_state_required`, `missing_fact`,
+`order_ambiguity` or `unsupported_host_rule` row appeared in this emitted
+runtime population. This is not a claim about every possible Move Most or
+Intercept case; the facade emitted only Tow rows in this snapshot.
+
+Cross-checking actual `planets-lab/main` found the relevant historical
+evidence already present: ordinary warp-well ordering is
+`TESTED + DIFF_VERIFIED`, and the dedicated Tow warp-well follow-up explained
+2529/2585 bounded Tow residual rows through ordinary eligible planetary wells.
+The next transfer is therefore limited to strict deterministic Tow in
+unlimited-fuel games using the existing unambiguous warp-well resolver. Finite
+fuel and overlapping-well tie-breaks remain fail-closed.
+
+Detailed checkpoint:
+`docs/handoff/2026-09-20-movement-blocker-runtime-and-tow-warp-well-transfer.md`.
+
 ### Movement research reconciliation
 
 The adjacent research repository `Numillyash/planets-lab` is the evidence source for reconstructed Host mechanics. Always inspect its actual `main` before relying on a checkpoint SHA from documentation.
@@ -168,10 +192,11 @@ Inference must remain visibly distinct from facts.
 
 ## Immediate product priorities
 
-1. Run the read-only current-turn movement blocker inventory and use the real blocker populations to choose the next movement transfer.
+1. Integrate and runtime-check the bounded unlimited-fuel Tow + ordinary warp-well transfer selected by the 2026-09-20 blocker inventory.
 2. Keep finite-fuel Tow and Intercept fail-closed where the necessary phase-aligned fuel state is not factual.
-3. Extend analyst/threat UX using existing provenance and prediction layers rather than inventing new factual state.
-4. Keep product work independent from ongoing `planets-lab` Host combat-order reverse. Do not wait for full NuHost reconstruction before improving provenance, review and analyst UX.
+3. Preserve fail-closed behavior for overlapping warp-well tie-breaks and special movement interactions.
+4. Extend analyst/threat UX using existing provenance and prediction layers rather than inventing new factual state.
+5. Keep product work independent from ongoing `planets-lab` Host combat-order reverse. Do not wait for full NuHost reconstruction before improving provenance, review and analyst UX.
 
 ## Working rules
 

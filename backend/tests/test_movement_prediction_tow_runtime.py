@@ -221,7 +221,7 @@ class MovementPredictionTowRuntimeTests(unittest.TestCase):
         self.assertFalse(outcomes[1].certain)
         self.assertEqual(known, {})
 
-    def test_tow_warp_well_interaction_fails_closed(self) -> None:
+    def test_unlimited_tow_warp_well_captures_shared_endpoint(self) -> None:
         ships = [
             ship(1, mission=6, target_id=2, waypoint_x=60),
             ship(2, waypoint_x=10),
@@ -238,16 +238,97 @@ class MovementPredictionTowRuntimeTests(unittest.TestCase):
                 PlanetWarpWell(
                     planet_id=99,
                     name="Tow Well",
-                    position=Point(60.0, 0.0),
+                    position=Point(62.0, 0.0),
                 )
+            ],
+        )
+
+        self.assertEqual(outcomes[1].lock_status, "locked")
+        self.assertEqual(outcomes[1].status, "locked")
+        self.assertEqual(outcomes[2].status, "towed")
+        self.assertTrue(outcomes[1].certain)
+        self.assertTrue(outcomes[2].certain)
+        self.assertEqual(outcomes[1].pre_well_position, Point(60.0, 0.0))
+        self.assertEqual(outcomes[2].pre_well_position, Point(60.0, 0.0))
+        self.assertEqual(outcomes[1].position, Point(62.0, 0.0))
+        self.assertEqual(outcomes[2].position, Point(62.0, 0.0))
+        self.assertEqual(outcomes[1].warp_well.status.value, "captured")
+        self.assertEqual(outcomes[1].warp_well.planet_id, 99)
+        self.assertEqual(known[1], Point(62.0, 0.0))
+        self.assertEqual(known[2], Point(62.0, 0.0))
+
+    def test_unlimited_tow_overlapping_warp_wells_stay_fail_closed(self) -> None:
+        ships = [
+            ship(1, mission=6, target_id=2, waypoint_x=60),
+            ship(2, waypoint_x=10),
+        ]
+        outcomes, known = _build_tow_outcomes(
+            ships=ships,
+            drafts=[],
+            owner_slot_id=3,
+            hulls=HULLS,
+            hull_names=HULL_NAMES,
+            unlimited_fuel=True,
+            gravity_wells_enabled=True,
+            planet_wells=[
+                PlanetWarpWell(
+                    planet_id=99,
+                    name="Left Well",
+                    position=Point(59.0, 0.0),
+                ),
+                PlanetWarpWell(
+                    planet_id=100,
+                    name="Right Well",
+                    position=Point(61.0, 0.0),
+                ),
             ],
         )
 
         self.assertEqual(outcomes[1].lock_status, "locked")
         self.assertEqual(outcomes[1].status, "locked_route_unresolved")
         self.assertFalse(outcomes[1].certain)
-        self.assertEqual(outcomes[1].warp_well.status.value, "captured")
+        self.assertFalse(outcomes[2].certain)
+        self.assertEqual(outcomes[1].pre_well_position, Point(60.0, 0.0))
+        self.assertEqual(
+            outcomes[1].warp_well.status.value,
+            "unresolved_multiple",
+        )
         self.assertEqual(known, {})
+
+    def test_unlimited_tow_warp_one_is_not_pulled_by_nearby_well(self) -> None:
+        ships = [
+            ship(
+                1,
+                mission=6,
+                target_id=2,
+                warp=1,
+                waypoint_x=1,
+            ),
+            ship(2, warp=0, waypoint_x=10),
+        ]
+        outcomes, known = _build_tow_outcomes(
+            ships=ships,
+            drafts=[],
+            owner_slot_id=3,
+            hulls=HULLS,
+            hull_names=HULL_NAMES,
+            unlimited_fuel=True,
+            gravity_wells_enabled=True,
+            planet_wells=[
+                PlanetWarpWell(
+                    planet_id=99,
+                    name="Near Well",
+                    position=Point(2.5, 0.0),
+                )
+            ],
+        )
+
+        self.assertTrue(outcomes[1].certain)
+        self.assertEqual(outcomes[1].pre_well_position, Point(1.0, 0.0))
+        self.assertEqual(outcomes[1].position, Point(1.0, 0.0))
+        self.assertEqual(outcomes[1].warp_well.status.value, "not_applicable")
+        self.assertEqual(known[1], Point(1.0, 0.0))
+        self.assertEqual(known[2], Point(1.0, 0.0))
 
     def test_intercept_uses_known_post_tow_target_position(self) -> None:
         ships = [
@@ -296,6 +377,63 @@ class MovementPredictionTowRuntimeTests(unittest.TestCase):
 
         self.assertEqual(results[3].status, InterceptStatus.REACHED_TARGET)
         self.assertEqual(results[3].position, Point(60.0, 0.0))
+        self.assertTrue(results[3].certain)
+
+
+    def test_intercept_uses_post_well_tow_target_position(self) -> None:
+        ships = [
+            ship(1, mission=6, target_id=2, waypoint_x=60),
+            ship(2, waypoint_x=10),
+            ship(3, x=0, y=20, waypoint_x=0, waypoint_y=20),
+        ]
+        outcomes, known = _build_tow_outcomes(
+            ships=ships,
+            drafts=[],
+            owner_slot_id=3,
+            hulls=HULLS,
+            hull_names=HULL_NAMES,
+            unlimited_fuel=True,
+            gravity_wells_enabled=True,
+            planet_wells=[
+                PlanetWarpWell(
+                    planet_id=99,
+                    name="Tow Well",
+                    position=Point(62.0, 0.0),
+                )
+            ],
+        )
+        context = _FuelContext(
+            owner_slot_id=3,
+            unlimited_fuel=True,
+            ships={item.ship_id: item for item in ships},
+            hulls=HULLS,
+            beams=[],
+            torpedoes=[],
+            engines=[],
+            tow_outcomes=outcomes,
+            tow_known_positions=known,
+        )
+        token = _CONTEXT.set(context)
+        try:
+            results = _resolve_intercepts(
+                [
+                    InterceptOrder(
+                        ship_id=3,
+                        origin=Point(0.0, 20.0),
+                        target_ship_id=2,
+                        max_distance=81.0,
+                        target_visible=True,
+                    )
+                ],
+                prior_final_positions={},
+                mode=InterceptMode.CLASSIC,
+            )
+        finally:
+            _CONTEXT.reset(token)
+
+        self.assertEqual(known[2], Point(62.0, 0.0))
+        self.assertEqual(results[3].status, InterceptStatus.REACHED_TARGET)
+        self.assertEqual(results[3].position, Point(62.0, 0.0))
         self.assertTrue(results[3].certain)
 
 
