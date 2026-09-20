@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from contextvars import ContextVar
 from dataclasses import dataclass, field, replace
-from math import hypot
 from typing import Any, Mapping
 
 from sqlalchemy import select
@@ -40,7 +39,6 @@ from app.services.movement_tow import (
     resolve_strict_tow_locks,
 )
 from app.services.movement_warp_well import (
-    WARP_WELL_RADIUS,
     PlanetWarpWell,
     WarpWellResult,
     resolve_warp_well,
@@ -48,8 +46,6 @@ from app.services.movement_warp_well import (
 
 
 TOW_MISSION_NAMES = frozenset({"tow", "try to tow", "mission #6"})
-_TOW_WELL_EPSILON = 1e-9
-
 
 @dataclass(frozen=True, slots=True)
 class _TowRuntimeOutcome:
@@ -234,24 +230,6 @@ def _tow_state(
     )
 
 
-def _tow_endpoint_inside_well(
-    *,
-    position: Point,
-    moved_distance: float | None,
-    planets: list[PlanetWarpWell],
-) -> bool:
-    if moved_distance is None or moved_distance <= _TOW_WELL_EPSILON:
-        return False
-    return any(
-        hypot(
-            position.x - planet.position.x,
-            position.y - planet.position.y,
-        )
-        <= WARP_WELL_RADIUS + _TOW_WELL_EPSILON
-        for planet in planets
-    )
-
-
 def _unresolved_tow_outcome(
     *,
     role: str,
@@ -305,6 +283,15 @@ def _known_tow_outcome(
     warp_well: WarpWellResult | None,
 ) -> _TowRuntimeOutcome:
     assert route.position is not None
+    final_position = (
+        warp_well.position
+        if (
+            warp_well is not None
+            and warp_well.certain
+            and warp_well.position is not None
+        )
+        else route.position
+    )
     return _TowRuntimeOutcome(
         role=role,
         tower_ship_id=tower_ship_id,
@@ -312,7 +299,7 @@ def _known_tow_outcome(
         lock_status=TowLockStatus.LOCKED.value,
         status=("locked" if role == "tower" else "towed"),
         certain=True,
-        position=route.position,
+        position=final_position,
         pre_well_position=route.position,
         waypoint=route.waypoint,
         requested_distance=route.requested_distance,
@@ -571,16 +558,11 @@ def _build_tow_outcomes(
                 moved_distance=float(route.moved_distance or 0.0),
                 planets=planet_wells,
             )
-            if _tow_endpoint_inside_well(
-                position=route.position,
-                moved_distance=route.moved_distance,
-                planets=planet_wells,
-            ):
+            if not well.certain or well.position is None:
                 reason = (
-                    "Tow lock and pre-well endpoint are known, but the Tow + "
-                    "planetary warp-well interaction is not independently verified. "
-                    "The whole Tow pair is withheld regardless of the participants' "
-                    "individual warp values."
+                    "Tow lock and pre-well endpoint are known, but the endpoint "
+                    "lies in multiple planetary warp wells and the authoritative "
+                    "tie-break is not modelled. The whole Tow pair remains withheld."
                 )
                 tower_outcomes[tower_id] = _unresolved_tow_outcome(
                     role="tower",
@@ -621,9 +603,10 @@ def _build_tow_outcomes(
                 continue
 
         reason = (
-            "Strict owner-visible Tow lock is deterministic in the verified "
-            "unlimited-fuel subset; tower and target share the towing endpoint "
-            "before later movement phases."
+            "Strict owner-visible Tow lock and ordinary planetary warp-well "
+            "resolution are deterministic in the verified unlimited-fuel subset; "
+            "tower and target share the same post-well endpoint before later "
+            "movement phases."
         )
         tower_outcomes[tower_id] = _known_tow_outcome(
             role="tower",
@@ -672,9 +655,11 @@ def _common_warnings(*, unlimited_fuel: bool) -> list[str]:
         0,
         (
             "Geometry preview: the verified strict owner-visible Tow subset is "
-            "resolved before Move Most/Intercept. Finite-fuel Tow, Tow contests/"
-            "chains, Tow + warp-well interaction, mine impacts, hyperjump/chunnel "
-            "and other unsupported Host movement substeps remain fail-closed."
+            "resolved before Move Most/Intercept. Unlimited-fuel ordinary planetary "
+            "warp-well capture is included when the well is unambiguous. Finite-fuel "
+            "Tow, Tow contests/chains, overlapping-well tie-breaks, mine impacts, "
+            "hyperjump/chunnel and other unsupported Host movement substeps remain "
+            "fail-closed."
         ),
     )
     return warnings
