@@ -380,5 +380,62 @@ class MovementPredictionTowRuntimeTests(unittest.TestCase):
         self.assertTrue(results[3].certain)
 
 
+    def test_intercept_uses_post_well_tow_target_position(self) -> None:
+        ships = [
+            ship(1, mission=6, target_id=2, waypoint_x=60),
+            ship(2, waypoint_x=10),
+            ship(3, x=0, y=20, waypoint_x=0, waypoint_y=20),
+        ]
+        outcomes, known = _build_tow_outcomes(
+            ships=ships,
+            drafts=[],
+            owner_slot_id=3,
+            hulls=HULLS,
+            hull_names=HULL_NAMES,
+            unlimited_fuel=True,
+            gravity_wells_enabled=True,
+            planet_wells=[
+                PlanetWarpWell(
+                    planet_id=99,
+                    name="Tow Well",
+                    position=Point(62.0, 0.0),
+                )
+            ],
+        )
+        context = _FuelContext(
+            owner_slot_id=3,
+            unlimited_fuel=True,
+            ships={item.ship_id: item for item in ships},
+            hulls=HULLS,
+            beams=[],
+            torpedoes=[],
+            engines=[],
+            tow_outcomes=outcomes,
+            tow_known_positions=known,
+        )
+        token = _CONTEXT.set(context)
+        try:
+            results = _resolve_intercepts(
+                [
+                    InterceptOrder(
+                        ship_id=3,
+                        origin=Point(0.0, 20.0),
+                        target_ship_id=2,
+                        max_distance=81.0,
+                        target_visible=True,
+                    )
+                ],
+                prior_final_positions={},
+                mode=InterceptMode.CLASSIC,
+            )
+        finally:
+            _CONTEXT.reset(token)
+
+        self.assertEqual(known[2], Point(62.0, 0.0))
+        self.assertEqual(results[3].status, InterceptStatus.REACHED_TARGET)
+        self.assertEqual(results[3].position, Point(62.0, 0.0))
+        self.assertTrue(results[3].certain)
+
+
 if __name__ == "__main__":
     unittest.main()
