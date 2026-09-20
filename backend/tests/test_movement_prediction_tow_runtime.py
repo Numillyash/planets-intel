@@ -304,7 +304,7 @@ class MovementPredictionTowRuntimeTests(unittest.TestCase):
                 warp=1,
                 waypoint_x=1,
             ),
-            ship(2, waypoint_x=10),
+            ship(2, warp=0, waypoint_x=10),
         ]
         outcomes, known = _build_tow_outcomes(
             ships=ships,
