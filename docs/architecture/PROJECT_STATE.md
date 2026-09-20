@@ -141,6 +141,21 @@ Zero-fuel normal movement and insufficient-fuel Gravitonic movement remain outsi
 
 Tow contests/chains/cycles, web-hit interruption details and other special interactions remain separately scoped and must not be smuggled into the base rule.
 
+### Current blocker-driven transfer
+
+The 2026-09-20 read-only production inventory emitted 48 current movement rows:
+34 PREDICTED and 14 UNKNOWN. All rows were Tow participants; all 14 UNKNOWN rows
+were seven Tow pairs blocked only by the existing Tow + planetary warp-well
+guard, and all rows were in unlimited-fuel games.
+
+The adjacent evidence repo already contains the bounded historical Tow warp-well
+follow-up (2529/2585 direct residual rows explained by ordinary eligible wells)
+and marks ordinary warp-well ordering as `TESTED + DIFF_VERIFIED`. Production
+work is therefore scoped to reusing the existing unambiguous warp-well resolver
+for strict unlimited-fuel Tow only. Finite-fuel Tow, Tow contests/chains/cycles,
+overlapping-well tie-breaks and special interaction ordering remain outside that
+promotion.
+
 ### Movement acceptance
 
 The explicit Tow draft path is accepted for the currently scoped product
@@ -201,10 +216,11 @@ Deterministic post-combat replay state and analyst-confirmed state may enrich an
 
 ## Current next priorities
 
-1. Run the current-turn blocker inventory and use its real `implementation_gap`, `phase_state_required`, `unsupported_host_rule` and other populations before selecting the next mechanics transfer.
+1. Complete the bounded unlimited-fuel Tow + ordinary warp-well transfer selected by the 2026-09-20 runtime blocker inventory.
 2. Preserve phase-state boundaries for finite-fuel Tow and Intercept; supported formulas do not justify substituting snapshot fuel.
-3. Extend analyst/threat UX using existing provenance and prediction layers rather than inventing new factual state.
-4. Let `planets-lab` continue Host combat ordering research independently; product work should not block on a complete NuHost reconstruction.
+3. Keep overlapping-well tie-breaks and special Tow interactions fail-closed.
+4. Extend analyst/threat UX using existing provenance and prediction layers rather than inventing new factual state.
+5. Let `planets-lab` continue Host combat ordering research independently; product work should not block on a complete NuHost reconstruction.
 
 ## Deliberately not claimed
 
