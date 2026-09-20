@@ -145,6 +145,9 @@ export function ThreatAnalysis({
     const vcr = analysis.loadout.vcr_reveal;
     const subjectMilitary = analysis.military?.subject_owner ?? null;
     const primaryMilitary = analysis.military?.primary_owner ?? null;
+    const provenance = analysis.provenance ?? null;
+    const subjectFactTurn = analysis.subject.info_turn ?? analysis.turn;
+    const observerCount = provenance?.accessible_observer_ids.length ?? 0;
 
     return (
         <DetailSection title="Threat analysis · inference">
@@ -192,7 +195,7 @@ export function ThreatAnalysis({
                             <span>
                                 <strong>VCR #{vcr.vcr_id} · T{vcr.battle_turn}</strong>
                                 <small>
-                                    factual equipment leak: {vcr.beam_count ?? "?"} beams · {vcr.launcher_count ?? "?"} tubes
+                                    factual equipment leak · batch #{vcr.batch_id}: {vcr.beam_count ?? "?"} beams · {vcr.launcher_count ?? "?"} tubes
                                 </small>
                                 {(vcr.combat_start_torpedoes ?? vcr.torpedoes) !== null && (
                                     <small>
@@ -337,14 +340,42 @@ export function ThreatAnalysis({
                         <FactRow
                             label="Enemy military"
                             value={subjectMilitary !== null
-                                ? `${subjectMilitary.military_score.toLocaleString()}${subjectMilitary.military_delta !== null ? ` · Δ ${subjectMilitary.military_delta >= 0 ? "+" : ""}${subjectMilitary.military_delta.toLocaleString()}` : ""}`
+                                ? `T${subjectMilitary.turn} · ${subjectMilitary.military_score.toLocaleString()}${subjectMilitary.military_delta !== null ? ` · Δ ${subjectMilitary.military_delta >= 0 ? "+" : ""}${subjectMilitary.military_delta.toLocaleString()}` : ""}`
                                 : "—"}
                         />
                         <FactRow
                             label="Primary military"
                             value={primaryMilitary !== null
-                                ? `${primaryMilitary.military_score.toLocaleString()}${primaryMilitary.military_delta !== null ? ` · Δ ${primaryMilitary.military_delta >= 0 ? "+" : ""}${primaryMilitary.military_delta.toLocaleString()}` : ""}`
+                                ? `T${primaryMilitary.turn} · ${primaryMilitary.military_score.toLocaleString()}${primaryMilitary.military_delta !== null ? ` · Δ ${primaryMilitary.military_delta >= 0 ? "+" : ""}${primaryMilitary.military_delta.toLocaleString()}` : ""}`
                                 : "—"}
+                        />
+                    </dl>
+                </div>
+            )}
+
+            {provenance !== null && (
+                <div style={{ marginTop: 10 }}>
+                    <strong style={{ fontSize: 12 }}>Evidence basis</strong>
+                    <dl className="intel-fact-list" style={{ marginTop: 5 }}>
+                        <FactRow
+                            label="Subject fact"
+                            value={`T${subjectFactTurn} · batch #${analysis.subject.source_batch_id}`}
+                        />
+                        <FactRow
+                            label="Rule catalog"
+                            value={`T${provenance.rule_catalog_turn}`}
+                        />
+                        <FactRow
+                            label="Observer coverage"
+                            value={`${observerCount} accessible source${observerCount === 1 ? "" : "s"}`}
+                        />
+                        <FactRow
+                            label="Analysis mode"
+                            value="read-time inference"
+                        />
+                        <FactRow
+                            label="Facts unchanged"
+                            value={provenance.facts_unchanged ? "Yes" : "No"}
                         />
                     </dl>
                 </div>
