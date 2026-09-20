@@ -13,13 +13,13 @@ This is the durable architectural state for `Numillyash/planets-intel`. Git hist
 
 ## Production checkpoint
 
-On 2026-09-18 production was successfully deployed at:
+On 2026-09-20 production was successfully deployed at:
 
 ```text
-fd3312e75756c416dee7d9febffad2149643d5c3
+88a420d334710b6e756f10b52d35a2c303846bdc
 ```
 
-with 300 backend tests passing, DB head `0018_tow_target_ship_id`, successful backend recreation and healthy `/api/health`.
+with 306 backend tests passing, DB head `0018_tow_target_ship_id`, successful backend recreation and healthy `/api/health`.
 
 This checkpoint includes:
 
@@ -30,13 +30,15 @@ This checkpoint includes:
 - the first production Turn Review / evidence ledger using the existing unified movement prediction stack;
 - structured provenance for UNKNOWN movement rows, distinguishing unavailable phase-state, implementation gaps, missing facts, unresolved dependencies, order ambiguity and unsupported Host rules;
 - lab-verified true-partial normal-speed Move Most fuel semantics with Host major/minor-axis endpoint projection and continuous nominal one-turn fuel basis;
-- accepted Tow runtime/rendering through the one-label-per-pair UX, with target geometry retained and duplicate `PREDICTED TOWED` text suppressed.
+- accepted Tow runtime/rendering through the one-label-per-pair UX, with target geometry retained and duplicate `PREDICTED TOWED` text suppressed;
+- accepted strict unlimited-fuel Tow + unambiguous ordinary planetary warp-well resolution, including shared post-well tower/target position and post-well Intercept dependency propagation.
 
 Detailed runtime records:
 
 - `docs/handoff/2026-09-11-turn-review-blockers-production.md`
 - `docs/handoff/2026-09-12-true-partial-move-most-production.md`
 - `docs/handoff/2026-09-18-tow-ux-production-acceptance.md`
+- `docs/handoff/2026-09-20-unlimited-tow-warp-well-production-closure.md`
 
 ## Stable baseline
 
@@ -143,18 +145,25 @@ Tow contests/chains/cycles, web-hit interruption details and other special inter
 
 ### Current blocker-driven transfer
 
-The 2026-09-20 read-only production inventory emitted 48 current movement rows:
-34 PREDICTED and 14 UNKNOWN. All rows were Tow participants; all 14 UNKNOWN rows
-were seven Tow pairs blocked only by the existing Tow + planetary warp-well
-guard, and all rows were in unlimited-fuel games.
+The bounded unlimited-fuel Tow + ordinary planetary warp-well transfer is now
+deployed and runtime-accepted.
 
-The adjacent evidence repo already contains the bounded historical Tow warp-well
-follow-up (2529/2585 direct residual rows explained by ordinary eligible wells)
-and marks ordinary warp-well ordering as `TESTED + DIFF_VERIFIED`. Production
-work is therefore scoped to reusing the existing unambiguous warp-well resolver
-for strict unlimited-fuel Tow only. Finite-fuel Tow, Tow contests/chains/cycles,
-overlapping-well tie-breaks and special interaction ordering remain outside that
-promotion.
+Before the transfer, the current effective facade emitted 48 Tow rows: 34
+PREDICTED and 14 UNKNOWN, with the 14 UNKNOWN rows representing seven Tow pairs
+blocked solely by the Tow + warp-well guard.
+
+After deploy, the same read-only audit returned:
+
+```text
+prediction_items 48
+predicted_items  48
+unknown_items     0
+blocker_counts   {}
+```
+
+No overlapping-well ambiguity occurred in this current population. Finite-fuel
+Tow, Tow contests/chains/cycles, overlapping-well tie-breaks and special
+interaction ordering remain outside the promotion.
 
 ### Movement acceptance
 
@@ -216,10 +225,10 @@ Deterministic post-combat replay state and analyst-confirmed state may enrich an
 
 ## Current next priorities
 
-1. Complete the bounded unlimited-fuel Tow + ordinary warp-well transfer selected by the 2026-09-20 runtime blocker inventory.
+1. Preserve the accepted Tow warp-well path and reopen it only on concrete regression or new bounded evidence.
 2. Preserve phase-state boundaries for finite-fuel Tow and Intercept; supported formulas do not justify substituting snapshot fuel.
 3. Keep overlapping-well tie-breaks and special Tow interactions fail-closed.
-4. Extend analyst/threat UX using existing provenance and prediction layers rather than inventing new factual state.
+4. Extend analyst/threat UX using existing factual, VCR and military-score provenance rather than inventing new factual state.
 5. Let `planets-lab` continue Host combat ordering research independently; product work should not block on a complete NuHost reconstruction.
 
 ## Deliberately not claimed

@@ -18,22 +18,23 @@ Source/runtime checkpoint at this handoff:
 
 ```text
 feature/operational-ui
-fd3312e75756c416dee7d9febffad2149643d5c3
+88a420d334710b6e756f10b52d35a2c303846bdc
 ```
 
-Production was deployed successfully at that exact SHA on 2026-09-18:
+Production was deployed successfully at that exact SHA on 2026-09-20:
 
 ```text
 Build: OK
-Backend tests: OK (300)
+Backend tests: OK (306)
 DB: 0018_tow_target_ship_id (head)
 Backend recreate: OK
 Health: {"status":"ok","service":"planets-intel-backend"}
 DEPLOY OK
-Log: /opt/planets-intel/logs/deploy/20260918-023940-production.log
+Log: /opt/planets-intel/logs/deploy/20260920-122950-production.log
 ```
 
-Detailed checkpoint: `docs/handoff/2026-09-18-tow-ux-production-acceptance.md`.
+Detailed checkpoint:
+`docs/handoff/2026-09-20-unlimited-tow-warp-well-production-closure.md`.
 
 ## Current product state
 
@@ -107,27 +108,29 @@ label per resolved Tow pair while retaining the target prediction geometry;
 
 ### Current blocker inventory — 2026-09-20
 
-The read-only production blocker inventory was run after PR #20. It found 48
-effective prediction rows across the current factual groups: 34 PREDICTED and
-14 UNKNOWN. Every emitted row was Tow; every UNKNOWN row was one half of seven
-Tow pairs with the same `dependency_unresolved` cause: the production guard
-around Tow + planetary warp-well interaction. All 48 rows were unlimited-fuel.
+The pre-transfer read-only inventory found 48 effective Tow rows: 34 PREDICTED
+and 14 UNKNOWN. The 14 UNKNOWN rows were exactly seven Tow pairs blocked by the
+old Tow + planetary warp-well guard, all in unlimited-fuel games.
 
-No `implementation_gap`, `phase_state_required`, `missing_fact`,
-`order_ambiguity` or `unsupported_host_rule` row appeared in this emitted
-runtime population. This is not a claim about every possible Move Most or
-Intercept case; the facade emitted only Tow rows in this snapshot.
+After the bounded unlimited-fuel Tow warp-well transfer was deployed at
+`88a420d334710b6e756f10b52d35a2c303846bdc`, the same inventory was rerun:
 
-Cross-checking actual `planets-lab/main` found the relevant historical
-evidence already present: ordinary warp-well ordering is
-`TESTED + DIFF_VERIFIED`, and the dedicated Tow warp-well follow-up explained
-2529/2585 bounded Tow residual rows through ordinary eligible planetary wells.
-The next transfer is therefore limited to strict deterministic Tow in
-unlimited-fuel games using the existing unambiguous warp-well resolver. Finite
-fuel and overlapping-well tie-breaks remain fail-closed.
+```text
+prediction_items 48
+predicted_items  48
+unknown_items     0
+blocker_counts   {}
+```
 
-Detailed checkpoint:
-`docs/handoff/2026-09-20-movement-blocker-runtime-and-tow-warp-well-transfer.md`.
+The seven prior pairs therefore resolved exactly as intended. No overlapping
+warp-well ambiguity was present in the current runtime population.
+
+This does not prove that every possible stored Move Most/Intercept/Tow state is
+solved; the diagnostic measures rows emitted by the effective production facade.
+
+Detailed checkpoints:
+- `docs/handoff/2026-09-20-movement-blocker-runtime-and-tow-warp-well-transfer.md`
+- `docs/handoff/2026-09-20-unlimited-tow-warp-well-production-closure.md`
 
 ### Movement research reconciliation
 
@@ -192,10 +195,10 @@ Inference must remain visibly distinct from facts.
 
 ## Immediate product priorities
 
-1. Integrate and runtime-check the bounded unlimited-fuel Tow + ordinary warp-well transfer selected by the 2026-09-20 blocker inventory.
+1. Leave the accepted unlimited-fuel Tow + ordinary warp-well path closed absent regression.
 2. Keep finite-fuel Tow and Intercept fail-closed where the necessary phase-aligned fuel state is not factual.
 3. Preserve fail-closed behavior for overlapping warp-well tie-breaks and special movement interactions.
-4. Extend analyst/threat UX using existing provenance and prediction layers rather than inventing new factual state.
+4. Extend analyst/threat UX using existing factual/VCR/military provenance rather than inventing new state.
 5. Keep product work independent from ongoing `planets-lab` Host combat-order reverse. Do not wait for full NuHost reconstruction before improving provenance, review and analyst UX.
 
 ## Working rules
