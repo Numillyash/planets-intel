@@ -85,7 +85,7 @@ class CommanderDossier(BaseModel):
     public_history_games: list[CommanderHistoryGame]
     public_history_game_count: int | None
     history_provenance: CommanderHistoryProvenance
-    prior_current_game_peers: list[CommanderPeerSummary]
+    current_game_peer_history: list[CommanderPeerSummary]
 
     race_history: list[CommanderRaceHistoryItem]
     race_frequency: dict[str, int]
