@@ -478,11 +478,48 @@ def exact_overlap_intervals(
     ]
 
 
-def _history_sort_key(game: dict[str, Any]) -> tuple[str, int]:
+def _history_date(game: dict[str, Any]) -> datetime | None:
+    value = game.get("date_created")
+    if not isinstance(value, str) or not value.strip():
+        return None
+    text = value.strip()
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        return _aware(parsed)
+    except ValueError:
+        pass
+    for pattern in ("%m/%d/%Y %I:%M:%S %p", "%m/%d/%Y"):
+        try:
+            return datetime.strptime(text, pattern).replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+    return None
+
+
+def _history_sort_key(game: dict[str, Any]) -> tuple[float, int]:
+    parsed = _history_date(game)
     return (
-        str(game.get("date_created") or ""),
+        parsed.timestamp() if parsed is not None else float(game["game_id"]),
         int(game["game_id"]),
     )
+
+
+def _shared_occurrence_bounds(
+    games: list[dict[str, Any]],
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    if not games:
+        return None, None
+    dated = [
+        (parsed, game)
+        for game in games
+        for parsed in [_history_date(game)]
+        if parsed is not None
+    ]
+    # Do not call a game first/last when another shared game lacks a date.
+    if len(dated) != len(games):
+        return None, None
+    dated.sort(key=lambda item: (item[0], int(item[1]["game_id"])))
+    return dated[0][1], dated[-1][1]
 
 
 def _current_commanders(
@@ -922,9 +959,9 @@ async def get_commander_intelligence(
                 _interval_race_records(history_game, right_intervals)
             )
 
-        shared_games_sorted = sorted(
-            [left_by_id[item] for item in shared_ids],
-            key=_history_sort_key,
+        shared_history_games = [left_by_id[item] for item in shared_ids]
+        first_shared, last_shared = _shared_occurrence_bounds(
+            shared_history_games
         )
         exact_overlap_turns = (
             known_overlap_turns if reconstruction_complete else None
@@ -941,12 +978,8 @@ async def get_commander_intelligence(
             "overlapping_turn_count": exact_overlap_turns,
             "known_overlapping_turn_count": known_overlap_turns,
             "overlap_reconstruction_complete": reconstruction_complete,
-            "first_shared_occurrence": (
-                shared_games_sorted[0] if shared_games_sorted else None
-            ),
-            "last_shared_occurrence": (
-                shared_games_sorted[-1] if shared_games_sorted else None
-            ),
+            "first_shared_occurrence": first_shared,
+            "last_shared_occurrence": last_shared,
             "games": game_rows,
             "status": "complete" if reconstruction_complete else "partial",
         }
