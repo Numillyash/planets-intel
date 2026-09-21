@@ -1054,7 +1054,7 @@ async def get_commander_intelligence(
                     len(history) if history is not None else None
                 ),
                 "history_provenance": history_provenance[key],
-                "prior_current_game_peers": peers,
+                "current_game_peer_history": peers,
                 "race_history": sorted(
                     race_dedupe.values(),
                     key=lambda item: item["game_id"],
