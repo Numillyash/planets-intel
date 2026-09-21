@@ -223,13 +223,41 @@ Existing threat analysis is useful product infrastructure and should be develope
 
 Deterministic post-combat replay state and analyst-confirmed state may enrich analysis, but both remain separate from factual observations and must be labelled accordingly.
 
+## Planned Commander Intelligence and operator-map extension
+
+A separate product workstream is now recorded for intelligence about **players/commanders themselves**, derived from public Planets.nu history, plus richer operator-facing map layers.
+
+External references reviewed on 2026-09-21:
+
+- T-Continuum Analyser — historical-game/replay/statistics ideas and Host-settings-oriented corpus browsing;
+- chmeee.org Planets.nu tools — map filtering, spatial messages/events and notes as operator-UX precedents;
+- `derblondehans/player-affinity-tool` — public-game-history intersection, replacement/dead-player recovery from event logs and turn-overlap calculation.
+
+The bounded product direction is:
+
+- add a **Commander / Player Dossier** backed by public factual game history;
+- preserve replacement-aware participation intervals rather than treating mere membership in the same game as simultaneous play;
+- expose factual pairwise history such as shared games and overlapping turns;
+- keep any higher-level labels such as "historically associated", "likely coordinated" or "rival" explicitly inferential and separately provenance-tagged;
+- consider race-history, repeat-game and co-presence summaries only from attributable public observations;
+- add optional operator map filters/layers, spatial event markers and analyst annotations without mixing them into factual game state.
+
+This work must reuse the existing fact/provenance architecture. Public Planets.nu API responses are observations; derived relationship summaries are derived data; analyst notes are analyst-authored state; behavioral interpretation remains inference.
+
+Do **not** duplicate the existing Time Machine / historical snapshot / ship-track stack merely to imitate external replay tools. Do **not** treat third-party statistics as Host evidence. External implementations are references for product ideas only; source code must not be copied into this repository without an explicit license review.
+
+Detailed scope and proposed implementation boundaries are recorded in:
+
+- `docs/handoff/2026-09-21-external-tools-intelligence-workstreams.md`
+
 ## Current next priorities
 
 1. Preserve the accepted Tow warp-well path and reopen it only on concrete regression or new bounded evidence.
 2. Preserve phase-state boundaries for finite-fuel Tow and Intercept; supported formulas do not justify substituting snapshot fuel.
 3. Keep overlapping-well tie-breaks and special Tow interactions fail-closed.
 4. Extend analyst/threat UX using existing factual, VCR and military-score provenance rather than inventing new factual state.
-5. Let `planets-lab` continue Host combat ordering research independently; product work should not block on a complete NuHost reconstruction.
+5. Build the bounded Commander Intelligence foundation from public history with replacement-aware participation and explicit fact/derived/inference boundaries; keep operator map annotations/layers separate from factual state.
+6. Let `planets-lab` continue Host combat ordering research independently; product work should not block on a complete NuHost reconstruction.
 
 ## Deliberately not claimed
 
