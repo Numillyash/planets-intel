@@ -1,6 +1,6 @@
 # Planets Intel — Current Handoff
 
-Updated: 2026-09-20
+Updated: 2026-09-21
 
 GitHub is the source of truth. Active development remains on `feature/operational-ui`. A fresh chat must inspect the actual branch HEAD before making current-code claims or writes, then read this file together with `NEW_CHAT_START.md`, `PROJECT_STATE.md` and the newest dated handoff under `docs/handoff/`.
 
@@ -14,14 +14,13 @@ GitHub is the source of truth. Active development remains on `feature/operationa
 - Deployment entrypoint: `/opt/planets-intel/scripts/deploy/production.sh`
 - Never infer production HEAD from chat history; inspect it before every deploy.
 
-Source/runtime checkpoint at this handoff:
+Production runtime checkpoint at this handoff:
 
 ```text
-feature/operational-ui
-88a420d334710b6e756f10b52d35a2c303846bdc
+d0aca955914db38abf6d49cac61a8df7e0de4b82
 ```
 
-Production was deployed successfully at that exact SHA on 2026-09-20:
+Production was deployed successfully at that exact SHA on 2026-09-21:
 
 ```text
 Build: OK
@@ -30,11 +29,14 @@ DB: 0018_tow_target_ship_id (head)
 Backend recreate: OK
 Health: {"status":"ok","service":"planets-intel-backend"}
 DEPLOY OK
-Log: /opt/planets-intel/logs/deploy/20260920-122950-production.log
+Log: /opt/planets-intel/logs/deploy/20260921-122316-production.log
 ```
 
-Detailed checkpoint:
-`docs/handoff/2026-09-20-unlimited-tow-warp-well-production-closure.md`.
+Active GitHub development may be ahead of this production checkpoint. Always
+inspect the actual `feature/operational-ui` HEAD separately before code work.
+
+Latest Commander work:
+`docs/handoff/2026-09-21-commander-intelligence-foundation.md`.
 
 ## Current product state
 
@@ -193,13 +195,52 @@ The existing product already contains useful intelligence infrastructure and sho
 
 Inference must remain visibly distinct from facts.
 
+### Commander / Player Intelligence
+
+The first bounded Commander Intelligence vertical slice is implemented on the
+active development branch and is pending production deployment/acceptance.
+
+It reuses the existing public Planets.nu adapter and canonical current-game
+roster, while adding backend-side transport caches for public player history and
+historical `loadinfo` responses. Replacement-aware participation intervals are
+derived at read time from public join/drop events with roster fallback. Unknown
+interval edges remain UNKNOWN.
+
+Pairwise output separates:
+
+```text
+shared game
+!= proven simultaneous participation
+!= behavioral relationship
+```
+
+Exact overlapping-turn totals are exposed only when every relevant interval
+bound is known. Partial reconstructions expose bounded known overlap separately.
+
+New API/UI surface:
+
+```text
+GET /api/games/{game_id}/commander-intelligence
+Game Dashboard -> Commander intel
+```
+
+The result is explicitly marked
+`analysis_kind=derived_historical_summary`,
+`behavioral_inference=false` and `facts_unchanged=true`.
+
+Migration `0019_commander_intel_cache` adds only public transport-cache tables;
+it does not materialize alliances, affinity scores or behavioral inference.
+
+Detailed handoff:
+`docs/handoff/2026-09-21-commander-intelligence-foundation.md`.
+
 ## Immediate product priorities
 
-1. Leave the accepted unlimited-fuel Tow + ordinary warp-well path closed absent regression.
-2. Keep finite-fuel Tow and Intercept fail-closed where the necessary phase-aligned fuel state is not factual.
-3. Preserve fail-closed behavior for overlapping warp-well tie-breaks and special movement interactions.
-4. Extend analyst/threat UX using existing factual/VCR/military provenance rather than inventing new state.
-5. Keep product work independent from ongoing `planets-lab` Host combat-order reverse. Do not wait for full NuHost reconstruction before improving provenance, review and analyst UX.
+1. Merge/deploy the bounded Commander Intelligence foundation and browser-check at least one concrete current-game pair back to public game ids and reconstructed participation overlap.
+2. Keep Commander factual/derived history separate from any future behavioral inference or analyst annotation.
+3. Leave the accepted unlimited-fuel Tow + ordinary warp-well path closed absent regression and preserve all finite-fuel/special-interaction fail-closed boundaries.
+4. Continue analyst/threat UX and the independent operator-map layer/filter workstream without creating a second historical replay subsystem.
+5. Keep product work independent from ongoing `planets-lab` Host combat-order reverse.
 
 ## Working rules
 
