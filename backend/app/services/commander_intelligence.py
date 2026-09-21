@@ -1043,6 +1043,11 @@ async def get_commander_intelligence(
                 item["username"].casefold(),
             ),
         )
+        public_history_ids = (
+            {item["game_id"] for item in history}
+            if history is not None
+            else set()
+        )
         dossier_rows.append(
             {
                 **commander,
@@ -1066,6 +1071,7 @@ async def get_commander_intelligence(
                         {
                             row["game_id"]
                             for row in race_dedupe.values()
+                            if row["game_id"] in public_history_ids
                         }
                     ),
                     "public_history_games": (
