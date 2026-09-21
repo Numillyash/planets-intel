@@ -32,6 +32,7 @@ import { MilitaryScoreChart } from "../statistics/MilitaryScoreChart";
 import { AdvantagesPanel } from "./AdvantagesPanel";
 import { BattlePlannerDashboardPanel } from "./BattlePlannerDashboardPanel";
 import { CombatFighterEvidencePanel } from "./CombatFighterEvidencePanel";
+import { CommanderIntelligencePanel } from "./CommanderIntelligencePanel";
 import { DiplomacyPanel } from "./DiplomacyPanel";
 import { MilitaryAttributionPanel } from "./MilitaryAttributionPanel";
 import { StarbaseListPanel } from "./StarbaseListPanel";
@@ -49,6 +50,7 @@ type GameDashboardTab =
     | "battle-planner"
     | "reports"
     | "communications"
+    | "commander-intel"
     | "planets"
     | "starships"
     | "starbases"
@@ -67,6 +69,7 @@ const TABS: Array<{ id: GameDashboardTab; label: string }> = [
     { id: "battle-planner", label: "Battle Planner" },
     { id: "reports", label: "Reports" },
     { id: "communications", label: "Communications" },
+    { id: "commander-intel", label: "Commander intel" },
     { id: "planets", label: "Planets" },
     { id: "starships", label: "Starships" },
     { id: "starbases", label: "Starbases" },
@@ -469,6 +472,22 @@ export function GameDashboard({
                             gameId={game.game.id}
                             linkedAccountId={selectedAccount.id}
                         />
+                    )
+                )}
+
+                {activeTab === "commander-intel" && (
+                    historicalMode ? (
+                        <HistoricalUnavailable
+                            title="Commander Intelligence is a live-roster view"
+                            turn={dashboardTurn}
+                        >
+                            The dossier is anchored to the canonical current-game
+                            commander roster and public historical game records.
+                            It is intentionally not relabelled as a turn-indexed
+                            Time Machine snapshot.
+                        </HistoricalUnavailable>
+                    ) : (
+                        <CommanderIntelligencePanel gameId={game.game.id} />
                     )
                 )}
 
