@@ -271,11 +271,11 @@ export function CommanderIntelligencePanel({
                         <small>running + finished games</small>
                     </div>
                     <div>
-                        <span>Prior current-game peers</span>
+                        <span>Peers with shared history</span>
                         <strong>
-                            {dossier.prior_current_game_peers.filter((peer) => peer.shared_games > 0).length}
+                            {dossier.current_game_peer_history.filter((peer) => peer.shared_games > 0).length}
                         </strong>
-                        <small>shared-game fact only</small>
+                        <small>other shared games; no relationship label</small>
                     </div>
                     <div>
                         <span>History source</span>
@@ -288,7 +288,7 @@ export function CommanderIntelligencePanel({
             <section className="panel">
                 <div className="panel-header">
                     <div>
-                        <h2>Current-game peers seen before</h2>
+                        <h2>Shared history with current-game peers</h2>
                         <p>Shared games and exact turn overlap are separate measurements.</p>
                     </div>
                 </div>
@@ -305,7 +305,7 @@ export function CommanderIntelligencePanel({
                                         <small>
                                             {pair.shared_games === null
                                                 ? "history unavailable"
-                                                : pair.shared_games + " previous shared games"}
+                                                : pair.shared_games + " other shared games"}
                                         </small>
                                     </span>
                                     <span>
