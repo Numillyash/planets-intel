@@ -12,6 +12,8 @@ from app.models.planets_account import PlanetsAccount
 from app.models.player_turn_activity_observation import PlayerTurnActivityObservation
 from app.models.private_message_observation import PrivateMessageObservation
 from app.models.private_observation_batch import PrivateObservationBatch
+from app.models.public_game_info_cache import PublicGameInfoCache
+from app.models.public_player_history_cache import PublicPlayerHistoryCache
 from app.models.score_observation import ScoreObservation
 from app.models.session import AppSession
 from app.models.ship_observation import ShipObservation
@@ -39,6 +41,8 @@ __all__ = [
     "PlayerTurnActivityObservation",
     "PrivateMessageObservation",
     "PrivateObservationBatch",
+    "PublicGameInfoCache",
+    "PublicPlayerHistoryCache",
     "ScoreObservation",
     "ShipObservation",
     "ShipOrderDraft",
