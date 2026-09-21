@@ -73,7 +73,7 @@ export interface CommanderDossier {
     public_history_games: CommanderHistoryGame[];
     public_history_game_count: number | null;
     history_provenance: CommanderHistoryProvenance;
-    prior_current_game_peers: CommanderPeerSummary[];
+    current_game_peer_history: CommanderPeerSummary[];
 
     race_history: CommanderRaceHistoryItem[];
     race_frequency: Record<string, number>;
