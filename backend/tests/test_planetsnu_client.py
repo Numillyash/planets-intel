@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import httpx
 
@@ -142,6 +142,38 @@ class PlanetsNuClientTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             _HttpErrorAsyncClient.attempts,
             ["http://proxy.invalid:8080"],
+        )
+
+    async def test_games_for_username_filters_requested_statuses_locally(self):
+        client = PlanetsNuClient()
+        client.get = AsyncMock(
+            return_value=[
+                {"id": 1, "status": 1},
+                {"id": 2, "status": 2},
+                {"id": 3, "status": 3},
+                {"id": 4, "status": 4},
+                {"id": 5, "status": "2"},
+            ]
+        )
+
+        result = await client.games_for_username(
+            " Example ",
+            statuses=(2, 3),
+        )
+
+        self.assertEqual(
+            result,
+            [
+                {"id": 2, "status": 2},
+                {"id": 3, "status": 3},
+            ],
+        )
+        client.get.assert_awaited_once_with(
+            "games/list",
+            params={
+                "username": "Example",
+                "status": "2,3",
+            },
         )
 
     async def test_send_message_never_retries_ambiguous_transport_failure(self):
