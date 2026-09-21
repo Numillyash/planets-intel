@@ -255,6 +255,7 @@ Detailed scope and proposed implementation boundaries are recorded in:
 
 - `docs/handoff/2026-09-21-external-tools-intelligence-workstreams.md`
 - `docs/handoff/2026-09-21-commander-intelligence-foundation.md`
+- `docs/handoff/2026-09-21-operator-map-layers-design.md`
 
 The first Commander slice now implements the factual/derived foundation. Public
 `games/list` and historical `loadinfo` payloads are cached backend-side;
