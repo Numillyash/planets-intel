@@ -271,7 +271,7 @@ export function CommanderIntelligencePanel({
                         <small>running + finished games</small>
                     </div>
                     <div>
-                        <span>Peers with shared history</span>
+                        <span>Known peers with shared history</span>
                         <strong>
                             {dossier.current_game_peer_history.filter((peer) => peer.shared_games > 0).length}
                         </strong>
