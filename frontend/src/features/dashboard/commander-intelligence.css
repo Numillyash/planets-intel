@@ -1,0 +1,193 @@
+.commander-header {
+    align-items: flex-start;
+    gap: 18px;
+}
+
+.commander-header select {
+    min-width: 240px;
+    max-width: 360px;
+}
+
+.commander-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.commander-summary-grid > div {
+    border: 1px solid rgba(129, 160, 197, 0.2);
+    border-radius: 8px;
+    padding: 10px 12px;
+    background: rgba(10, 17, 29, 0.42);
+}
+
+.commander-summary-grid span,
+.commander-summary-grid small,
+.commander-peer small,
+.commander-game-evidence small {
+    display: block;
+    color: #8fa3bc;
+    font-size: 11px;
+}
+
+.commander-summary-grid strong {
+    display: block;
+    margin: 3px 0;
+    font-size: 15px;
+}
+
+.commander-warning {
+    margin-top: 10px;
+    border: 1px solid rgba(255, 190, 112, 0.45);
+    border-radius: 7px;
+    padding: 8px 10px;
+    color: #ffd09a;
+    font-size: 11px;
+}
+
+.commander-peer-list,
+.commander-pair-games,
+.commander-history-list {
+    display: grid;
+    gap: 7px;
+}
+
+.commander-peer,
+.commander-game-evidence {
+    border: 1px solid rgba(129, 160, 197, 0.18);
+    border-radius: 8px;
+    background: rgba(8, 14, 25, 0.38);
+}
+
+.commander-peer > summary,
+.commander-game-evidence > summary {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    align-items: center;
+    cursor: pointer;
+    padding: 9px 11px;
+}
+
+.commander-peer > summary > span:last-child {
+    text-align: right;
+}
+
+.commander-pair-games {
+    padding: 0 10px 10px;
+}
+
+.commander-game-evidence {
+    background: rgba(4, 10, 18, 0.48);
+}
+
+.commander-overlap-chip {
+    color: #9fd4ff;
+    font-size: 11px;
+    white-space: nowrap;
+}
+
+.commander-evidence-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    padding: 0 11px 9px;
+}
+
+.commander-evidence-grid > div {
+    min-width: 0;
+}
+
+.commander-evidence-grid small {
+    margin-top: 3px;
+    overflow-wrap: anywhere;
+}
+
+.commander-provenance {
+    margin: 8px 11px 10px;
+    color: #71859e;
+    font-size: 10px;
+    overflow-wrap: anywhere;
+}
+
+.commander-race-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.commander-race-list > div {
+    border: 1px solid rgba(129, 160, 197, 0.18);
+    border-radius: 999px;
+    padding: 6px 10px;
+}
+
+.commander-race-list span {
+    margin-left: 7px;
+    color: #8fa3bc;
+    font-size: 11px;
+}
+
+.commander-history-summary {
+    cursor: pointer;
+    font-weight: 700;
+}
+
+.commander-history-list {
+    margin-top: 10px;
+    max-height: 380px;
+    overflow: auto;
+}
+
+.commander-history-list > div {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    border-bottom: 1px solid rgba(129, 160, 197, 0.12);
+    padding: 6px 2px;
+    font-size: 11px;
+}
+
+.commander-history-list small {
+    display: inline;
+    margin-left: 6px;
+    color: #71859e;
+}
+
+.commander-boundary {
+    border-color: rgba(116, 206, 180, 0.28);
+}
+
+.commander-boundary p {
+    margin: 5px 0 0;
+    color: #95a9bf;
+    font-size: 11px;
+    line-height: 1.45;
+}
+
+@media (max-width: 760px) {
+    .commander-header {
+        flex-direction: column;
+    }
+
+    .commander-header select {
+        width: 100%;
+        max-width: none;
+    }
+
+    .commander-evidence-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .commander-peer > summary,
+    .commander-game-evidence > summary,
+    .commander-history-list > div {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .commander-peer > summary > span:last-child {
+        text-align: left;
+    }
+}

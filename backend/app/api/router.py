@@ -3,6 +3,7 @@ from fastapi import APIRouter
 from app.api.routes.account_games import router as account_games_router
 from app.api.routes.auth import router as auth_router
 from app.api.routes.combat_replay import router as combat_replay_router
+from app.api.routes.commander_intelligence import router as commander_intelligence_router
 from app.api.routes.game_activity import router as game_activity_router
 from app.api.routes.games import router as games_router
 from app.api.routes.health import router as health_router
@@ -83,6 +84,11 @@ api_router.include_router(
 api_router.include_router(
     combat_replay_router,
     tags=["combat-replay"],
+)
+
+api_router.include_router(
+    commander_intelligence_router,
+    tags=["commander-intelligence"],
 )
 
 api_router.include_router(

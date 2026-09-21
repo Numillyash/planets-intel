@@ -192,12 +192,18 @@ class PlanetsNuClient:
     async def games_for_username(
         self,
         username: str,
+        *,
+        statuses: tuple[int, ...] | None = None,
     ) -> list[dict[str, Any]]:
+        params: dict[str, Any] = {
+            "username": username.strip(),
+        }
+        if statuses:
+            params["status"] = ",".join(str(status) for status in statuses)
+
         payload = await self.get(
             "games/list",
-            params={
-                "username": username.strip(),
-            },
+            params=params,
         )
 
         if not isinstance(payload, list):
@@ -212,6 +218,22 @@ class PlanetsNuClient:
             raise PlanetsNuError(
                 "Planets.nu games/list contains invalid records"
             )
+
+        if statuses:
+            allowed = set(statuses)
+            # Planets.nu documents username as a dominant games/list filter;
+            # other query fields can be ignored. Enforce the requested status
+            # subset locally so Commander Intelligence cannot silently include
+            # joining/open games when it asks for running/finished history.
+            return [
+                game
+                for game in payload
+                if (
+                    not isinstance(game.get("status"), bool)
+                    and isinstance(game.get("status"), int)
+                    and game["status"] in allowed
+                )
+            ]
 
         return payload
 

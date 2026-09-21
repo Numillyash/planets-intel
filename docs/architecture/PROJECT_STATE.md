@@ -13,13 +13,17 @@ This is the durable architectural state for `Numillyash/planets-intel`. Git hist
 
 ## Production checkpoint
 
-On 2026-09-20 production was successfully deployed at:
+On 2026-09-21 production was successfully deployed at:
 
 ```text
-88a420d334710b6e756f10b52d35a2c303846bdc
+d0aca955914db38abf6d49cac61a8df7e0de4b82
 ```
 
 with 306 backend tests passing, DB head `0018_tow_target_ship_id`, successful backend recreation and healthy `/api/health`.
+
+The Commander Intelligence foundation is newer development and introduces DB
+target `0019_commander_intel_cache`; it is not yet a production checkpoint
+until deployed and runtime-accepted.
 
 This checkpoint includes:
 
@@ -50,7 +54,8 @@ Detailed runtime records:
 - Historical private snapshots and Time Machine / historical mode.
 - Historical ship tracks with lifecycle splitting for reused numeric ship IDs.
 - VCR ingestion, combat evidence and Battle Planner infrastructure.
-- Threat analysis and military attribution/read-time inference layers.
+- Threat analysis and military attribution/read-time inference layers with visible evidence provenance.
+- Bounded Commander Intelligence foundation: backend-cached public player history, replacement-aware participation reconstruction, pairwise turn overlap API and Commander Dossier UI.
 - Communications with accepted private grouping / race-first display behavior.
 - Local ship, planet and starbase order drafts.
 - Unified movement-turn state and movement prediction across Tow, Move Most and Intercept.
@@ -249,15 +254,23 @@ Do **not** duplicate the existing Time Machine / historical snapshot / ship-trac
 Detailed scope and proposed implementation boundaries are recorded in:
 
 - `docs/handoff/2026-09-21-external-tools-intelligence-workstreams.md`
+- `docs/handoff/2026-09-21-commander-intelligence-foundation.md`
+- `docs/handoff/2026-09-21-operator-map-layers-design.md`
+
+The first Commander slice now implements the factual/derived foundation. Public
+`games/list` and historical `loadinfo` payloads are cached backend-side;
+participation intervals preserve multiple join/drop periods and unknown bounds;
+pairwise overlap counts are exact only when reconstruction is complete.
+Behavioral inference remains absent by design.
 
 ## Current next priorities
 
-1. Preserve the accepted Tow warp-well path and reopen it only on concrete regression or new bounded evidence.
-2. Preserve phase-state boundaries for finite-fuel Tow and Intercept; supported formulas do not justify substituting snapshot fuel.
-3. Keep overlapping-well tie-breaks and special Tow interactions fail-closed.
-4. Extend analyst/threat UX using existing factual, VCR and military-score provenance rather than inventing new factual state.
-5. Build the bounded Commander Intelligence foundation from public history with replacement-aware participation and explicit fact/derived/inference boundaries; keep operator map annotations/layers separate from factual state.
-6. Let `planets-lab` continue Host combat ordering research independently; product work should not block on a complete NuHost reconstruction.
+1. Deploy and runtime/browser-accept the Commander Intelligence foundation, including one traceable pairwise overlap case.
+2. Preserve the Commander boundary: public fact/cache != derived overlap summary != analyst annotation != behavioral inference.
+3. Continue the independent operator-map visibility/event/annotation workstream on top of existing Time Machine/VCR/history infrastructure.
+4. Preserve phase-state and special-interaction fail-closed boundaries in movement; reopen accepted Tow only on concrete regression/evidence.
+5. Continue analyst/threat UX using existing factual, VCR and military-score provenance.
+6. Let `planets-lab` continue Host combat ordering research independently.
 
 ## Deliberately not claimed
 
