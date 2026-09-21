@@ -887,6 +887,14 @@ async def get_commander_intelligence(
                 and all(item["bounds_known"] for item in right_intervals)
             )
 
+            # Exact intersections between bounded intervals remain factual
+            # lower-bound evidence even when another interval has an unknown
+            # edge. The pair-level exact total stays null until every shared
+            # game is fully reconstructed.
+            known_overlap_turns += overlap_turns
+            if overlaps:
+                known_overlap_games += 1
+
             if not all_bounds_known:
                 reconstruction_complete = False
                 overlap_status = "interval_bounds_incomplete"
@@ -894,9 +902,6 @@ async def get_commander_intelligence(
             else:
                 overlap_status = "complete"
                 exact_turns = overlap_turns
-                known_overlap_turns += overlap_turns
-                if overlaps:
-                    known_overlap_games += 1
 
             game_rows.append(
                 {
