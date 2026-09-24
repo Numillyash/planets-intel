@@ -244,7 +244,7 @@ Detailed handoff:
 
 ### Operator diagnostics workflow
 
-The bridge acceptance path now avoids a full silent scheduler iteration. The
+When a targeted refresh reaches Planets.nu but one linked account still fails, use the read-only raw `game/loadturn` diagnostic under `scripts/maintenance/diagnose-private-loadturn-account.sh`. It auto-selects the highest-turn stale in-game observer, keeps the API key redacted, and distinguishes HTTP/API/JSON-response failures without persisting a new batch.\n\nThe bridge acceptance path now avoids a full silent scheduler iteration. The
 production-side bridge diagnostic delegates to
 `scripts/maintenance/diagnose-private-refresh-target.sh`, which inventories
 stale private observers, probes Planets.nu from inside the backend container,
