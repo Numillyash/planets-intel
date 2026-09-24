@@ -244,6 +244,13 @@ Detailed handoff:
 
 ### Operator diagnostics workflow
 
+The bridge acceptance path now avoids a full silent scheduler iteration. The
+production-side bridge diagnostic delegates to
+`scripts/maintenance/diagnose-private-refresh-target.sh`, which inventories
+stale private observers, probes Planets.nu from inside the backend container,
+selects one stale game, prints progress before the refresh, applies a bounded
+per-target timeout and verifies post-refresh turns.
+
 Production SSH is commonly reached through PowerShell. Large pasted shell blocks
 are unreliable in that path. For future diagnostics/repairs, prefer committing a
 versioned script under `scripts/maintenance/`, merging it, and asking the

@@ -74,29 +74,19 @@ if [[ "$proxy_rc" -ne 0 ]]; then
     exit 2
 fi
 
-section "ONE NORMAL PRIVATE REFRESH ITERATION"
-if command -v timeout >/dev/null 2>&1; then
-    set +e
-    timeout "$REFRESH_TIMEOUT_SECONDS"         docker compose exec -T backend         python -m app.scripts.inspect_background_refresh --run
-    refresh_rc=$?
-    set -e
-else
-    set +e
-    docker compose exec -T backend         python -m app.scripts.inspect_background_refresh --run
-    refresh_rc=$?
-    set -e
-fi
+section "TARGETED STALE PRIVATE REFRESH"
+set +e
+PLANETS_INTEL_TARGET_REFRESH_TIMEOUT_SECONDS="$REFRESH_TIMEOUT_SECONDS" \
+    bash scripts/maintenance/diagnose-private-refresh-target.sh
+refresh_rc=$?
+set -e
 printf 'refresh_rc=%d\n' "$refresh_rc"
 
 section "RESULT"
 if [[ "$refresh_rc" -eq 0 ]]; then
-    echo "DIAGNOSIS=proxy_transport_ok_refresh_completed"
+    echo "DIAGNOSIS=proxy_transport_ok_target_refresh_completed"
     exit 0
 fi
-if [[ "$refresh_rc" -eq 124 ]]; then
-    echo "DIAGNOSIS=proxy_transport_ok_refresh_timeout"
-    exit 3
-fi
 
-echo "DIAGNOSIS=proxy_transport_ok_refresh_failed"
+echo "DIAGNOSIS=proxy_transport_ok_target_refresh_failed"
 exit "$refresh_rc"
