@@ -40,7 +40,8 @@ Docker build stage.
 - `inspect-planets-reply-client.sh` — public Planets.nu client inspector; uses host Python and must stay Python 3.6 compatible.
 - `inspect-tow-orders.sh` — read-only factual Tow/draft/effective-prediction inspection for selected ship IDs.
 - `inspect-movement-blockers.sh` — read-only current-turn inventory of effective movement prediction blocker populations.
-- `diagnose-private-refresh-bridge.sh` — production-side proxy/private-refresh transport diagnostic with a bounded refresh attempt only after the proxy endpoint is reachable.
+- `diagnose-private-refresh-bridge.sh` — production-side proxy/private-refresh transport diagnostic; after the proxy endpoint is reachable it delegates to one bounded stale-target refresh instead of running the whole scheduler batch.
+- `diagnose-private-refresh-target.sh` + `.py` — target-progress diagnostic that inventories stale canonical/private turn mismatches, probes the proxy from the backend container, selects one stale game, prints START/timeout/result explicitly, refreshes only that game, and verifies the post-refresh observer turns.
 - `diagnose-wsl-proxy-bridge.sh` — WSL-side Tinyproxy/listener/local-proxy diagnostic for the Windows/WSL bridge host.
 - `diagnose-windows-proxy-bridge.ps1` — Windows-side ZeroTier/portproxy/listener diagnostic for the bridge host.
 - `diagnose-windows-wsl-proxy-bridge.ps1` — combined Windows + default-WSL diagnostic; checks ZeroTier, IP Helper, portproxy, the Windows listener, current WSL IPv4, Tinyproxy and the local WSL proxy path in one run.
