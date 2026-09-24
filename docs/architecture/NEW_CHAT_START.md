@@ -63,6 +63,28 @@ Important current facts:
 - production NetworkManager DNS uses `1.1.1.1` + `9.9.9.9` because `8.8.8.8` repeatedly timed out from this host on 2026-08-24;
 - Docker BuildKit requires working DNS/HTTPS access to `registry-1.docker.io` for base-image metadata.
 
+## Operator command delivery rule
+
+For production/SSH troubleshooting, diagnostics and repair workflows, do not
+send the operator a large multiline command block when the same work can be
+versioned safely in the repository.
+
+Preferred workflow:
+
+1. add or reuse a script under `scripts/maintenance/`;
+2. commit/push it to GitHub;
+3. run CI when appropriate;
+4. merge it into `feature/operational-ui`;
+5. ask the operator to run the script and return its output.
+
+A single short bootstrap command such as `git pull --ff-only`, a deploy
+entrypoint, or one script invocation is acceptable. Ad-hoc pasted shell
+pipelines should be reserved for cases where creating a script would add no
+value or GitHub is itself unavailable.
+
+This rule exists because the production server is commonly accessed over SSH
+through PowerShell, where pasting large multiline shell blocks is unreliable.
+
 ## First commands in the new chat
 
 Run this before any code change:

@@ -40,10 +40,26 @@ Docker build stage.
 - `inspect-planets-reply-client.sh` — public Planets.nu client inspector; uses host Python and must stay Python 3.6 compatible.
 - `inspect-tow-orders.sh` — read-only factual Tow/draft/effective-prediction inspection for selected ship IDs.
 - `inspect-movement-blockers.sh` — read-only current-turn inventory of effective movement prediction blocker populations.
+- `diagnose-private-refresh-bridge.sh` — production-side proxy/private-refresh transport diagnostic with a bounded refresh attempt only after the proxy endpoint is reachable.
+- `diagnose-wsl-proxy-bridge.sh` — WSL-side Tinyproxy/listener/local-proxy diagnostic for the Windows/WSL bridge host.
+- `diagnose-windows-proxy-bridge.ps1` — Windows-side ZeroTier/portproxy/listener diagnostic for the bridge host.
 
 The two movement inspectors stream the checked-out diagnostic source into the
 already-running backend container. They therefore do not require a production
 image rebuild merely to inspect persisted state after a fast-forward Git pull.
+
+## Operator workflow
+
+Prefer a committed maintenance script over pasting a long shell transcript into
+an SSH session. The intended operator interaction is normally:
+
+```text
+update checkout -> run one script -> return complete output
+```
+
+Scripts should print section headers, decisive return codes and a compact
+`DIAGNOSIS=...` line where practical. Diagnostics must be read-only unless the
+script name and documentation explicitly identify a repair action.
 
 ## Package mapping for CentOS-family hosts
 

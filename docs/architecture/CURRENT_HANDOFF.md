@@ -242,6 +242,25 @@ Detailed handoff:
 4. Continue analyst/threat UX and the independent operator-map layer/filter workstream without creating a second historical replay subsystem.
 5. Keep product work independent from ongoing `planets-lab` Host combat-order reverse.
 
+### Operator diagnostics workflow
+
+Production SSH is commonly reached through PowerShell. Large pasted shell blocks
+are unreliable in that path. For future diagnostics/repairs, prefer committing a
+versioned script under `scripts/maintenance/`, merging it, and asking the
+operator to run that script rather than sending a multiline command batch.
+
+Current bridge diagnostics:
+
+```text
+scripts/maintenance/diagnose-private-refresh-bridge.sh
+scripts/maintenance/diagnose-wsl-proxy-bridge.sh
+scripts/maintenance/diagnose-windows-proxy-bridge.ps1
+```
+
+The production-side script first checks backend health and the configured
+`PLANETSNU_PROXY_URL`; it only runs a normal private-refresh iteration after
+the proxy transport itself succeeds.
+
 ## Working rules
 
 - GitHub branch state is authoritative; documentation SHA examples are checkpoints, not permission to skip inspection.
