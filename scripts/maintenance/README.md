@@ -44,6 +44,7 @@ Docker build stage.
 - `diagnose-wsl-proxy-bridge.sh` — WSL-side Tinyproxy/listener/local-proxy diagnostic for the Windows/WSL bridge host.
 - `diagnose-windows-proxy-bridge.ps1` — Windows-side ZeroTier/portproxy/listener diagnostic for the bridge host.
 - `diagnose-windows-wsl-proxy-bridge.ps1` — combined Windows + default-WSL diagnostic; checks ZeroTier, IP Helper, portproxy, the Windows listener, current WSL IPv4, Tinyproxy and the local WSL proxy path in one run.
+- `repair-windows-zerotier-proxy-bridge.ps1` — bounded Windows repair for the confirmed case where Tinyproxy works in WSL but the ZeroTier-facing bridge port is unreachable; backs up state, recreates the explicit portproxy rule, ensures a scoped firewall rule, restarts IP Helper and verifies TCP + HTTP proxy traversal.
 
 The two movement inspectors stream the checked-out diagnostic source into the
 already-running backend container. They therefore do not require a production
