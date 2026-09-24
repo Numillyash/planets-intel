@@ -43,6 +43,7 @@ Docker build stage.
 - `diagnose-private-refresh-bridge.sh` — production-side proxy/private-refresh transport diagnostic with a bounded refresh attempt only after the proxy endpoint is reachable.
 - `diagnose-wsl-proxy-bridge.sh` — WSL-side Tinyproxy/listener/local-proxy diagnostic for the Windows/WSL bridge host.
 - `diagnose-windows-proxy-bridge.ps1` — Windows-side ZeroTier/portproxy/listener diagnostic for the bridge host.
+- `diagnose-windows-wsl-proxy-bridge.ps1` — combined Windows + default-WSL diagnostic; checks ZeroTier, IP Helper, portproxy, the Windows listener, current WSL IPv4, Tinyproxy and the local WSL proxy path in one run.
 
 The two movement inspectors stream the checked-out diagnostic source into the
 already-running backend container. They therefore do not require a production
