@@ -3,7 +3,11 @@ from unittest.mock import AsyncMock, patch
 
 import httpx
 
-from app.services.private_refresh import _resolve_refresh_turn
+from app.planetsnu.client import PlanetsNuError
+from app.services.private_refresh import (
+    _resolve_refresh_turn,
+    refresh_accessible_private_intel,
+)
 
 
 class PrivateRefreshTurnResolutionTests(unittest.IsolatedAsyncioTestCase):
@@ -48,6 +52,56 @@ class PrivateRefreshTurnResolutionTests(unittest.IsolatedAsyncioTestCase):
         ):
             with self.assertRaises(httpx.ConnectError):
                 await _resolve_refresh_turn(999999)
+
+    async def test_private_api_error_detail_is_preserved(self) -> None:
+        account = {
+            "id": 1,
+            "planets_username": "georgul",
+            "planets_account_id": 33734,
+            "is_owned": True,
+        }
+        with (
+            patch(
+                "app.services.private_refresh._resolve_refresh_turn",
+                new=AsyncMock(
+                    return_value=(19, {
+                        "status": "refreshed",
+                        "source": "planetsnu-public",
+                        "detail": None,
+                    })
+                ),
+            ),
+            patch(
+                "app.services.private_refresh._accessible_accounts",
+                return_value=[account],
+            ),
+            patch(
+                "app.services.private_refresh._is_account_in_game",
+                return_value=True,
+            ),
+            patch(
+                "app.services.private_refresh._latest_batch",
+                return_value=None,
+            ),
+            patch(
+                "app.services.private_refresh.sync_private_game",
+                new=AsyncMock(
+                    side_effect=PlanetsNuError(
+                        "You do not have permission to view this turn."
+                    )
+                ),
+            ),
+        ):
+            result = await refresh_accessible_private_intel(
+                user_id=1,
+                game_id=684779,
+            )
+
+        self.assertEqual(result["failed"], 1)
+        self.assertEqual(
+            result["results"][0]["detail"],
+            "You do not have permission to view this turn.",
+        )
 
 
 if __name__ == "__main__":
