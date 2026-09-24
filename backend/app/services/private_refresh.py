@@ -281,12 +281,12 @@ async def refresh_accessible_private_intel(
                     "status": "failed",
                     "detail": str(exc),
                 }
-            except PlanetsNuError:
+            except PlanetsNuError as exc:
                 return {
                     "linked_account_id": account["id"],
                     "planets_username": account["planets_username"],
                     "status": "failed",
-                    "detail": "Planets.nu private synchronization failed",
+                    "detail": str(exc),
                 }
 
             return {
