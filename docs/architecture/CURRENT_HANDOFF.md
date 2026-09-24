@@ -249,7 +249,10 @@ production-side bridge diagnostic delegates to
 `scripts/maintenance/diagnose-private-refresh-target.sh`, which inventories
 stale private observers, probes Planets.nu from inside the backend container,
 selects one stale game, prints progress before the refresh, applies a bounded
-per-target timeout and verifies post-refresh turns.
+per-target timeout and verifies post-refresh turns. Known non-members are not
+counted as stale observers. The backend-container proxy probe treats
+`/time` as an HTTP transport probe only because Planets.nu returns JavaScript-like
+text there rather than JSON.
 
 Production SSH is commonly reached through PowerShell. Large pasted shell blocks
 are unreliable in that path. For future diagnostics/repairs, prefer committing a
@@ -265,8 +268,8 @@ scripts/maintenance/diagnose-windows-proxy-bridge.ps1
 ```
 
 The production-side script first checks backend health and the configured
-`PLANETSNU_PROXY_URL`; it only runs a normal private-refresh iteration after
-the proxy transport itself succeeds.
+`PLANETSNU_PROXY_URL`; after proxy transport succeeds it runs one bounded,
+targeted stale-game refresh rather than a whole scheduler iteration.
 
 ## Working rules
 

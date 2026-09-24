@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import json
 
+import httpx
 from sqlalchemy import select
 
 from app.db.session import SessionLocal
@@ -13,7 +14,8 @@ from app.services.background_private_refresh import (
     running_private_refresh_targets,
 )
 from app.services.private_refresh import (
-    accessible_refresh_account_ids,
+    _accessible_accounts,
+    _is_account_in_game,
     refresh_accessible_private_intel,
 )
 
@@ -52,22 +54,50 @@ def game_turn(game_id):
     return row[0], row[1]
 
 
+def _membership_label(value):
+    if value is True:
+        return "in_game"
+    if value is False:
+        return "not_in_game"
+    return "unknown"
+
+
 def build_targets():
     raw = running_private_refresh_targets()
     targets = deduplicate_private_refresh_targets(raw)
     result = []
+
     for user_id, game_id in targets:
         turn, name = game_turn(game_id)
-        observer_ids = accessible_refresh_account_ids(user_id)
-        latest = {
-            account_id: latest_turn(game_id, account_id)
-            for account_id in observer_ids
-        }
-        stale = [
-            account_id
-            for account_id, observed_turn in latest.items()
-            if turn is not None and (observed_turn is None or observed_turn < turn)
-        ]
+        accounts = _accessible_accounts(user_id)
+
+        latest = {}
+        membership = {}
+        stale = []
+        excluded_nonmembers = []
+
+        for account in accounts:
+            account_id = int(account["id"])
+            observed_turn = latest_turn(game_id, account_id)
+            latest[account_id] = observed_turn
+
+            in_game = _is_account_in_game(
+                planets_account_id=account["planets_account_id"],
+                planets_username=account["planets_username"],
+                game_id=game_id,
+            )
+            membership[account_id] = _membership_label(in_game)
+
+            if in_game is False:
+                excluded_nonmembers.append(account_id)
+                continue
+
+            if (
+                turn is not None
+                and (observed_turn is None or observed_turn < turn)
+            ):
+                stale.append(account_id)
+
         result.append(
             {
                 "user_id": user_id,
@@ -75,10 +105,38 @@ def build_targets():
                 "game_name": name,
                 "canonical_turn": turn,
                 "observer_latest_turns": latest,
+                "observer_membership": membership,
+                "excluded_nonmember_observers": excluded_nonmembers,
                 "stale_observers": stale,
             }
         )
+
     return result
+
+
+async def probe_backend_proxy(timeout):
+    client = PlanetsNuClient()
+    if not client.proxy_url:
+        raise RuntimeError("backend has no configured Planets.nu proxy")
+
+    async with httpx.AsyncClient(
+        timeout=min(timeout, 30),
+        follow_redirects=True,
+        proxy=client.proxy_url,
+        trust_env=False,
+    ) as http:
+        response = await http.get(
+            client.base_url + "/time",
+            params={"version": 1},
+        )
+        response.raise_for_status()
+
+    return {
+        "proxy_url": client.proxy_url,
+        "status_code": response.status_code,
+        "content_type": response.headers.get("content-type"),
+        "body_preview": response.text[:240],
+    }
 
 
 async def main():
@@ -121,8 +179,8 @@ async def main():
     print("===== BACKEND PROXY PROBE =====", flush=True)
     try:
         probe = await asyncio.wait_for(
-            PlanetsNuClient().get("time", params={"version": 1}),
-            timeout=min(args.timeout, 30),
+            probe_backend_proxy(args.timeout),
+            timeout=min(args.timeout, 35),
         )
         print("backend_proxy_probe=OK", flush=True)
         print(json.dumps(probe, ensure_ascii=False, default=str), flush=True)
