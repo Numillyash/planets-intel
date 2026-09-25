@@ -17,7 +17,7 @@ from app.services.background_private_refresh import (
 )
 from app.services.private_refresh import (
     _accessible_accounts,
-    _is_account_in_game,
+    _account_private_refresh_state,
 )
 
 
@@ -58,12 +58,12 @@ def _select_stale_member_target() -> dict[str, Any] | None:
             continue
 
         for account in _accessible_accounts(user_id):
-            membership = _is_account_in_game(
+            refresh_state = _account_private_refresh_state(
                 planets_account_id=account["planets_account_id"],
                 planets_username=account["planets_username"],
                 game_id=game_id,
             )
-            if membership is False:
+            if refresh_state in {"absent", "inactive"}:
                 continue
 
             observed_turn = _latest_turn(game_id, int(account["id"]))
@@ -79,7 +79,7 @@ def _select_stale_member_target() -> dict[str, Any] | None:
                     "linked_account_id": int(account["id"]),
                     "planets_username": account["planets_username"],
                     "observed_turn": observed_turn,
-                    "membership": "in_game" if membership is True else "unknown",
+                    "membership": refresh_state,
                 }
             )
 
