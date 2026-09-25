@@ -143,16 +143,14 @@ export function GameDashboard({
     history,
     privateIntel,
     selectedAccount,
-    turnReviewIntel,
     latestScores,
     refreshing,
     onRefresh,
 }: {
     game: GameDetailsResponse;
     history: ScoreHistoryResponse | null;
-    privateIntel: PrivateIntelMapResponse | null;
+    privateIntel: LatestPrivateIntelResponse | null;
     selectedAccount: PlanetsAccountResponse;
-    turnReviewIntel: LatestPrivateIntelResponse | null;
     latestScores: Map<number, ScoreHistoryItem>;
     refreshing: boolean;
     onRefresh: () => void;
@@ -431,7 +429,7 @@ export function GameDashboard({
                     ) : (
                         <TurnReviewPanel
                             gameId={game.game.id}
-                            intel={turnReviewIntel}
+                            intel={privateIntel}
                             linkedAccountId={selectedAccount.id}
                             turn={dashboardTurn}
                         />
