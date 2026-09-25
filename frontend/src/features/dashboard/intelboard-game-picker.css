@@ -402,6 +402,19 @@
     white-space: nowrap;
 }
 
+.intelboard-game-observer-chip.is-archive {
+    border-color: #4b4a45;
+    background: #15181d;
+    color: #9aa3ad;
+}
+
+.intelboard-game-observer-state {
+    color: #7f8b98;
+    font-size: 0.55rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
 .intelboard-turn-rail {
     display: flex;
     align-items: flex-start;
