@@ -342,7 +342,11 @@ function PlayerTurnRail({
                     player,
                     loadInfoMatchesTurn,
                 );
-                const managedLabel = player === null
+                const managedLabel = (
+                    player === null
+                    || state === "computer"
+                    || state === "inactive"
+                )
                     ? null
                     : managedUsernames.get(normalizedUsername(player.username)) ?? null;
 
