@@ -8,6 +8,7 @@ import {
 
 import {
     getAccountGames,
+    getCombinedPrivateIntel,
     getGame,
     getLatestPrivateIntel,
     getPlanetsAccounts,
@@ -26,6 +27,7 @@ import type {
     PlanetsAccountResponse,
     ScoreHistoryResponse,
 } from "../../types/api";
+import type { CombinedPrivateIntelResponse } from "../../types/intel";
 import { PrivateIntelMap } from "../map/PrivateIntelMap";
 import { GameDashboard } from "./GameDashboard";
 
@@ -115,6 +117,8 @@ export function DashboardApp({
 
     const [privateIntel, setPrivateIntel] =
         useState<LatestPrivateIntelResponse | null>(null);
+    const [combinedPrivateIntel, setCombinedPrivateIntel] =
+        useState<CombinedPrivateIntelResponse | null>(null);
     const [privateIntelLoading, setPrivateIntelLoading] = useState(false);
     const [privateIntelError, setPrivateIntelError] = useState<string | null>(null);
 
@@ -315,6 +319,7 @@ export function DashboardApp({
             selectedGameId === null
         ) {
             setPrivateIntel(null);
+            setCombinedPrivateIntel(null);
             setPrivateIntelError(null);
             setPrivateIntelLoading(false);
             return () => { cancelled = true; };
@@ -327,10 +332,17 @@ export function DashboardApp({
             setPrivateIntelLoading(true);
             setPrivateIntelError(null);
             setPrivateIntel(null);
+            setCombinedPrivateIntel(null);
 
             try {
-                const response = await getLatestPrivateIntel(gameId, accountId);
-                if (!cancelled) setPrivateIntel(response);
+                const [response, combinedResponse] = await Promise.all([
+                    getLatestPrivateIntel(gameId, accountId),
+                    getCombinedPrivateIntel(gameId, accountId).catch(() => null),
+                ]);
+                if (!cancelled) {
+                    setPrivateIntel(response);
+                    setCombinedPrivateIntel(combinedResponse);
+                }
             } catch (reason) {
                 if (!cancelled) {
                     setPrivateIntelError(
@@ -365,12 +377,19 @@ export function DashboardApp({
 
         try {
             await refreshAccessiblePrivateIntel(gameId);
-            const [intelResponse, historyResponse, gameResponse] = await Promise.all([
+            const [
+                intelResponse,
+                combinedResponse,
+                historyResponse,
+                gameResponse,
+            ] = await Promise.all([
                 getLatestPrivateIntel(gameId, accountId),
+                getCombinedPrivateIntel(gameId, accountId).catch(() => null),
                 getScoreHistory(gameId),
                 getGame(gameId),
             ]);
             setPrivateIntel(intelResponse);
+            setCombinedPrivateIntel(combinedResponse);
             setHistory(historyResponse);
             setGame(gameResponse);
         } catch (reason) {
@@ -429,9 +448,24 @@ export function DashboardApp({
         game !== null &&
         privateIntel !== null &&
         privateIntel.turn !== game.game.turn;
-    const dashboardPrivateIntel = privateIntelTurnMismatch
-        ? null
-        : privateIntel;
+    const selectedObserverInactive =
+        selectedGame?.observer_status !== null &&
+        selectedGame?.observer_status !== undefined &&
+        selectedGame.observer_status !== 1;
+    const currentObserverIntel =
+        game !== null &&
+        privateIntel !== null &&
+        privateIntel.turn === game.game.turn
+            ? privateIntel
+            : null;
+    const currentCombinedIntel =
+        game !== null &&
+        combinedPrivateIntel !== null &&
+        combinedPrivateIntel.turn === game.game.turn
+            ? combinedPrivateIntel
+            : null;
+    const dashboardPrivateIntel =
+        currentCombinedIntel ?? currentObserverIntel;
 
     async function handlePrivateIntelRefresh() {
         await refreshDashboardData();
@@ -589,21 +623,39 @@ export function DashboardApp({
                     {privateIntelTurnMismatch && privateIntel !== null && (
                         <section
                             className="panel"
-                            role="alert"
+                            role="status"
                             style={{
                                 border: "1px solid rgba(255, 204, 115, 0.62)",
                                 background: "rgba(75, 61, 32, 0.36)",
                                 marginBottom: 12,
                             }}
                         >
-                            <div className="eyebrow">Private intel turn mismatch</div>
+                            <div className="eyebrow">
+                                {selectedObserverInactive
+                                    ? "Observer archive"
+                                    : "Private intel turn mismatch"}
+                            </div>
                             <h2 style={{ marginTop: 4 }}>
-                                Game T{game.game.turn} · factual private snapshot T{privateIntel.turn}
+                                Game T{game.game.turn} · {selectedAccount.planets_username} factual snapshot T{privateIntel.turn}
                             </h2>
                             <p style={{ marginBottom: 0 }}>
-                                Current-turn private fact tables are withheld so T{privateIntel.turn}
-                                {" data cannot be relabelled as T"}{game.game.turn}. The map below remains
-                                available and identifies its factual snapshot turn explicitly.
+                                {selectedObserverInactive ? (
+                                    <>
+                                        The canonical roster marks this observer inactive/dead, so
+                                        Planets.nu no longer grants current-turn loadturn access for
+                                        this slot. T{privateIntel.turn} remains historical evidence and
+                                        is not relabelled as T{game.game.turn}.{" "}
+                                        {currentCombinedIntel !== null
+                                            ? "Current shared factual intel is available at T" + currentCombinedIntel.turn + " and is used by the live dashboard."
+                                            : "No other authorized source currently provides a matching current-turn snapshot, so current private fact tables remain withheld."}
+                                    </>
+                                ) : (
+                                    <>
+                                        Current-turn private fact tables are withheld so T{privateIntel.turn}
+                                        {" data cannot be relabelled as T"}{game.game.turn}. The map below remains
+                                        available and identifies its factual snapshot turn explicitly.
+                                    </>
+                                )}
                             </p>
                         </section>
                     )}
@@ -616,6 +668,7 @@ export function DashboardApp({
                         privateIntel={dashboardPrivateIntel}
                         refreshing={privateIntelLoading}
                         selectedAccount={selectedAccount}
+                        turnReviewIntel={currentObserverIntel}
                     />
 
                     <PrivateIntelMap
