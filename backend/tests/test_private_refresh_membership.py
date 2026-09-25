@@ -3,7 +3,10 @@ from unittest.mock import patch
 
 from sqlalchemy.dialects import postgresql
 
-from app.services.private_refresh import _is_account_in_game
+from app.services.private_refresh import (
+    _account_private_refresh_state,
+    _is_account_in_game,
+)
 
 
 class _ScalarOneResult:
@@ -77,6 +80,31 @@ class PrivateRefreshMembershipTests(unittest.TestCase):
                 game_id=682909,
             )
         )
+
+    def test_active_roster_status_is_refreshable(self) -> None:
+        session = _CaptureSession(1)
+        with patch("app.services.private_refresh.SessionLocal", return_value=session):
+            state = _account_private_refresh_state(
+                planets_account_id=33734,
+                planets_username="georgul",
+                game_id=684779,
+            )
+
+        self.assertEqual(state, "active")
+        sql = _sql(session.statement)
+        self.assertIn("game_player_slots.status", sql)
+        self.assertIn("game_player_slots.game_id = 684779", sql)
+
+    def test_dead_roster_status_is_inactive_for_current_loadturn(self) -> None:
+        session = _CaptureSession(2)
+        with patch("app.services.private_refresh.SessionLocal", return_value=session):
+            state = _account_private_refresh_state(
+                planets_account_id=33734,
+                planets_username="georgul",
+                game_id=684779,
+            )
+
+        self.assertEqual(state, "inactive")
 
     def test_valid_external_id_and_username_are_both_allowed(self) -> None:
         session = _CaptureSession(5)

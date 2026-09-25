@@ -15,7 +15,7 @@ from app.services.background_private_refresh import (
 )
 from app.services.private_refresh import (
     _accessible_accounts,
-    _is_account_in_game,
+    _account_private_refresh_state,
     refresh_accessible_private_intel,
 )
 
@@ -81,14 +81,14 @@ def build_targets():
             observed_turn = latest_turn(game_id, account_id)
             latest[account_id] = observed_turn
 
-            in_game = _is_account_in_game(
+            refresh_state = _account_private_refresh_state(
                 planets_account_id=account["planets_account_id"],
                 planets_username=account["planets_username"],
                 game_id=game_id,
             )
-            membership[account_id] = _membership_label(in_game)
+            membership[account_id] = refresh_state
 
-            if in_game is False:
+            if refresh_state in {"absent", "inactive"}:
                 excluded_nonmembers.append(account_id)
                 continue
 

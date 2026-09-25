@@ -53,6 +53,48 @@ class PrivateRefreshTurnResolutionTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(httpx.ConnectError):
                 await _resolve_refresh_turn(999999)
 
+    async def test_dead_observer_is_skipped_without_loadturn(self) -> None:
+        account = {
+            "id": 1,
+            "planets_username": "georgul",
+            "planets_account_id": 33734,
+            "is_owned": True,
+        }
+        sync_private = AsyncMock()
+        with (
+            patch(
+                "app.services.private_refresh._resolve_refresh_turn",
+                new=AsyncMock(
+                    return_value=(19, {
+                        "status": "refreshed",
+                        "source": "planetsnu-public",
+                        "detail": None,
+                    })
+                ),
+            ),
+            patch(
+                "app.services.private_refresh._accessible_accounts",
+                return_value=[account],
+            ),
+            patch(
+                "app.services.private_refresh._account_private_refresh_state",
+                return_value="inactive",
+            ),
+            patch(
+                "app.services.private_refresh.sync_private_game",
+                new=sync_private,
+            ),
+        ):
+            result = await refresh_accessible_private_intel(
+                user_id=1,
+                game_id=684779,
+            )
+
+        sync_private.assert_not_awaited()
+        self.assertEqual(result["failed"], 0)
+        self.assertEqual(result["skipped"], 1)
+        self.assertIn("inactive/dead", result["results"][0]["detail"])
+
     async def test_private_api_error_detail_is_preserved(self) -> None:
         account = {
             "id": 1,
@@ -76,8 +118,8 @@ class PrivateRefreshTurnResolutionTests(unittest.IsolatedAsyncioTestCase):
                 return_value=[account],
             ),
             patch(
-                "app.services.private_refresh._is_account_in_game",
-                return_value=True,
+                "app.services.private_refresh._account_private_refresh_state",
+                return_value="active",
             ),
             patch(
                 "app.services.private_refresh._latest_batch",

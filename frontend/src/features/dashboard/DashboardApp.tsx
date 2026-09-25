@@ -429,6 +429,10 @@ export function DashboardApp({
         game !== null &&
         privateIntel !== null &&
         privateIntel.turn !== game.game.turn;
+    const selectedObserverInactive =
+        selectedGame?.observer_status !== null &&
+        selectedGame?.observer_status !== undefined &&
+        selectedGame.observer_status !== 1;
     const dashboardPrivateIntel = privateIntelTurnMismatch
         ? null
         : privateIntel;
@@ -589,21 +593,39 @@ export function DashboardApp({
                     {privateIntelTurnMismatch && privateIntel !== null && (
                         <section
                             className="panel"
-                            role="alert"
+                            role={selectedObserverInactive ? "status" : "alert"}
                             style={{
                                 border: "1px solid rgba(255, 204, 115, 0.62)",
                                 background: "rgba(75, 61, 32, 0.36)",
                                 marginBottom: 12,
                             }}
                         >
-                            <div className="eyebrow">Private intel turn mismatch</div>
+                            <div className="eyebrow">
+                                {selectedObserverInactive
+                                    ? "Observer archive"
+                                    : "Private intel turn mismatch"}
+                            </div>
                             <h2 style={{ marginTop: 4 }}>
-                                Game T{game.game.turn} · factual private snapshot T{privateIntel.turn}
+                                Game T{game.game.turn} · {selectedAccount.planets_username} factual snapshot T{privateIntel.turn}
                             </h2>
                             <p style={{ marginBottom: 0 }}>
-                                Current-turn private fact tables are withheld so T{privateIntel.turn}
-                                {" data cannot be relabelled as T"}{game.game.turn}. The map below remains
-                                available and identifies its factual snapshot turn explicitly.
+                                {selectedObserverInactive ? (
+                                    <>
+                                        The canonical roster marks this observer inactive/dead.
+                                        Planets.nu account login can still work, but current-turn
+                                        loadturn access for this game slot is no longer expected.
+                                        T{privateIntel.turn} remains historical factual evidence and
+                                        is not relabelled as T{game.game.turn}. Current-turn private
+                                        fact tables for this observer remain withheld; the combined
+                                        map may still use other authorized current observers.
+                                    </>
+                                ) : (
+                                    <>
+                                        Current-turn private fact tables are withheld so T{privateIntel.turn}
+                                        {" data cannot be relabelled as T"}{game.game.turn}. The map below remains
+                                        available and identifies its factual snapshot turn explicitly.
+                                    </>
+                                )}
                             </p>
                         </section>
                     )}

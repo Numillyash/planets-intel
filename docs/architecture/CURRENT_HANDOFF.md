@@ -46,6 +46,8 @@ The earlier stale-map incident was traced to a stale `PLANETSNU_PROXY_URL`, not 
 
 Current safety behavior:
 
+- canonical roster status `1` is the active-player state for current private refresh; a matched observer with another status remains historical membership evidence but is skipped for current `loadturn` refresh because Planets.nu may still allow account login while denying the dead/removed game slot current-turn access;
+- a stale snapshot for such an inactive/dead selected observer is presented as an observer archive, not as an unexplained transport failure; the old snapshot is never relabelled as the current turn, while the combined map may still use other authorized current observers;
 - total accessible-private refresh failure is surfaced to the frontend even when the refresh endpoint itself returns HTTP 200;
 - concrete server failure detail is retained for the user-facing warning;
 - if canonical game turn and factual private snapshot turn differ, current-turn private fact tables fail closed instead of relabelling stale facts as current;
