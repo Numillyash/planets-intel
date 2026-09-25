@@ -143,6 +143,50 @@ async def _resolve_refresh_turn(game_id: int) -> tuple[int, dict[str, Any]]:
         }
 
 
+def _account_private_refresh_state(
+    *,
+    planets_account_id: int | None,
+    planets_username: str,
+    game_id: int,
+) -> str:
+    """Classify whether current-turn private loadturn is expected to work.
+
+    Canonical roster status 1 is the active-player state used elsewhere in the
+    product. A matched slot with any other status remains valid historical
+    membership evidence, but Planets.nu may no longer authorize current
+    loadturn for that observer after death/removal. Keep that distinct from an
+    absent roster identity and from identity that cannot be evaluated.
+    """
+
+    normalized_username = planets_username.strip().casefold()
+    predicates = []
+    if planets_account_id is not None and planets_account_id > 0:
+        predicates.append(GamePlayerSlot.account_id == planets_account_id)
+    if normalized_username:
+        predicates.append(
+            func.lower(func.trim(GamePlayerSlot.username)) == normalized_username
+        )
+    if not predicates:
+        return "unknown"
+
+    with SessionLocal() as session:
+        status = session.execute(
+            select(GamePlayerSlot.status)
+            .where(
+                GamePlayerSlot.game_id == game_id,
+                or_(*predicates),
+            )
+            .order_by(GamePlayerSlot.slot_id)
+            .limit(1)
+        ).scalar_one_or_none()
+
+    if status is None:
+        return "absent"
+    if int(status) == 1:
+        return "active"
+    return "inactive"
+
+
 def _is_account_in_game(
     *,
     planets_account_id: int | None,
@@ -220,19 +264,33 @@ async def refresh_accessible_private_intel(
     refresh_candidates: list[dict[str, Any]] = []
 
     for account in accounts:
-        membership = _is_account_in_game(
+        refresh_state = _account_private_refresh_state(
             planets_account_id=account["planets_account_id"],
             planets_username=account["planets_username"],
             game_id=game_id,
         )
 
-        if membership is False:
+        if refresh_state == "absent":
             immediate_results.append(
                 {
                     "linked_account_id": account["id"],
                     "planets_username": account["planets_username"],
                     "status": "skipped",
                     "detail": "linked account is not a player in this game",
+                }
+            )
+            continue
+
+        if refresh_state == "inactive":
+            immediate_results.append(
+                {
+                    "linked_account_id": account["id"],
+                    "planets_username": account["planets_username"],
+                    "status": "skipped",
+                    "detail": (
+                        "canonical roster marks this observer inactive/dead; "
+                        "current-turn loadturn access is not expected"
+                    ),
                 }
             )
             continue
