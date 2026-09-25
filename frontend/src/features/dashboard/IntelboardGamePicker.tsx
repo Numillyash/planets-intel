@@ -391,6 +391,20 @@ function PlayerTurnRail({
     );
 }
 
+function observerArchiveLabel(
+    observerGame: AccountGameSummary,
+    state: PlayerTurnState | null,
+): string | null {
+    if (observerGame.observer_status !== null && observerGame.observer_status !== 1) {
+        return state === "computer"
+            ? "archive · slot now computer"
+            : "archive · inactive/dead";
+    }
+    if (state === "computer") return "slot now computer";
+    if (state === "inactive") return "inactive/dead";
+    return null;
+}
+
 function accountInitials(username: string): string {
     const words = username.trim().split(/\s+/).filter(Boolean);
     if (words.length === 0) return "?";
@@ -524,18 +538,28 @@ function GameCard({
                             : observerGame.observer_status !== null
                                 ? (observerGame.observer_status === 1 ? "unknown" : "inactive")
                                 : null;
+                    const archiveLabel = observerArchiveLabel(observerGame, ownState);
                     return (
                         <button
-                            className={`intelboard-game-observer-chip${account.id === preferredObserver.account.id ? " is-preferred" : ""}`}
+                            className={`intelboard-game-observer-chip${account.id === preferredObserver.account.id ? " is-preferred" : ""}${archiveLabel === null ? "" : " is-archive"}`}
                             key={account.id}
                             onClick={() => openAs(account)}
-                            title={`Open ${game.name} as ${account.planets_username}`}
+                            title={
+                                archiveLabel === null
+                                    ? `Open ${game.name} as ${account.planets_username}`
+                                    : `Open historical observer ${account.planets_username} · ${archiveLabel}`
+                            }
                             type="button"
                         >
                             {ownState !== null && (
                                 <i className={`is-${ownState}`} aria-hidden="true" />
                             )}
                             <strong>{account.planets_username}</strong>
+                            {archiveLabel !== null && (
+                                <span className="intelboard-game-observer-state">
+                                    {archiveLabel}
+                                </span>
+                            )}
                         </button>
                     );
                 })}
