@@ -40,6 +40,7 @@ import { drawHostEvents, hostEventKey } from "./hostEventScene";
 import { drawMapScene } from "./mapScene";
 import { drawOrderVectors } from "./orderVectorScene";
 import {
+    clearCurrentCombatContacts,
     combatEventKey,
     drawCurrentCombatContacts,
     drawHistoricalShipTracks,
@@ -732,6 +733,8 @@ export function PixiMapCanvas({
                     }
                 },
             });
+        } else {
+            clearCurrentCombatContacts(intel.turn);
         }
 
         if (layerVisibility.hostEvents) {
