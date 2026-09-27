@@ -1,6 +1,6 @@
 # Planets Intel — Current Handoff
 
-Updated: 2026-09-21
+Updated: 2026-09-27
 
 GitHub is the source of truth. Active development remains on `feature/operational-ui`. A fresh chat must inspect the actual branch HEAD before making current-code claims or writes, then read this file together with `NEW_CHAT_START.md`, `PROJECT_STATE.md` and the newest dated handoff under `docs/handoff/`.
 
@@ -37,6 +37,9 @@ inspect the actual `feature/operational-ui` HEAD separately before code work.
 
 Latest Commander work:
 `docs/handoff/2026-09-21-commander-intelligence-foundation.md`.
+
+Latest external-tool/product reference catalog:
+`docs/handoff/2026-09-27-external-planets-tools-reference-catalog.md`.
 
 ## Current product state
 
@@ -238,11 +241,11 @@ Detailed handoff:
 
 ## Immediate product priorities
 
-1. Merge/deploy the bounded Commander Intelligence foundation and browser-check at least one concrete current-game pair back to public game ids and reconstructed participation overlap.
-2. Keep Commander factual/derived history separate from any future behavioral inference or analyst annotation.
-3. Leave the accepted unlimited-fuel Tow + ordinary warp-well path closed absent regression and preserve all finite-fuel/special-interaction fail-closed boundaries.
-4. Continue analyst/threat UX and the independent operator-map layer/filter workstream without creating a second historical replay subsystem.
-5. Keep product work independent from ongoing `planets-lab` Host combat-order reverse.
+1. Continue the operator-map layer/filter workstream on the existing Pixi stack; use Planets-Console plus McNimble Redraw/Filter, Show Messages and Show Notes as UX references, not as a second map implementation.
+2. Follow layer visibility with spatial-message/event markers from already-authorized factual observations; keep analyst annotations separate from facts and predictions.
+3. Keep Commander Intelligence factual/derived history separate from behavioral inference; the external player-affinity matrix is a comparison/UX reference, not a relationship oracle.
+4. Leave the accepted unlimited-fuel Tow + ordinary warp-well path closed absent regression and preserve all finite-fuel/special-interaction fail-closed boundaries.
+5. Route third-party combat/mechanics candidates (nu-replayer, Kecupo VCR sim, nupilot, c2nu) through `planets-lab` before production adoption.
 
 ### Operator diagnostics workflow
 
