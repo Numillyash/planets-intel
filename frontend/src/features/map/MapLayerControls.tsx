@@ -21,6 +21,7 @@ export const DEFAULT_MAP_LAYER_VISIBILITY: MapLayerVisibility = {
     movementPredictions: true,
     combatEvents: true,
     hostEvents: true,
+    spatialMessages: false,
 };
 
 
