@@ -7,7 +7,10 @@ import {
 } from "react";
 import { Application, Assets, Container, Graphics, Text } from "pixi.js";
 import { getHostEvents } from "../../api/activity";
-import { getHistoricalShipTracks } from "../../api/history";
+import {
+    getHistoricalShipTracks,
+    getSpatialMessages,
+} from "../../api/history";
 import { privateHullAssetUrl } from "../../lib/privateAssets";
 import type { HostEventItem } from "../../types/activity";
 import type {
@@ -47,6 +50,10 @@ import {
     type ShipTrackMode,
 } from "./historicalTrackScene";
 import { drawMinefields } from "./minefieldScene";
+import {
+    drawSpatialMessages,
+    type SpatialMessageSelection,
+} from "./spatialMessageScene";
 import {
     DEFAULT_MAP_LAYER_VISIBILITY,
     MapLayerControls,
@@ -156,6 +163,11 @@ export function PixiMapCanvas({
     const [hostEvents, setHostEvents] = useState<HostEventItem[]>([]);
     const [selectedHostEventKey, setSelectedHostEventKey] =
         useState<string | null>(null);
+    const [spatialMessages, setSpatialMessages] = useState<
+        SpatialMessageSelection["messages"]
+    >([]);
+    const [selectedSpatialMessage, setSelectedSpatialMessage] =
+        useState<SpatialMessageSelection | null>(null);
     const [layerVisibility, setLayerVisibility] =
         useState<MapLayerVisibility>(DEFAULT_MAP_LAYER_VISIBILITY);
     const layerVisibilityRef = useRef(layerVisibility);
@@ -266,6 +278,7 @@ export function PixiMapCanvas({
     useEffect(() => {
         setSelectedCombatEvent(null);
         setSelectedHostEventKey(null);
+        setSelectedSpatialMessage(null);
     }, [intel.game_id, intel.turn]);
 
     useEffect(() => {
@@ -321,6 +334,33 @@ export function PixiMapCanvas({
     }, [intel.game_id, intel.turn, linkedAccountId]);
 
     useEffect(() => {
+        let cancelled = false;
+
+        async function loadSpatialMessages() {
+            try {
+                const response = await getSpatialMessages(
+                    intel.game_id,
+                    linkedAccountId,
+                    intel.turn,
+                );
+                if (!cancelled) {
+                    setSpatialMessages(response?.messages ?? []);
+                }
+            } catch {
+                if (!cancelled) {
+                    setSpatialMessages([]);
+                }
+            }
+        }
+
+        void loadSpatialMessages();
+        return () => {
+            cancelled = true;
+        };
+    }, [intel.game_id, intel.turn, linkedAccountId]);
+
+
+    useEffect(() => {
         if (selectedCombatEvent === null) return;
         const selectedKey = combatEventKey(selectedCombatEvent);
         const stillPresent = historicalTracks.some((track) =>
@@ -340,6 +380,21 @@ export function PixiMapCanvas({
         );
         if (!stillPresent) setSelectedHostEventKey(null);
     }, [hostEvents, selectedHostEventKey]);
+
+    useEffect(() => {
+        if (selectedSpatialMessage === null) return;
+        const stillPresent = spatialMessages.some(
+            (message) =>
+                message.x === selectedSpatialMessage.x
+                && message.y === selectedSpatialMessage.y
+                && selectedSpatialMessage.messages.some(
+                    (selectedMessage) =>
+                        selectedMessage.message_key === message.message_key,
+                ),
+        );
+        if (!stillPresent) setSelectedSpatialMessage(null);
+    }, [selectedSpatialMessage, spatialMessages]);
+
 
     useEffect(() => {
         const host = hostRef.current;
@@ -729,6 +784,7 @@ export function PixiMapCanvas({
                     : combatEventKey(selectedCombatEvent),
                 onSelectEvent: (event) => {
                     if (waypointPickShipIdRef.current === null) {
+                        setSelectedSpatialMessage(null);
                         setSelectedCombatEvent(event);
                     }
                 },
@@ -745,11 +801,27 @@ export function PixiMapCanvas({
                 selectedKey: selectedHostEventKey,
                 onSelect: (event) => {
                     if (waypointPickShipIdRef.current !== null) return;
+                    setSelectedSpatialMessage(null);
                     const key = hostEventKey(event);
                     setSelectedHostEventKey(key);
                     window.dispatchEvent(new CustomEvent("dashboard-host-event-select", {
                         detail: { key },
                     }));
+                },
+            });
+        }
+
+        if (layerVisibility.spatialMessages) {
+            drawSpatialMessages({
+                world,
+                messages: spatialMessages,
+                bounds,
+                selectedPositionKey: selectedSpatialMessage?.positionKey ?? null,
+                onSelect: (selection) => {
+                    if (waypointPickShipIdRef.current !== null) return;
+                    setSelectedCombatEvent(null);
+                    setSelectedHostEventKey(null);
+                    setSelectedSpatialMessage(selection);
                 },
             });
         }
@@ -777,7 +849,9 @@ export function PixiMapCanvas({
         selected,
         selectedCombatEvent,
         selectedHostEventKey,
+        selectedSpatialMessage,
         shipPositions,
+        spatialMessages,
         trackFadePercent,
         trackLookbackTurns,
         trackMode,
@@ -860,6 +934,102 @@ export function PixiMapCanvas({
                 onFocus={focusCombatEvent}
                 turn={intel.turn}
             />
+
+            {layerVisibility.spatialMessages && selectedSpatialMessage !== null && (
+                <div
+                    style={{
+                        position: "absolute",
+                        zIndex: 5,
+                        left: 12,
+                        top: 12,
+                        width: "min(390px, calc(100% - 24px))",
+                        maxHeight: "min(420px, calc(100% - 24px))",
+                        overflowY: "auto",
+                        padding: "12px 13px",
+                        border: "1px solid rgba(123, 188, 255, 0.58)",
+                        borderRadius: 9,
+                        background: "rgba(8, 13, 21, 0.96)",
+                        boxShadow: "0 10px 28px rgba(0, 0, 0, 0.38)",
+                        backdropFilter: "blur(6px)",
+                    }}
+                >
+                    <div
+                        style={{
+                            display: "flex",
+                            alignItems: "flex-start",
+                            justifyContent: "space-between",
+                            gap: 12,
+                        }}
+                    >
+                        <div>
+                            <div className="eyebrow">Spatial message evidence</div>
+                            <strong>
+                                {selectedSpatialMessage.messages.length === 1
+                                    ? "1 message"
+                                    : `${selectedSpatialMessage.messages.length} messages`}
+                                {" · "}
+                                {selectedSpatialMessage.x}, {selectedSpatialMessage.y}
+                            </strong>
+                            <div style={{ color: "#91a9c8", marginTop: 3, fontSize: 11 }}>
+                                Selected observer only · raw factual message records
+                            </div>
+                        </div>
+                        <button
+                            className="secondary-button"
+                            onClick={() => setSelectedSpatialMessage(null)}
+                            style={{ padding: "4px 8px" }}
+                            type="button"
+                        >
+                            Close
+                        </button>
+                    </div>
+
+                    <div
+                        style={{
+                            display: "grid",
+                            gap: 8,
+                            marginTop: 11,
+                        }}
+                    >
+                        {selectedSpatialMessage.messages.map((message) => (
+                            <div
+                                key={message.message_key}
+                                style={{
+                                    padding: "8px 9px",
+                                    border: "1px solid #26374d",
+                                    borderRadius: 6,
+                                    background: "#0b1420",
+                                }}
+                            >
+                                <strong>
+                                    {message.headline?.trim() || "Message"}
+                                </strong>
+                                <div style={{ color: "#c5d4e7", marginTop: 5, fontSize: 12, whiteSpace: "pre-wrap" }}>
+                                    {message.body?.trim() || "No message body stored."}
+                                </div>
+                                <div style={{ color: "#7890ad", marginTop: 6, fontSize: 10 }}>
+                                    T{message.message_turn ?? intel.turn}
+                                    {" · "}batch #{message.batch_id}
+                                    {" · "}{message.source_collections.join(" + ")}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    <div
+                        style={{
+                            marginTop: 9,
+                            paddingTop: 8,
+                            borderTop: "1px solid #28384c",
+                            color: "#8da3be",
+                            fontSize: 10.5,
+                        }}
+                    >
+                        Message text is not shared through dashboard intel sharing.
+                        This layer is scoped to the selected owned observer.
+                    </div>
+                </div>
+            )}
 
             {layerVisibility.combatEvents && selectedCombatEvent !== null && (
                 <div
