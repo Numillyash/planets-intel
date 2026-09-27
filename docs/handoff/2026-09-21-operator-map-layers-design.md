@@ -3,6 +3,14 @@
 This document records the implementation boundary for the second external-tools
 workstream. It is an architecture plan, not a second replay system.
 
+External UX references reviewed on 2026-09-27 are cataloged in
+`docs/handoff/2026-09-27-external-planets-tools-reference-catalog.md`. In particular,
+Planets-Console is a strong current reference for layer-control ergonomics and
+Stellar Cartography/minefield presentation, while McNimble's Redraw and Filter,
+Show Messages and Show Notes are useful precedent for filtering, spatial events,
+annotations and compact co-location summaries. These are references only; the
+existing Pixi architecture below remains authoritative for implementation.
+
 ## Existing map architecture
 
 The current map already has the correct major integration points:

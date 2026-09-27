@@ -7,6 +7,8 @@ Branch: `feature/operational-ui`
 
 This note records product ideas extracted from three external Planets.nu tools. It is a planning/source-boundary record, not a claim that any feature below is already implemented.
 
+> Expanded catalog: `docs/handoff/2026-09-27-external-planets-tools-reference-catalog.md` now records a broader client/plugin survey, licensing cautions, and an explicit `planets-intel` vs `planets-lab` responsibility matrix. This 2026-09-21 note remains the focused origin of the Commander Intelligence / map-layer workstreams.
+
 ## Sources reviewed
 
 1. T-Continuum Analyser
