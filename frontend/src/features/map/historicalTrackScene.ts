@@ -622,6 +622,12 @@ function drawVcrOnlyShipContacts({
     }
 }
 
+export function clearCurrentCombatContacts(throughTurn: number): void {
+    activeVcrGraphics.clear();
+    resetCurrentCombatPositions(throughTurn);
+}
+
+
 export function drawCurrentCombatContacts({
     world,
     tracks,

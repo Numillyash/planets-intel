@@ -40,12 +40,18 @@ import { drawHostEvents, hostEventKey } from "./hostEventScene";
 import { drawMapScene } from "./mapScene";
 import { drawOrderVectors } from "./orderVectorScene";
 import {
+    clearCurrentCombatContacts,
     combatEventKey,
     drawCurrentCombatContacts,
     drawHistoricalShipTracks,
     type ShipTrackMode,
 } from "./historicalTrackScene";
 import { drawMinefields } from "./minefieldScene";
+import {
+    DEFAULT_MAP_LAYER_VISIBILITY,
+    MapLayerControls,
+    type MapLayerVisibility,
+} from "./MapLayerControls";
 import { TrackControls } from "./TrackControls";
 import { useMapOrderDrafts } from "./useMapOrderDrafts";
 
@@ -150,6 +156,9 @@ export function PixiMapCanvas({
     const [hostEvents, setHostEvents] = useState<HostEventItem[]>([]);
     const [selectedHostEventKey, setSelectedHostEventKey] =
         useState<string | null>(null);
+    const [layerVisibility, setLayerVisibility] =
+        useState<MapLayerVisibility>(DEFAULT_MAP_LAYER_VISIBILITY);
+    const layerVisibilityRef = useRef(layerVisibility);
 
     const bounds = useMemo(
         () => observedBounds(intel),
@@ -178,6 +187,7 @@ export function PixiMapCanvas({
 
     intelRef.current = intel;
     boundsRef.current = bounds;
+    layerVisibilityRef.current = layerVisibility;
 
     useEffect(() => {
         const startPicking = (event: Event) => {
@@ -449,6 +459,11 @@ export function PixiMapCanvas({
             };
 
             const updateHazardTooltip = (point: { x: number; y: number }) => {
+                if (!layerVisibilityRef.current.entities) {
+                    hideHazardTooltip();
+                    return;
+                }
+
                 const currentWorld = worldRef.current;
                 const currentIntel = intelRef.current;
                 const layer = hoverLayerRef.current;
@@ -652,78 +667,92 @@ export function PixiMapCanvas({
             onSelect(entity);
         };
 
-        drawMinefields({
-            world,
-            intel,
-            bounds,
-            selected,
-            onSelect: selectMapEntity,
-        });
+        if (layerVisibility.minefields) {
+            drawMinefields({
+                world,
+                intel,
+                bounds,
+                selected,
+                onSelect: selectMapEntity,
+            });
+        }
 
-        drawHistoricalShipTracks({
-            world,
-            tracks: historicalTracks,
-            bounds,
-            selected,
-            mode: trackMode,
-            throughTurn: intel.turn,
-            lookbackTurns: trackLookbackTurns,
-            fadePerTurn: trackFadePercent / 100,
-        });
+        if (layerVisibility.historicalTracks) {
+            drawHistoricalShipTracks({
+                world,
+                tracks: historicalTracks,
+                bounds,
+                selected,
+                mode: trackMode,
+                throughTurn: intel.turn,
+                lookbackTurns: trackLookbackTurns,
+                fadePerTurn: trackFadePercent / 100,
+            });
+        }
 
-        drawMapScene({
-            world,
-            intel,
-            bounds,
-            links,
-            shipPositions,
-            basesByPlanet,
-            labelMode,
-            selected,
-            onSelect: selectMapEntity,
-            loadedHullAssetUrls: loadedHullAssetUrlsRef.current,
-        });
+        if (layerVisibility.entities) {
+            drawMapScene({
+                world,
+                intel,
+                bounds,
+                links,
+                shipPositions,
+                basesByPlanet,
+                labelMode,
+                selected,
+                onSelect: selectMapEntity,
+                loadedHullAssetUrls: loadedHullAssetUrlsRef.current,
+            });
+        }
 
-        drawOrderVectors({
-            world,
-            intel,
-            bounds,
-            selected,
-            drafts: orderDrafts,
-        });
+        if (layerVisibility.movementPredictions) {
+            drawOrderVectors({
+                world,
+                intel,
+                bounds,
+                selected,
+                drafts: orderDrafts,
+            });
+        }
 
-        drawCurrentCombatContacts({
-            world,
-            tracks: historicalTracks,
-            bounds,
-            throughTurn: intel.turn,
-            visibleShipIds: new Set(
-                shipPositions.map((position) => position.ship.ship_id),
-            ),
-            selectedEventKey: selectedCombatEvent === null
-                ? null
-                : combatEventKey(selectedCombatEvent),
-            onSelectEvent: (event) => {
-                if (waypointPickShipIdRef.current === null) {
-                    setSelectedCombatEvent(event);
-                }
-            },
-        });
+        if (layerVisibility.combatEvents) {
+            drawCurrentCombatContacts({
+                world,
+                tracks: historicalTracks,
+                bounds,
+                throughTurn: intel.turn,
+                visibleShipIds: new Set(
+                    shipPositions.map((position) => position.ship.ship_id),
+                ),
+                selectedEventKey: selectedCombatEvent === null
+                    ? null
+                    : combatEventKey(selectedCombatEvent),
+                onSelectEvent: (event) => {
+                    if (waypointPickShipIdRef.current === null) {
+                        setSelectedCombatEvent(event);
+                    }
+                },
+            });
+        } else {
+            clearCurrentCombatContacts(intel.turn);
+        }
 
-        drawHostEvents({
-            world,
-            events: hostEvents,
-            bounds,
-            selectedKey: selectedHostEventKey,
-            onSelect: (event) => {
-                if (waypointPickShipIdRef.current !== null) return;
-                const key = hostEventKey(event);
-                setSelectedHostEventKey(key);
-                window.dispatchEvent(new CustomEvent("dashboard-host-event-select", {
-                    detail: { key },
-                }));
-            },
-        });
+        if (layerVisibility.hostEvents) {
+            drawHostEvents({
+                world,
+                events: hostEvents,
+                bounds,
+                selectedKey: selectedHostEventKey,
+                onSelect: (event) => {
+                    if (waypointPickShipIdRef.current !== null) return;
+                    const key = hostEventKey(event);
+                    setSelectedHostEventKey(key);
+                    window.dispatchEvent(new CustomEvent("dashboard-host-event-select", {
+                        detail: { key },
+                    }));
+                },
+            });
+        }
 
         if (hoverLayerRef.current !== null) hoverLayerRef.current.visible = false;
 
@@ -741,6 +770,7 @@ export function PixiMapCanvas({
         hullArtworkRevision,
         intel,
         labelMode,
+        layerVisibility,
         links,
         onSelect,
         orderDrafts,
@@ -808,14 +838,21 @@ export function PixiMapCanvas({
                 </div>
             )}
 
-            <TrackControls
-                fadePercent={trackFadePercent}
-                lookbackTurns={trackLookbackTurns}
-                mode={trackMode}
-                onFadeChange={setTrackFadePercent}
-                onLookbackChange={setTrackLookbackTurns}
-                onModeChange={setTrackMode}
+            <MapLayerControls
+                onChange={setLayerVisibility}
+                visibility={layerVisibility}
             />
+
+            {layerVisibility.historicalTracks && (
+                <TrackControls
+                    fadePercent={trackFadePercent}
+                    lookbackTurns={trackLookbackTurns}
+                    mode={trackMode}
+                    onFadeChange={setTrackFadePercent}
+                    onLookbackChange={setTrackLookbackTurns}
+                    onModeChange={setTrackMode}
+                />
+            )}
 
             <CombatEventPanel
                 gameId={intel.game_id}
@@ -824,7 +861,7 @@ export function PixiMapCanvas({
                 turn={intel.turn}
             />
 
-            {selectedCombatEvent !== null && (
+            {layerVisibility.combatEvents && selectedCombatEvent !== null && (
                 <div
                     style={{
                         position: "absolute",
