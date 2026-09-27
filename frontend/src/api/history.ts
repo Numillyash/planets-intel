@@ -6,6 +6,7 @@ import type {
     HistoricalCombatEventSide,
     HistoricalIntelStatus,
     HistoricalShipTracksResponse,
+    SpatialMessagesResponse,
 } from "../types/history";
 
 async function parseErrorMessage(response: Response): Promise<string> {
@@ -183,4 +184,16 @@ export async function backfillHistoricalTurn(
         );
     }
     return response.json() as Promise<HistoricalBackfillTurnResponse>;
+}
+
+
+export async function getSpatialMessages(
+    gameId: number,
+    linkedAccountId: number,
+    turn: number,
+): Promise<SpatialMessagesResponse | null> {
+    return apiGetOptional<SpatialMessagesResponse>(
+        `/api/games/${gameId}/private-intel/history/spatial-messages`
+        + `?linked_account_id=${linkedAccountId}&turn=${turn}`,
+    );
 }
