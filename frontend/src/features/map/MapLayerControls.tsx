@@ -73,7 +73,7 @@ const LAYERS: Array<{
         key: "spatialMessages",
         label: "Spatial messages",
         detail: "Coordinate-bearing messages from the selected observer",
-        provenance: "facts",
+        provenance: "private facts",
     },
 ];
 
