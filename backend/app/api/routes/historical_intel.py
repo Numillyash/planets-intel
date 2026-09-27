@@ -18,6 +18,7 @@ from app.services.host_events import get_accessible_host_events
 from app.services.loadout_inference import get_ship_loadout_inference
 from app.services.player_activity import get_player_activity_analysis
 from app.services.private_intel import get_private_intel_turn
+from app.services.spatial_messages import get_spatial_private_messages
 from app.services.threat_analysis_post_state import get_ship_threat_analysis_with_post_state
 
 
@@ -194,6 +195,29 @@ def historical_host_events(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Host-event context not found",
+        )
+    return result
+
+
+@router.get(
+    "/games/{game_id}/private-intel/history/spatial-messages",
+)
+def historical_spatial_messages(
+    game_id: int = Path(gt=0),
+    linked_account_id: int = Query(gt=0),
+    turn: int = Query(gt=0),
+    user: AppUser = Depends(require_user),
+) -> dict[str, object]:
+    result = get_spatial_private_messages(
+        user_id=user.id,
+        game_id=game_id,
+        linked_account_id=linked_account_id,
+        turn=turn,
+    )
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Spatial-message context not found",
         )
     return result
 

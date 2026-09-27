@@ -10,6 +10,7 @@ export interface MapLayerVisibility {
     movementPredictions: boolean;
     combatEvents: boolean;
     hostEvents: boolean;
+    spatialMessages: boolean;
 }
 
 
@@ -20,6 +21,7 @@ export const DEFAULT_MAP_LAYER_VISIBILITY: MapLayerVisibility = {
     movementPredictions: true,
     combatEvents: true,
     hostEvents: true,
+    spatialMessages: false,
 };
 
 
@@ -67,6 +69,12 @@ const LAYERS: Array<{
         label: "Host events",
         detail: "Observed host/explosion event markers",
         provenance: "facts",
+    },
+    {
+        key: "spatialMessages",
+        label: "Spatial messages",
+        detail: "Coordinate-bearing messages from the selected observer",
+        provenance: "private facts",
     },
 ];
 

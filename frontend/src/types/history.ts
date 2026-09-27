@@ -195,3 +195,30 @@ export interface HistoricalShipTracksResponse {
     through_turn: number;
     tracks: HistoricalShipTrack[];
 }
+
+
+export interface SpatialMessageItem {
+    message_key: string;
+    message_id: number | null;
+    message_type: number | null;
+    message_turn: number | null;
+    owner_id: number | null;
+    target_id: number | null;
+    headline: string | null;
+    body: string | null;
+    x: number;
+    y: number;
+    source_collections: string[];
+    batch_id: number;
+    observed_at: string;
+}
+
+export interface SpatialMessagesResponse {
+    game_id: number;
+    turn: number;
+    linked_account_id: number;
+    planets_username: string;
+    scope: "selected_observer_private_messages";
+    count: number;
+    messages: SpatialMessageItem[];
+}
