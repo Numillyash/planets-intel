@@ -240,6 +240,8 @@ Detailed handoff:
 `docs/handoff/2026-09-21-commander-intelligence-foundation.md`.
 
 ## Immediate product priorities
+- Operator map layer controls are implemented on the existing Pixi stack.
+- The next bounded slice is observer-scoped spatial messages from existing private message observations; raw message text remains selected-observer-only and is not widened by dashboard intel sharing.
 
 1. Continue the operator-map layer/filter workstream on the existing Pixi stack; use Planets-Console plus McNimble Redraw/Filter, Show Messages and Show Notes as UX references, not as a second map implementation.
 2. Follow layer visibility with spatial-message/event markers from already-authorized factual observations; keep analyst annotations separate from facts and predictions.
