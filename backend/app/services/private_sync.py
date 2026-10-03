@@ -3,7 +3,6 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
-import httpx
 from sqlalchemy import select
 
 from app.core.credentials import decrypt_credential
