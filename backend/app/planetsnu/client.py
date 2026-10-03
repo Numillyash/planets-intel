@@ -13,6 +13,10 @@ class PlanetsNuAuthError(PlanetsNuError):
     pass
 
 
+class PlanetsNuTransportError(PlanetsNuError):
+    """All attempted read transport paths failed before an HTTP response."""
+
+
 class PlanetsNuAmbiguousWriteError(PlanetsNuError):
     """The write request may have reached Planets.nu but no response was received."""
 
@@ -84,10 +88,64 @@ class PlanetsNuClient:
                 route = "proxy" if proxy is not None else "direct"
                 failures.append(f"{route} {exc.__class__.__name__}")
 
-        error_type = PlanetsNuAmbiguousWriteError if ambiguous_write else PlanetsNuError
+        error_type = (
+            PlanetsNuAmbiguousWriteError
+            if ambiguous_write
+            else PlanetsNuTransportError
+        )
         raise error_type(
             "Planets.nu request failed: " + "; ".join(failures)
         )
+
+    async def probe_private_transport(
+        self,
+        *,
+        timeout_seconds: float = 12.0,
+    ) -> dict[str, Any]:
+        """Probe the configured private transport without parsing API payload.
+
+        Planets.nu's /time endpoint returns JavaScript-like text rather than
+        JSON. This probe is therefore intentionally transport/HTTP-only.
+
+        When a proxy is configured, the probe uses that proxy exclusively:
+        background private collection must know whether its intended bridge is
+        alive instead of masking bridge failure behind a slow direct fallback.
+        If no proxy is configured, it probes the direct route.
+        """
+
+        url = f"{self.base_url}/time"
+        proxy = self.proxy_url
+        route = "proxy" if proxy is not None else "direct"
+
+        try:
+            async with httpx.AsyncClient(
+                timeout=timeout_seconds,
+                follow_redirects=True,
+                proxy=proxy,
+                trust_env=False,
+            ) as client:
+                response = await client.get(
+                    url,
+                    params={"version": 1},
+                )
+                response.raise_for_status()
+        except httpx.RequestError as exc:
+            raise PlanetsNuTransportError(
+                f"Planets.nu {route} probe failed: {exc.__class__.__name__}"
+            ) from exc
+        except httpx.HTTPStatusError as exc:
+            raise PlanetsNuError(
+                f"Planets.nu {route} probe returned HTTP "
+                f"{exc.response.status_code}"
+            ) from exc
+
+        return {
+            "ok": True,
+            "route": route,
+            "proxy_configured": proxy is not None,
+            "status_code": response.status_code,
+        }
+
 
     async def get(
         self,
