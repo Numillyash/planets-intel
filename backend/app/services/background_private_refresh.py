@@ -285,8 +285,9 @@ async def discover_live_private_refresh_targets() -> dict[str, Any]:
                 public_games_seen += len(public_games)
                 raw_games.extend(public_games)
 
-            api_key = decrypt_credential(encrypted_api_key)
+            api_key: str | None = None
             try:
+                api_key = decrypt_credential(encrypted_api_key)
                 authenticated = await client.my_games(api_key)
             except asyncio.CancelledError:
                 raise
@@ -308,7 +309,8 @@ async def discover_live_private_refresh_targets() -> dict[str, Any]:
                         authenticated_games_seen += 1
                         raw_games.append(raw_game)
             finally:
-                del api_key
+                if api_key is not None:
+                    del api_key
 
             remote_games_seen += len(raw_games)
             seen_game_ids: set[int] = set()
