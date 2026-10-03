@@ -3,6 +3,7 @@ from typing import Any
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import aliased
 
+from app.core.credentials import decrypt_credential
 from app.db.session import SessionLocal
 from app.models.game import Game
 from app.models.game_player_slot import GamePlayerSlot
@@ -40,6 +41,42 @@ def _game_record_from_remote(raw: dict[str, Any]) -> dict[str, Any] | None:
         "observer_status": None,
         "membership_source": "upstream",
     }
+
+
+def _game_record_from_authenticated_envelope(
+    envelope: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Normalize one /account/mygames v2 record.
+
+    The authenticated endpoint returns {"game": {...}, "player": {...}}.
+    Preserve the same game-list shape used by the picker while attaching the
+    selected account's current slot/status as stronger observer evidence.
+    """
+
+    raw_game = envelope.get("game")
+    if not isinstance(raw_game, dict):
+        return None
+
+    record = _game_record_from_remote(raw_game)
+    if record is None:
+        return None
+
+    player = envelope.get("player")
+    if isinstance(player, dict):
+        slot_id = player.get("id")
+        status = player.get("status")
+        if (
+            not isinstance(slot_id, bool)
+            and isinstance(slot_id, int)
+            and slot_id > 0
+        ):
+            record["observer_slot_id"] = slot_id
+        if not isinstance(status, bool) and isinstance(status, int):
+            record["observer_status"] = status
+        record["membership_source"] = "authenticated-mygames"
+
+    record["data_source"] = "planets.nu-authenticated"
+    return record
 
 
 def _game_record_from_cache(
@@ -221,31 +258,60 @@ async def get_account_games(
         # account itself can still be passed to the cache helper because its
         # scalar columns are already loaded.
         planets_username = account.planets_username
+        encrypted_api_key = account.api_key_encrypted
         cached_games = _cached_games_for_account(account)
 
-    upstream_available = True
-    upstream_error: str | None = None
+    public_error: str | None = None
+    authenticated_error: str | None = None
+    raw_games: list[dict[str, Any]] = []
+    authenticated_games: list[dict[str, Any]] = []
+    client = PlanetsNuClient()
 
     try:
-        raw_games = await PlanetsNuClient().games_for_username(
-            planets_username
-        )
+        raw_games = await client.games_for_username(planets_username)
     except PlanetsNuError as exc:
-        upstream_available = False
-        upstream_error = str(exc)
-        raw_games = []
+        public_error = str(exc)
+
+    api_key = decrypt_credential(encrypted_api_key)
+    try:
+        authenticated_games = await client.my_games(api_key)
+    except PlanetsNuError as exc:
+        authenticated_error = str(exc)
+    finally:
+        del api_key
+
+    upstream_available = public_error is None or authenticated_error is None
+    upstream_errors = [
+        label + ": " + detail
+        for label, detail in (
+            ("public games/list", public_error),
+            ("authenticated account/mygames", authenticated_error),
+        )
+        if detail is not None
+    ]
+    upstream_error = " · ".join(upstream_errors) if upstream_errors else None
 
     by_id: dict[int, dict[str, Any]] = {
         game["id"]: game
         for game in cached_games
     }
 
+    # Public username discovery keeps archive/current metadata broad for normal
+    # games, but it is not sufficient for private/custom membership.
     for raw in raw_games:
         game = _game_record_from_remote(raw)
         if game is not None:
-            # Fresh Planets.nu metadata wins for the game itself, while local
-            # observer slot/status evidence survives the merge. This keeps the
-            # archive classification factual even when games/list is incomplete.
+            by_id[game["id"]] = _merge_remote_observer_evidence(
+                game,
+                by_id.get(game["id"]),
+            )
+
+    # Authenticated current-player discovery is authoritative for active private
+    # and custom games belonging to this linked observer. Apply it after the
+    # public list so its observer slot/status evidence wins.
+    for envelope in authenticated_games:
+        game = _game_record_from_authenticated_envelope(envelope)
+        if game is not None:
             by_id[game["id"]] = _merge_remote_observer_evidence(
                 game,
                 by_id.get(game["id"]),
