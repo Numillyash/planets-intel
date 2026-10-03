@@ -265,6 +265,29 @@ The private collector now treats that transport as an explicit dependency:
 The Windows watchdog is an operator-installed host integration. It must not be
 assumed present merely because its script exists in Git.
 
+## Authenticated private-game discovery — 2026-10-03
+
+The public `games/list?username=...` path is insufficient as the sole live-game
+discovery source for linked observers: a current private/custom game can be
+visible to the authenticated Planets.nu account while absent from the public
+username listing.
+
+The dashboard game picker and background collector therefore use two independent
+sources:
+
+- public `games/list?username=...` for broad public/history metadata;
+- authenticated `account/mygames?version=2` for the linked account's current
+  active memberships, including private/custom games.
+
+Authenticated records are normalized into the existing game-picker shape and
+retain their factual player slot/status. The background scheduler unions both
+sources before canonical public sync/private collection. One source failing does
+not discard records returned by the other, but the iteration remains visibly
+degraded.
+
+This avoids requiring a manual dashboard open or hard-coded game id to seed a
+new private custom game.
+
 ## Immediate product priorities
 - Operator map layer controls are implemented on the existing Pixi stack.
 - The next bounded slice is observer-scoped spatial messages from existing private message observations; raw message text remains selected-observer-only and is not widened by dashboard intel sharing.
