@@ -246,6 +246,53 @@ class PlanetsNuClientTests(unittest.IsolatedAsyncioTestCase):
             },
         )
 
+    async def test_mygames_uses_authenticated_version2_endpoint(self):
+        client = PlanetsNuClient()
+        client.post_form = AsyncMock(
+            return_value={
+                "success": True,
+                "games": [
+                    {
+                        "game": {
+                            "id": 686764,
+                            "status": 2,
+                            "statusname": "Running",
+                        },
+                        "player": {
+                            "id": 2,
+                            "status": 1,
+                        },
+                    }
+                ],
+            }
+        )
+
+        result = await client.my_games("secret")
+
+        self.assertEqual(result[0]["game"]["id"], 686764)
+        client.post_form.assert_awaited_once_with(
+            "account/mygames?version=2",
+            data={"apikey": "secret"},
+            headers={
+                "Origin": "https://planets.nu",
+                "Referer": "https://planets.nu/",
+                "User-Agent": "Mozilla/5.0",
+            },
+            use_proxy=True,
+        )
+
+    async def test_mygames_rejects_invalid_envelopes(self):
+        client = PlanetsNuClient()
+        client.post_form = AsyncMock(
+            return_value={"success": True, "games": [{"id": 686764}]}
+        )
+
+        with self.assertRaisesRegex(
+            PlanetsNuError,
+            "contains invalid game records",
+        ):
+            await client.my_games("secret")
+
     async def test_send_message_never_retries_ambiguous_transport_failure(self):
         _WriteTransportFailureAsyncClient.attempts = []
         client = PlanetsNuClient()
