@@ -288,6 +288,34 @@ degraded.
 This avoids requiring a manual dashboard open or hard-coded game id to seed a
 new private custom game.
 
+## Live combined source-turn boundary — 2026-10-03
+
+The live Combined dashboard map must not mix observation batches from different
+turns as if they were co-current facts.
+
+A concrete failure mode was an inactive/dead local observer whose last private
+snapshot was from an older turn: that historical batch continued contributing
+ships and starbases to a newer live Combined map because the aggregator loaded
+the latest batch from every accessible observer regardless of batch turn.
+
+The live Combined endpoint now applies a source-turn gate:
+
+- only private observation batches whose `batch.turn` equals the canonical
+  current game turn may contribute entities to the live Combined union;
+- an inactive/dead primary observer's latest historical batch may still provide
+  observer identity metadata so the user can open a current Combined view
+  supplied by another authorized current observer;
+- stale observer batches remain available through observer archive/history and
+  Time Machine paths, but they are not current-map sources;
+- this gate is on the observation **batch turn**, not entity `info_turn`.
+  A current-turn observer snapshot may legitimately carry an older last-seen
+  enemy entity, and that remains factual current knowledge with its older
+  `info_turn` provenance.
+
+Do not implement "player is inactive/dead => delete every entity owned by that
+race" as a map rule without Host/evidence support. Roster status and entity
+existence are separate factual domains.
+
 ## Immediate product priorities
 - Operator map layer controls are implemented on the existing Pixi stack.
 - The next bounded slice is observer-scoped spatial messages from existing private message observations; raw message text remains selected-observer-only and is not widened by dashboard intel sharing.
