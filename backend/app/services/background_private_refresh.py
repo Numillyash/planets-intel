@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from contextlib import suppress
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import and_, func, or_, select
@@ -26,8 +27,83 @@ from app.services.private_refresh import (
 LOGGER = logging.getLogger("uvicorn.error")
 
 BACKGROUND_REFRESH_INTERVAL_SECONDS = 5 * 60
+BACKGROUND_REFRESH_DEGRADED_RETRY_SECONDS = 60
 BACKGROUND_REFRESH_STARTUP_DELAY_SECONDS = 15
+BACKGROUND_REFRESH_TRANSPORT_PROBE_TIMEOUT_SECONDS = 12.0
 MAX_CONCURRENT_GAME_REFRESHES = 2
+
+_PRIVATE_REFRESH_HEALTH: dict[str, Any] = {
+    "scheduler_running": False,
+    "transport_status": "unknown",
+    "transport_route": None,
+    "proxy_configured": None,
+    "last_transport_check_at": None,
+    "last_transport_error": None,
+    "consecutive_transport_failures": 0,
+    "last_iteration_started_at": None,
+    "last_iteration_completed_at": None,
+    "last_iteration_status": "never",
+    "last_success_at": None,
+    "last_summary": None,
+}
+
+
+def _utc_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def private_refresh_health_snapshot() -> dict[str, Any]:
+    """Return non-secret in-memory scheduler health for operations/diagnostics."""
+
+    snapshot = dict(_PRIVATE_REFRESH_HEALTH)
+    summary = snapshot.get("last_summary")
+    if isinstance(summary, dict):
+        snapshot["last_summary"] = dict(summary)
+    return snapshot
+
+
+async def probe_background_private_transport() -> tuple[bool, dict[str, Any]]:
+    """Check the exact transport path private collection intends to use."""
+
+    checked_at = _utc_iso()
+    client = PlanetsNuClient()
+
+    try:
+        result = await client.probe_private_transport(
+            timeout_seconds=BACKGROUND_REFRESH_TRANSPORT_PROBE_TIMEOUT_SECONDS,
+        )
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        failures = int(_PRIVATE_REFRESH_HEALTH["consecutive_transport_failures"]) + 1
+        diagnostic = {
+            "ok": False,
+            "error_type": type(exc).__name__,
+            "detail": str(exc),
+        }
+        _PRIVATE_REFRESH_HEALTH.update(
+            {
+                "transport_status": "failed",
+                "transport_route": "proxy" if client.proxy_url else "direct",
+                "proxy_configured": client.proxy_url is not None,
+                "last_transport_check_at": checked_at,
+                "last_transport_error": f"{type(exc).__name__}: {exc}",
+                "consecutive_transport_failures": failures,
+            }
+        )
+        return False, diagnostic
+
+    _PRIVATE_REFRESH_HEALTH.update(
+        {
+            "transport_status": "ok",
+            "transport_route": result.get("route"),
+            "proxy_configured": bool(result.get("proxy_configured")),
+            "last_transport_check_at": checked_at,
+            "last_transport_error": None,
+            "consecutive_transport_failures": 0,
+        }
+    )
+    return True, result
 
 
 def _membership_join_condition():
@@ -292,34 +368,124 @@ async def refresh_all_running_private_intel_once() -> dict[str, Any]:
 
 
 async def background_private_refresh_loop() -> None:
-    """Refresh all active games forever, independently of the frontend."""
+    """Refresh all active games forever, independently of the frontend.
 
+    The scheduler probes the intended private transport before fan-out. When
+    the Windows/WSL proxy bridge is unavailable, the iteration is skipped and
+    retried after a short degraded interval. This avoids timeout storms while
+    recovering automatically soon after the bridge returns.
+    """
+
+    _PRIVATE_REFRESH_HEALTH["scheduler_running"] = True
     LOGGER.info(
-        "background private refresh scheduler started startup_delay=%ss interval=%ss",
+        "background private refresh scheduler started "
+        "startup_delay=%ss interval=%ss degraded_retry=%ss",
         BACKGROUND_REFRESH_STARTUP_DELAY_SECONDS,
         BACKGROUND_REFRESH_INTERVAL_SECONDS,
+        BACKGROUND_REFRESH_DEGRADED_RETRY_SECONDS,
     )
-    await asyncio.sleep(BACKGROUND_REFRESH_STARTUP_DELAY_SECONDS)
-    while True:
-        try:
-            summary = await refresh_all_running_private_intel_once()
-            LOGGER.info(
-                "background private refresh iteration complete "
-                "canonical_targets=%s discovered_targets=%s "
-                "discovery_failures=%s raw_targets=%s targets=%s deduplicated=%s",
-                summary.get("canonical_targets", 0),
-                summary.get("discovered_targets", 0),
-                summary.get("discovery_failures", 0),
-                summary.get("raw_targets", 0),
-                summary.get("targets", 0),
-                summary.get("deduplicated", 0),
-            )
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            LOGGER.exception("background private refresh iteration failed")
 
-        await asyncio.sleep(BACKGROUND_REFRESH_INTERVAL_SECONDS)
+    try:
+        await asyncio.sleep(BACKGROUND_REFRESH_STARTUP_DELAY_SECONDS)
+        while True:
+            sleep_seconds = BACKGROUND_REFRESH_INTERVAL_SECONDS
+            started_at = _utc_iso()
+            _PRIVATE_REFRESH_HEALTH.update(
+                {
+                    "last_iteration_started_at": started_at,
+                    "last_iteration_status": "running",
+                }
+            )
+
+            try:
+                transport_ok, transport = await probe_background_private_transport()
+                if not transport_ok:
+                    sleep_seconds = BACKGROUND_REFRESH_DEGRADED_RETRY_SECONDS
+                    completed_at = _utc_iso()
+                    _PRIVATE_REFRESH_HEALTH.update(
+                        {
+                            "last_iteration_completed_at": completed_at,
+                            "last_iteration_status": "transport_down",
+                            "last_summary": None,
+                        }
+                    )
+                    LOGGER.warning(
+                        "background private refresh transport unavailable "
+                        "route=%s error=%s retry_in=%ss",
+                        _PRIVATE_REFRESH_HEALTH.get("transport_route"),
+                        transport.get("detail"),
+                        sleep_seconds,
+                    )
+                else:
+                    summary = await refresh_all_running_private_intel_once()
+                    partial_count = sum(
+                        item.get("status") == "partial"
+                        for item in summary.get("results", [])
+                    )
+                    failed_count = sum(
+                        item.get("status") == "failed"
+                        for item in summary.get("results", [])
+                    )
+                    discovery_failures = int(summary.get("discovery_failures", 0))
+                    iteration_status = (
+                        "ok"
+                        if partial_count == 0
+                        and failed_count == 0
+                        and discovery_failures == 0
+                        else "partial"
+                    )
+                    completed_at = _utc_iso()
+                    compact_summary = {
+                        "canonical_targets": int(summary.get("canonical_targets", 0)),
+                        "discovered_targets": int(summary.get("discovered_targets", 0)),
+                        "discovery_failures": discovery_failures,
+                        "targets": int(summary.get("targets", 0)),
+                        "partial_targets": partial_count,
+                        "failed_targets": failed_count,
+                    }
+                    _PRIVATE_REFRESH_HEALTH.update(
+                        {
+                            "last_iteration_completed_at": completed_at,
+                            "last_iteration_status": iteration_status,
+                            "last_summary": compact_summary,
+                        }
+                    )
+                    if iteration_status == "ok":
+                        _PRIVATE_REFRESH_HEALTH["last_success_at"] = completed_at
+
+                    LOGGER.info(
+                        "background private refresh iteration complete "
+                        "canonical_targets=%s discovered_targets=%s "
+                        "discovery_failures=%s raw_targets=%s targets=%s "
+                        "deduplicated=%s partial_targets=%s failed_targets=%s",
+                        summary.get("canonical_targets", 0),
+                        summary.get("discovered_targets", 0),
+                        discovery_failures,
+                        summary.get("raw_targets", 0),
+                        summary.get("targets", 0),
+                        summary.get("deduplicated", 0),
+                        partial_count,
+                        failed_count,
+                    )
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                completed_at = _utc_iso()
+                _PRIVATE_REFRESH_HEALTH.update(
+                    {
+                        "last_iteration_completed_at": completed_at,
+                        "last_iteration_status": "failed",
+                        "last_summary": None,
+                    }
+                )
+                LOGGER.exception(
+                    "background private refresh iteration failed: %s",
+                    exc,
+                )
+
+            await asyncio.sleep(sleep_seconds)
+    finally:
+        _PRIVATE_REFRESH_HEALTH["scheduler_running"] = False
 
 
 async def cancel_background_task(task: asyncio.Task[None]) -> None:
