@@ -41,6 +41,33 @@ function Is-Admin {
     return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
+function Restart-Elevated([switch]$ForUninstall) {
+    if (-not $PSCommandPath) {
+        throw "Cannot determine script source path for elevation."
+    }
+
+    $quotedScript = '"' + $PSCommandPath.Replace('"', '""') + '"'
+    $quotedPrefix = '"' + $PreferredNetworkPrefix.Replace('"', '""') + '"'
+    $quotedUrl = '"' + $ApiTestUrl.Replace('"', '""') + '"'
+
+    $args = @(
+        "-NoLogo",
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-File", $quotedScript,
+        "-Port", [string]$Port,
+        "-PreferredNetworkPrefix", $quotedPrefix,
+        "-ApiTestUrl", $quotedUrl
+    )
+    if ($ForUninstall) {
+        $args += "-Uninstall"
+    }
+
+    Write-Host "Requesting administrator privileges for watchdog setup..."
+    Start-Process powershell.exe -Verb RunAs -ArgumentList ($args -join " ")
+    exit 0
+}
+
 function Fail([string]$Diagnosis, [string]$Message, [int]$Code) {
     Log ("DIAGNOSIS={0} {1}" -f $Diagnosis, $Message)
     exit $Code
