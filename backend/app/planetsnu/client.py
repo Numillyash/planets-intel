@@ -295,6 +295,61 @@ class PlanetsNuClient:
 
         return payload
 
+    async def my_games(
+        self,
+        api_key: str,
+    ) -> list[dict[str, Any]]:
+        """Return the authenticated account's active game envelopes.
+
+        Planets.nu documents /account/mygames as the current player's active
+        game list. Unlike public /games/list?username=..., this authenticated
+        source can expose private/custom games belonging to the linked account.
+
+        Version 2 returns entries shaped as {"game": {...}, "player": {...}}.
+        """
+
+        payload = await self.post_form(
+            "account/mygames?version=2",
+            data={"apikey": api_key},
+            headers={
+                "Origin": "https://planets.nu",
+                "Referer": "https://planets.nu/",
+                "User-Agent": "Mozilla/5.0",
+            },
+            use_proxy=True,
+        )
+
+        if not isinstance(payload, dict):
+            raise PlanetsNuError(
+                "Planets.nu account/mygames response is not an object"
+            )
+        if payload.get("success") is False:
+            raise PlanetsNuError(
+                str(
+                    payload.get(
+                        "error",
+                        "Planets.nu account/mygames failed",
+                    )
+                )
+            )
+
+        games = payload.get("games")
+        if not isinstance(games, list):
+            raise PlanetsNuError(
+                "Planets.nu account/mygames response has no games list"
+            )
+
+        if not all(
+            isinstance(item, dict)
+            and isinstance(item.get("game"), dict)
+            for item in games
+        ):
+            raise PlanetsNuError(
+                "Planets.nu account/mygames contains invalid game records"
+            )
+
+        return games
+
     async def load_turn(
         self,
         game_id: int,
