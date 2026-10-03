@@ -62,7 +62,7 @@ function Get-ZeroTierListenAddress {
 }
 
 function Invoke-WslProxyTest {
-    $command = 'set +e; curl -sS --connect-timeout 6 --max-time 15 --proxy http://127.0.0.1:{0} \'{1}\' -o /dev/null; exit $?' -f $Port, $ApiTestUrl
+    $command = 'set +e; curl -sS --connect-timeout 6 --max-time 15 --proxy http://127.0.0.1:{0} "{1}" -o /dev/null; exit $?' -f $Port, $ApiTestUrl
     & wsl.exe -u root -e bash -lc $command *> $null
     return ($LASTEXITCODE -eq 0)
 }
