@@ -2,9 +2,13 @@ import asyncio
 import unittest
 from unittest.mock import AsyncMock, Mock, patch
 
+from app.planetsnu.client import PlanetsNuTransportError
 from app.services.background_private_refresh import (
+    _PRIVATE_REFRESH_HEALTH,
     _remote_game_is_refresh_candidate,
     discover_live_private_refresh_targets,
+    private_refresh_health_snapshot,
+    probe_background_private_transport,
     refresh_all_running_private_intel_once,
 )
 
@@ -213,6 +217,69 @@ class BackgroundPrivateRefreshTests(unittest.TestCase):
 
         statuses = sorted(item["status"] for item in result["results"])
         self.assertEqual(statuses, ["failed", "ok"])
+
+    def test_transport_probe_failure_updates_scheduler_health(self) -> None:
+        client = Mock()
+        client.proxy_url = "http://proxy.invalid:18088"
+        client.probe_private_transport = AsyncMock(
+            side_effect=PlanetsNuTransportError("bridge unavailable")
+        )
+
+        previous = dict(_PRIVATE_REFRESH_HEALTH)
+        try:
+            _PRIVATE_REFRESH_HEALTH["consecutive_transport_failures"] = 0
+            with patch(
+                "app.services.background_private_refresh.PlanetsNuClient",
+                return_value=client,
+            ):
+                ok, diagnostic = asyncio.run(
+                    probe_background_private_transport()
+                )
+
+            self.assertFalse(ok)
+            self.assertEqual(
+                diagnostic["error_type"],
+                "PlanetsNuTransportError",
+            )
+            health = private_refresh_health_snapshot()
+            self.assertEqual(health["transport_status"], "failed")
+            self.assertEqual(health["transport_route"], "proxy")
+            self.assertEqual(health["consecutive_transport_failures"], 1)
+            self.assertIn("bridge unavailable", health["last_transport_error"])
+        finally:
+            _PRIVATE_REFRESH_HEALTH.clear()
+            _PRIVATE_REFRESH_HEALTH.update(previous)
+
+    def test_transport_probe_recovery_clears_failure_counter(self) -> None:
+        client = Mock()
+        client.proxy_url = "http://proxy.invalid:18088"
+        client.probe_private_transport = AsyncMock(
+            return_value={
+                "ok": True,
+                "route": "proxy",
+                "proxy_configured": True,
+                "status_code": 200,
+            }
+        )
+
+        previous = dict(_PRIVATE_REFRESH_HEALTH)
+        try:
+            _PRIVATE_REFRESH_HEALTH["consecutive_transport_failures"] = 4
+            _PRIVATE_REFRESH_HEALTH["last_transport_error"] = "old failure"
+            with patch(
+                "app.services.background_private_refresh.PlanetsNuClient",
+                return_value=client,
+            ):
+                ok, _ = asyncio.run(probe_background_private_transport())
+
+            self.assertTrue(ok)
+            health = private_refresh_health_snapshot()
+            self.assertEqual(health["transport_status"], "ok")
+            self.assertEqual(health["consecutive_transport_failures"], 0)
+            self.assertIsNone(health["last_transport_error"])
+        finally:
+            _PRIVATE_REFRESH_HEALTH.clear()
+            _PRIVATE_REFRESH_HEALTH.update(previous)
 
     def test_remote_game_candidate_accepts_running_and_joining_only(self) -> None:
         self.assertTrue(
