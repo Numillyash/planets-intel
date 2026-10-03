@@ -3,7 +3,6 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
-import httpx
 from sqlalchemy import select
 
 from app.core.credentials import decrypt_credential
@@ -13,7 +12,11 @@ from app.models.game import Game
 from app.models.game_player_slot import GamePlayerSlot
 from app.models.planets_account import PlanetsAccount
 from app.planetsnu.activity import load_ingame_activity, load_private_activity
-from app.planetsnu.client import PlanetsNuClient, PlanetsNuError
+from app.planetsnu.client import (
+    PlanetsNuClient,
+    PlanetsNuError,
+    PlanetsNuTransportError,
+)
 from app.services.game_activity import persist_game_activity_observations
 from app.services.game_rule_catalog import persist_game_rule_catalog
 from app.services.private_auxiliary import persist_private_auxiliary_observations
@@ -252,7 +255,7 @@ async def sync_private_game(
     try:
         client = PlanetsNuClient()
         payload = None
-        last_transport_error: httpx.TransportError | None = None
+        last_transport_error: PlanetsNuTransportError | None = None
 
         for attempt in range(1, 4):
             try:
@@ -262,7 +265,7 @@ async def sync_private_game(
                     turn=turn,
                 )
                 break
-            except httpx.TransportError as exc:
+            except PlanetsNuTransportError as exc:
                 last_transport_error = exc
                 if attempt == 3:
                     break

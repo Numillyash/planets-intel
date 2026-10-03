@@ -239,6 +239,32 @@ it does not materialize alliances, affinity scores or behavioral inference.
 Detailed handoff:
 `docs/handoff/2026-09-21-commander-intelligence-foundation.md`.
 
+## Private-refresh transport resilience — 2026-10-03
+
+A recurring operational failure mode is the Windows/WSL/ZeroTier bridge becoming
+unreachable while the backend and Tinyproxy process remain otherwise healthy.
+The private collector now treats that transport as an explicit dependency:
+
+- the scheduler probes the intended private transport before game/account fan-out;
+- a failed probe short-circuits the whole private-refresh iteration instead of
+  creating a timeout storm across games and observers;
+- degraded transport is retried every 60 seconds, while healthy collection keeps
+  the normal five-minute cadence;
+- recovery is automatic on the first successful probe;
+- `/api/health/private-refresh` exposes non-secret in-memory scheduler/transport
+  state for diagnostics;
+- Planets.nu read transport failures have a dedicated
+  `PlanetsNuTransportError`, so private-sync retry logic can distinguish actual
+  transport loss from API/data errors;
+- the production diagnostic accepts an exact game id and reports scheduler health;
+- `scripts/maintenance/install-windows-proxy-watchdog.ps1` can install a
+  self-healing Windows Scheduled Task that checks the WSL Tinyproxy, ZeroTier
+  listener and end-to-end proxy path every two minutes and repairs the bridge
+  only when checks fail.
+
+The Windows watchdog is an operator-installed host integration. It must not be
+assumed present merely because its script exists in Git.
+
 ## Immediate product priorities
 - Operator map layer controls are implemented on the existing Pixi stack.
 - The next bounded slice is observer-scoped spatial messages from existing private message observations; raw message text remains selected-observer-only and is not widened by dashboard intel sharing.

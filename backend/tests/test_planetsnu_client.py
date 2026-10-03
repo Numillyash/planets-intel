@@ -7,6 +7,7 @@ from app.planetsnu.client import (
     PlanetsNuAmbiguousWriteError,
     PlanetsNuClient,
     PlanetsNuError,
+    PlanetsNuTransportError,
     _encode_nonpublic_text,
 )
 
@@ -49,6 +50,43 @@ class _FallbackAsyncClient:
                 request=httpx.Request(method, url),
             )
         return _FakeResponse({"success": True, "rst": {}})
+
+
+class _AllTransportFailureAsyncClient:
+    attempts = []
+
+    def __init__(self, *, proxy=None, **kwargs):
+        self.proxy = proxy
+        self.__class__.attempts.append(proxy)
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+    async def request(self, method, url, **kwargs):
+        raise httpx.ConnectError(
+            "unreachable",
+            request=httpx.Request(method, url),
+        )
+
+
+class _ProbeAsyncClient:
+    attempts = []
+
+    def __init__(self, *, proxy=None, **kwargs):
+        self.proxy = proxy
+        self.__class__.attempts.append(proxy)
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+    async def get(self, url, **kwargs):
+        return _FakeResponse({"ignored": True})
 
 
 class _HttpErrorAsyncClient:
@@ -128,6 +166,38 @@ class PlanetsNuClientTests(unittest.IsolatedAsyncioTestCase):
             _FallbackAsyncClient.attempts,
             ["http://proxy.invalid:8080", None],
         )
+
+    async def test_read_transport_failure_has_distinct_error_type(self):
+        _AllTransportFailureAsyncClient.attempts = []
+        client = PlanetsNuClient()
+        client.proxy_url = "http://proxy.invalid:8080"
+        client.base_url = "https://api.planets.nu"
+
+        with patch(
+            "app.planetsnu.client.httpx.AsyncClient",
+            _AllTransportFailureAsyncClient,
+        ):
+            with self.assertRaises(PlanetsNuTransportError):
+                await client.get("games/list", params={"username": "Example"})
+
+        self.assertEqual(
+            _AllTransportFailureAsyncClient.attempts,
+            ["http://proxy.invalid:8080", None],
+        )
+
+    async def test_private_transport_probe_uses_proxy_without_json_parsing(self):
+        _ProbeAsyncClient.attempts = []
+        client = PlanetsNuClient()
+        client.proxy_url = "http://proxy.invalid:8080"
+        client.base_url = "https://api.planets.nu"
+
+        with patch("app.planetsnu.client.httpx.AsyncClient", _ProbeAsyncClient):
+            result = await client.probe_private_transport(timeout_seconds=3.0)
+
+        self.assertEqual(_ProbeAsyncClient.attempts, ["http://proxy.invalid:8080"])
+        self.assertEqual(result["route"], "proxy")
+        self.assertEqual(result["status_code"], 200)
+
 
     async def test_http_error_does_not_trigger_direct_retry(self):
         _HttpErrorAsyncClient.attempts = []
