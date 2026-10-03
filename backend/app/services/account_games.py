@@ -134,6 +134,22 @@ def _cached_membership_condition(account: PlanetsAccount):
     return or_(*predicates)
 
 
+def _merge_authenticated_game(
+    authenticated: dict[str, Any],
+    existing: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Keep authenticated game metadata/identity with cached evidence fallback."""
+
+    merged = dict(authenticated)
+    if existing is None:
+        return merged
+
+    for key in ("observer_slot_id", "observer_status", "membership_source"):
+        if merged.get(key) is None and existing.get(key) is not None:
+            merged[key] = existing[key]
+    return merged
+
+
 def _merge_remote_observer_evidence(
     remote: dict[str, Any],
     cached: dict[str, Any] | None,
@@ -312,7 +328,7 @@ async def get_account_games(
     for envelope in authenticated_games:
         game = _game_record_from_authenticated_envelope(envelope)
         if game is not None:
-            by_id[game["id"]] = _merge_remote_observer_evidence(
+            by_id[game["id"]] = _merge_authenticated_game(
                 game,
                 by_id.get(game["id"]),
             )
