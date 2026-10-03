@@ -3,6 +3,7 @@ from typing import Any
 from sqlalchemy import select
 
 from app.db.session import SessionLocal
+from app.models.game import Game
 from app.models.planets_account import PlanetsAccount
 from app.services.combined_intel import (
     _Snapshot,
@@ -13,6 +14,36 @@ from app.services.combined_intel import (
     _merge_stellar_cartography,
 )
 from app.services.intel_access import accessible_intel_accounts
+
+
+def _select_live_snapshots(
+    snapshots: list[_Snapshot],
+    *,
+    linked_account_id: int,
+    current_turn: int,
+) -> tuple[list[_Snapshot], _Snapshot | None]:
+    """Separate live aggregation sources from primary observer identity.
+
+    A linked observer can remain useful historical evidence after death/removal,
+    but an older private batch must not be injected into the current-turn
+    combined map. Only batches captured for the current canonical turn may
+    contribute live entities.
+
+    The primary observer's latest snapshot is retained separately for identity
+    metadata so a dead/archive primary observer can still open a current
+    combined view supplied by another authorized current observer.
+    """
+
+    primary_snapshot: _Snapshot | None = None
+    live: list[_Snapshot] = []
+
+    for snapshot in snapshots:
+        if snapshot.account.id == linked_account_id:
+            primary_snapshot = snapshot
+        if snapshot.batch.turn == current_turn:
+            live.append(snapshot)
+
+    return live, primary_snapshot
 
 
 def get_accessible_combined_private_intel(
@@ -50,9 +81,13 @@ def get_accessible_combined_private_intel(
                 .order_by(PlanetsAccount.id)
             ).scalars().all()
         )
+        current_turn = session.execute(
+            select(Game.current_turn).where(Game.id == game_id)
+        ).scalar_one_or_none()
+        if current_turn is None:
+            return None
 
-        snapshots: list[_Snapshot] = []
-        primary_snapshot: _Snapshot | None = None
+        latest_snapshots: list[_Snapshot] = []
 
         for account in accounts:
             snapshot = _load_latest_snapshot(
@@ -60,11 +95,14 @@ def get_accessible_combined_private_intel(
                 account=account,
                 game_id=game_id,
             )
-            if snapshot is None:
-                continue
-            snapshots.append(snapshot)
-            if account.id == linked_account_id:
-                primary_snapshot = snapshot
+            if snapshot is not None:
+                latest_snapshots.append(snapshot)
+
+        snapshots, primary_snapshot = _select_live_snapshots(
+            latest_snapshots,
+            linked_account_id=linked_account_id,
+            current_turn=int(current_turn),
+        )
 
         if primary_snapshot is None or not snapshots:
             return None
@@ -89,7 +127,7 @@ def get_accessible_combined_private_intel(
             "mode": "combined",
             "aggregation_policy": "freshest_field_union",
             "game_id": game_id,
-            "turn": max(snapshot.batch.turn for snapshot in snapshots),
+            "turn": int(current_turn),
             "primary_observer": {
                 "linked_account_id": primary.id,
                 "planets_account_id": primary.planets_account_id,
