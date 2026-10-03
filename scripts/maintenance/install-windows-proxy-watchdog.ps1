@@ -10,6 +10,7 @@ $ErrorActionPreference = "Stop"
 $TaskName = "Planets Intel Proxy Bridge Watchdog"
 $InstallRoot = Join-Path $env:ProgramData "PlanetsIntel"
 $InstalledScript = Join-Path $InstallRoot "proxy-bridge-watchdog.ps1"
+$InstalledLauncher = Join-Path $InstallRoot "proxy-bridge-watchdog.vbs"
 $LogRoot = Join-Path $InstallRoot "logs"
 $LogPath = Join-Path $LogRoot "proxy-bridge-watchdog.log"
 
@@ -164,30 +165,81 @@ function Run-WatchdogOnce {
 }
 
 function Install-Watchdog {
-    if (-not (Is-Admin)) { Fail "install_requires_admin" "Run installer from elevated PowerShell." 10 }
+    if (-not (Is-Admin)) {
+        if (-not $PSCommandPath) {
+            Fail "installer_path_unknown" "Cannot determine script source path." 11
+        }
+
+        $elevatedArgs = @(
+            "-NoLogo",
+            "-NoProfile",
+            "-ExecutionPolicy", "Bypass",
+            "-File", ('"{0}"' -f $PSCommandPath),
+            "-Port", [string]$Port,
+            "-PreferredNetworkPrefix", ('"{0}"' -f $PreferredNetworkPrefix),
+            "-ApiTestUrl", ('"{0}"' -f $ApiTestUrl)
+        )
+
+        Write-Host "Requesting administrator privileges for watchdog setup..."
+        Start-Process powershell.exe -Verb RunAs -ArgumentList ($elevatedArgs -join " ")
+        exit 0
+    }
+
     Ensure-Dirs
-    if (-not $PSCommandPath) { Fail "installer_path_unknown" "Cannot determine script source path." 11 }
+    if (-not $PSCommandPath) {
+        Fail "installer_path_unknown" "Cannot determine script source path." 11
+    }
+
     Copy-Item -LiteralPath $PSCommandPath -Destination $InstalledScript -Force
+
+    $launcherCommand = (
+        'powershell.exe -NoLogo -NonInteractive -NoProfile -ExecutionPolicy Bypass ' +
+        '-File ""{0}"" -RunOnce -Port {1} -PreferredNetworkPrefix ""{2}"" -ApiTestUrl ""{3}""'
+    ) -f $InstalledScript, $Port, $PreferredNetworkPrefix, $ApiTestUrl
+
+    $launcherContent = @(
+        'Set shell = CreateObject("WScript.Shell")'
+        ('rc = shell.Run("{0}", 0, True)' -f $launcherCommand.Replace('"', '""'))
+        'WScript.Quit rc'
+    )
+    Set-Content -Path $InstalledLauncher -Value $launcherContent -Encoding ASCII
+
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent().Name
-    $actionArgs = ('-NoLogo -NonInteractive -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File "{0}" -RunOnce -Port {1} -PreferredNetworkPrefix "{2}" -ApiTestUrl "{3}"' -f $InstalledScript, $Port, $PreferredNetworkPrefix, $ApiTestUrl)
-    $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $actionArgs
+    $action = New-ScheduledTaskAction -Execute "$env:WINDIR\System32\wscript.exe" -Argument ('//B //NoLogo "{0}"' -f $InstalledLauncher)
     $logon = New-ScheduledTaskTrigger -AtLogOn -User $identity
     $repeat = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 2) -RepetitionDuration (New-TimeSpan -Days 3650)
     $principal = New-ScheduledTaskPrincipal -UserId $identity -LogonType Interactive -RunLevel Highest
     $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -MultipleInstances IgnoreNew
+
     Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger @($logon, $repeat) -Principal $principal -Settings $settings -Force | Out-Null
-    Log ("watchdog_installed task={0} user={1}" -f $TaskName, $identity)
+
+    $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction Stop
+    $taskAction = $task.Actions | Select-Object -First 1
+    Log ("watchdog_installed task={0} user={1} execute={2} arguments={3}" -f $TaskName, $identity, $taskAction.Execute, $taskAction.Arguments)
+
     & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $InstalledScript -RunOnce -Port $Port -PreferredNetworkPrefix $PreferredNetworkPrefix -ApiTestUrl $ApiTestUrl
     $initialRc = $LASTEXITCODE
-    if ($initialRc -ne 0) { Fail "watchdog_installed_initial_repair_failed" ("Task installed, but initial health/repair run failed rc={0}. See {1}" -f $initialRc, $LogPath) 12 }
+    if ($initialRc -ne 0) {
+        Fail "watchdog_installed_initial_repair_failed" ("Task installed, but initial health/repair run failed rc={0}. See {1}" -f $initialRc, $LogPath) 12
+    }
+
     Log ("DIAGNOSIS=windows_proxy_watchdog_installed log={0}" -f $LogPath)
     exit 0
 }
 
 function Uninstall-Watchdog {
-    if (-not (Is-Admin)) { Fail "uninstall_requires_admin" "Run uninstall from elevated PowerShell." 30 }
+    if (-not (Is-Admin)) {
+        if (-not $PSCommandPath) {
+            Fail "installer_path_unknown" "Cannot determine script source path." 31
+        }
+        $elevatedArgs = @("-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ('"{0}"' -f $PSCommandPath), "-Uninstall")
+        Start-Process powershell.exe -Verb RunAs -ArgumentList ($elevatedArgs -join " ")
+        exit 0
+    }
+
     Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
     Remove-Item $InstalledScript -Force -ErrorAction SilentlyContinue
+    Remove-Item $InstalledLauncher -Force -ErrorAction SilentlyContinue
     Log "DIAGNOSIS=windows_proxy_watchdog_uninstalled"
     exit 0
 }
