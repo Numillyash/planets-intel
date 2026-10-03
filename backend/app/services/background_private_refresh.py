@@ -8,6 +8,7 @@ from typing import Any
 
 from sqlalchemy import and_, func, or_, select
 
+from app.core.credentials import decrypt_credential
 from app.db.session import SessionLocal
 from app.models.game import Game
 from app.models.game_player_slot import GamePlayerSlot
@@ -163,30 +164,42 @@ def running_private_refresh_targets() -> list[tuple[int, int]]:
     return sorted({(int(user_id), int(game_id)) for user_id, game_id in rows})
 
 
-def _active_live_discovery_accounts() -> list[tuple[int, str]]:
-    """Return active local linked-account usernames for lightweight game discovery."""
+def _active_live_discovery_accounts() -> list[tuple[int, int, str, str]]:
+    """Return active linked accounts for public + authenticated discovery."""
 
     with SessionLocal() as session:
         rows = session.execute(
             select(
                 PlanetsAccount.user_id,
+                PlanetsAccount.id,
                 PlanetsAccount.planets_username,
+                PlanetsAccount.api_key_encrypted,
             ).where(PlanetsAccount.is_active.is_(True))
         ).all()
 
-    unique: dict[tuple[int, str], tuple[int, str]] = {}
-    for user_id, raw_username in rows:
+    unique: dict[
+        tuple[int, str],
+        tuple[int, int, str, str],
+    ] = {}
+    for user_id, account_id, raw_username, encrypted_api_key in rows:
         username = str(raw_username or "").strip()
         if not username:
             continue
         key = (int(user_id), username.casefold())
-        unique.setdefault(key, (int(user_id), username))
+        unique.setdefault(
+            key,
+            (
+                int(user_id),
+                int(account_id),
+                username,
+                str(encrypted_api_key),
+            ),
+        )
 
     return sorted(
         unique.values(),
-        key=lambda item: (item[0], item[1].casefold()),
+        key=lambda item: (item[0], item[2].casefold()),
     )
-
 
 def _remote_game_is_refresh_candidate(raw: dict[str, Any]) -> bool:
     """Accept only valid Running/Joining games returned by ``games/list``."""
@@ -219,16 +232,13 @@ def _remote_game_is_refresh_candidate(raw: dict[str, Any]) -> bool:
 
 
 async def discover_live_private_refresh_targets() -> dict[str, Any]:
-    """Discover active games even when they are not canonical locally yet.
+    """Discover active games from public and authenticated account sources.
 
-    The game chooser already uses the public ``games/list`` endpoint, so a new
-    game can be visible to the user before a canonical Game/GamePlayerSlot row
-    exists. Background collection must use the same discovery source or the new
-    game would never become a scheduler target without a manual refresh/open.
-
-    Discovery itself is read-only. ``refresh_accessible_private_intel`` performs
-    the existing public sync first, which seeds the canonical game/roster, and
-    then refreshes private loadturn observations through the normal path.
+    Public games/list by username remains useful for ordinary game metadata,
+    but private/custom games can be absent from that public source.
+    account/mygames is the authenticated current-player source and is therefore
+    required for complete automatic discovery of active private games.
+    Either source can fail independently without discarding the other.
     """
 
     accounts = _active_live_discovery_accounts()
@@ -237,44 +247,107 @@ async def discover_live_private_refresh_targets() -> dict[str, Any]:
     failures = 0
     remote_games_seen = 0
     candidate_games_seen = 0
+    public_games_seen = 0
+    authenticated_games_seen = 0
 
-    async def discover_one(user_id: int, username: str) -> None:
-        nonlocal failures, remote_games_seen, candidate_games_seen
+    async def discover_one(
+        user_id: int,
+        linked_account_id: int,
+        username: str,
+        encrypted_api_key: str,
+    ) -> None:
+        nonlocal failures
+        nonlocal remote_games_seen
+        nonlocal candidate_games_seen
+        nonlocal public_games_seen
+        nonlocal authenticated_games_seen
+
         async with semaphore:
+            client = PlanetsNuClient()
+            raw_games: list[dict[str, Any]] = []
+
             try:
-                games = await PlanetsNuClient().games_for_username(username)
+                public_games = await client.games_for_username(username)
             except asyncio.CancelledError:
                 raise
-            except Exception as exc:  # one account must not stop the scheduler
+            except Exception as exc:
                 failures += 1
                 LOGGER.warning(
-                    "background game discovery failed user=%s username=%r: %s",
+                    "background public game discovery failed "
+                    "user=%s account=%s username=%r: %s",
                     user_id,
+                    linked_account_id,
                     username,
                     exc,
                     exc_info=True,
                 )
-                return
+            else:
+                public_games_seen += len(public_games)
+                raw_games.extend(public_games)
 
-            remote_games_seen += len(games)
-            for raw in games:
+            api_key = decrypt_credential(encrypted_api_key)
+            try:
+                authenticated = await client.my_games(api_key)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                failures += 1
+                LOGGER.warning(
+                    "background authenticated game discovery failed "
+                    "user=%s account=%s username=%r: %s",
+                    user_id,
+                    linked_account_id,
+                    username,
+                    exc,
+                    exc_info=True,
+                )
+            else:
+                for envelope in authenticated:
+                    raw_game = envelope.get("game")
+                    if isinstance(raw_game, dict):
+                        authenticated_games_seen += 1
+                        raw_games.append(raw_game)
+            finally:
+                del api_key
+
+            remote_games_seen += len(raw_games)
+            seen_game_ids: set[int] = set()
+            for raw in raw_games:
                 if not _remote_game_is_refresh_candidate(raw):
                     continue
+                game_id = int(raw["id"])
+                if game_id in seen_game_ids:
+                    continue
+                seen_game_ids.add(game_id)
                 candidate_games_seen += 1
-                targets.add((user_id, int(raw["id"])))
+                targets.add((user_id, game_id))
 
     await asyncio.gather(
-        *(discover_one(user_id, username) for user_id, username in accounts)
+        *(
+            discover_one(
+                user_id,
+                linked_account_id,
+                username,
+                encrypted_api_key,
+            )
+            for (
+                user_id,
+                linked_account_id,
+                username,
+                encrypted_api_key,
+            ) in accounts
+        )
     )
 
     return {
         "accounts": len(accounts),
         "failures": failures,
         "remote_games_seen": remote_games_seen,
+        "public_games_seen": public_games_seen,
+        "authenticated_games_seen": authenticated_games_seen,
         "candidate_games_seen": candidate_games_seen,
         "targets": sorted(targets),
     }
-
 
 def deduplicate_private_refresh_targets(
     targets: list[tuple[int, int]],
@@ -359,6 +432,8 @@ async def refresh_all_running_private_intel_once() -> dict[str, Any]:
         "discovery_accounts": int(discovery["accounts"]),
         "discovery_failures": int(discovery["failures"]),
         "remote_games_seen": int(discovery["remote_games_seen"]),
+        "public_games_seen": int(discovery["public_games_seen"]),
+        "authenticated_games_seen": int(discovery["authenticated_games_seen"]),
         "candidate_games_seen": int(discovery["candidate_games_seen"]),
         "raw_targets": len(raw_targets),
         "targets": len(targets),
@@ -456,11 +531,14 @@ async def background_private_refresh_loop() -> None:
                     LOGGER.info(
                         "background private refresh iteration complete "
                         "canonical_targets=%s discovered_targets=%s "
-                        "discovery_failures=%s raw_targets=%s targets=%s "
-                        "deduplicated=%s partial_targets=%s failed_targets=%s",
+                        "discovery_failures=%s public_games=%s authenticated_games=%s "
+                        "raw_targets=%s targets=%s deduplicated=%s "
+                        "partial_targets=%s failed_targets=%s",
                         summary.get("canonical_targets", 0),
                         summary.get("discovered_targets", 0),
                         discovery_failures,
+                        summary.get("public_games_seen", 0),
+                        summary.get("authenticated_games_seen", 0),
                         summary.get("raw_targets", 0),
                         summary.get("targets", 0),
                         summary.get("deduplicated", 0),
