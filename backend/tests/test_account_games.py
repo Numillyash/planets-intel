@@ -5,8 +5,10 @@ from sqlalchemy.dialects import postgresql
 
 from app.services.account_games import (
     _cached_membership_condition,
+    _game_record_from_authenticated_envelope,
     _game_record_from_cache,
     _game_record_from_remote,
+    _merge_authenticated_game,
     _merge_remote_observer_evidence,
 )
 
@@ -54,6 +56,74 @@ class AccountGameRecordTests(unittest.TestCase):
         self.assertIsNone(missing["turn_status"])
         self.assertIsNone(invalid["turn_status"])
 
+    def test_authenticated_private_game_carries_current_observer_evidence(self):
+        record = _game_record_from_authenticated_envelope(
+            {
+                "game": {
+                    "id": 686764,
+                    "name": "Sector 686764",
+                    "status": 2,
+                    "statusname": "Running",
+                    "turn": 9,
+                    "slots": 4,
+                    "isprivate": True,
+                    "iscustom": True,
+                },
+                "player": {
+                    "id": 2,
+                    "status": 1,
+                },
+            }
+        )
+
+        self.assertIsNotNone(record)
+        assert record is not None
+        self.assertEqual(record["id"], 686764)
+        self.assertEqual(record["turn"], 9)
+        self.assertTrue(record["is_private"])
+        self.assertTrue(record["is_custom"])
+        self.assertEqual(record["observer_slot_id"], 2)
+        self.assertEqual(record["observer_status"], 1)
+        self.assertEqual(record["membership_source"], "authenticated-mygames")
+        self.assertEqual(record["data_source"], "planets.nu-authenticated")
+
+    def test_authenticated_observer_evidence_wins_over_stale_cached_status(self):
+        authenticated = _game_record_from_authenticated_envelope(
+            {
+                "game": {
+                    "id": 686764,
+                    "name": "Sector 686764",
+                    "status": 2,
+                    "statusname": "Running",
+                    "turn": 9,
+                    "slots": 4,
+                },
+                "player": {
+                    "id": 2,
+                    "status": 1,
+                },
+            }
+        )
+        self.assertIsNotNone(authenticated)
+        assert authenticated is not None
+
+        cached = {
+            **authenticated,
+            "turn": 8,
+            "data_source": "canonical-cache",
+            "observer_slot_id": 2,
+            "observer_status": 0,
+            "membership_source": "roster",
+        }
+
+        merged = _merge_authenticated_game(authenticated, cached)
+
+        self.assertEqual(merged["turn"], 9)
+        self.assertEqual(merged["observer_status"], 1)
+        self.assertEqual(
+            merged["membership_source"],
+            "authenticated-mygames",
+        )
     def test_sentinel_account_id_cannot_match_cached_sentinel_slots(self):
         account = SimpleNamespace(
             planets_account_id=0,
