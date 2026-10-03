@@ -142,7 +142,7 @@ function Install-Watchdog {
     if (-not $PSCommandPath) { Fail "installer_path_unknown" "Cannot determine script source path." 11 }
     Copy-Item -LiteralPath $PSCommandPath -Destination $InstalledScript -Force
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent().Name
-    $actionArgs = ('-NoProfile -ExecutionPolicy Bypass -File "{0}" -RunOnce -Port {1} -PreferredNetworkPrefix "{2}" -ApiTestUrl "{3}"' -f $InstalledScript, $Port, $PreferredNetworkPrefix, $ApiTestUrl)
+    $actionArgs = ('-NoLogo -NonInteractive -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -File "{0}" -RunOnce -Port {1} -PreferredNetworkPrefix "{2}" -ApiTestUrl "{3}"' -f $InstalledScript, $Port, $PreferredNetworkPrefix, $ApiTestUrl)
     $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $actionArgs
     $logon = New-ScheduledTaskTrigger -AtLogOn -User $identity
     $repeat = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 2) -RepetitionDuration (New-TimeSpan -Days 3650)
