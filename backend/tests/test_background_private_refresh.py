@@ -17,6 +17,8 @@ EMPTY_DISCOVERY = {
     "accounts": 0,
     "failures": 0,
     "remote_games_seen": 0,
+    "public_games_seen": 0,
+    "authenticated_games_seen": 0,
     "candidate_games_seen": 0,
     "targets": [],
 }
@@ -311,11 +313,16 @@ class BackgroundPrivateRefreshTests(unittest.TestCase):
                 {"id": 999001, "status": 3, "statusname": "Finished"},
             ]
         )
+        client.my_games = AsyncMock(return_value=[])
 
         with (
             patch(
                 "app.services.background_private_refresh._active_live_discovery_accounts",
-                return_value=[(7, "georgul")],
+                return_value=[(7, 11, "georgul", "encrypted")],
+            ),
+            patch(
+                "app.services.background_private_refresh.decrypt_credential",
+                return_value="secret",
             ),
             patch(
                 "app.services.background_private_refresh.PlanetsNuClient",
@@ -327,26 +334,84 @@ class BackgroundPrivateRefreshTests(unittest.TestCase):
         self.assertEqual(result["accounts"], 1)
         self.assertEqual(result["failures"], 0)
         self.assertEqual(result["remote_games_seen"], 2)
+        self.assertEqual(result["public_games_seen"], 2)
+        self.assertEqual(result["authenticated_games_seen"], 0)
         self.assertEqual(result["candidate_games_seen"], 1)
         self.assertEqual(result["targets"], [(7, 684653)])
         client.games_for_username.assert_awaited_once_with("georgul")
+        client.my_games.assert_awaited_once_with("secret")
 
-    def test_one_failed_live_discovery_account_does_not_hide_other_accounts(self) -> None:
-        failed_client = Mock()
-        failed_client.games_for_username = AsyncMock(
-            side_effect=RuntimeError("games/list failed")
-        )
-        working_client = Mock()
-        working_client.games_for_username = AsyncMock(
+    def test_authenticated_discovery_surfaces_private_custom_game_missing_from_public_list(self) -> None:
+        client = Mock()
+        client.games_for_username = AsyncMock(return_value=[])
+        client.my_games = AsyncMock(
             return_value=[
-                {"id": 684653, "status": 2, "statusname": "Running"},
+                {
+                    "game": {
+                        "id": 686764,
+                        "status": 2,
+                        "statusname": "Running",
+                        "isprivate": True,
+                        "iscustom": True,
+                    },
+                    "player": {
+                        "id": 2,
+                        "status": 1,
+                    },
+                }
             ]
         )
 
         with (
             patch(
                 "app.services.background_private_refresh._active_live_discovery_accounts",
-                return_value=[(7, "georgul"), (8, "helping die")],
+                return_value=[(1, 2, "helping die", "encrypted")],
+            ),
+            patch(
+                "app.services.background_private_refresh.decrypt_credential",
+                return_value="secret",
+            ),
+            patch(
+                "app.services.background_private_refresh.PlanetsNuClient",
+                return_value=client,
+            ),
+        ):
+            result = asyncio.run(discover_live_private_refresh_targets())
+
+        self.assertEqual(result["failures"], 0)
+        self.assertEqual(result["public_games_seen"], 0)
+        self.assertEqual(result["authenticated_games_seen"], 1)
+        self.assertEqual(result["candidate_games_seen"], 1)
+        self.assertEqual(result["targets"], [(1, 686764)])
+
+    def test_one_failed_live_discovery_account_does_not_hide_other_accounts(self) -> None:
+        failed_client = Mock()
+        failed_client.games_for_username = AsyncMock(
+            side_effect=RuntimeError("games/list failed")
+        )
+        failed_client.my_games = AsyncMock(
+            side_effect=RuntimeError("mygames failed")
+        )
+
+        working_client = Mock()
+        working_client.games_for_username = AsyncMock(
+            return_value=[
+                {"id": 684653, "status": 2, "statusname": "Running"},
+            ]
+        )
+        working_client.my_games = AsyncMock(return_value=[])
+
+        with (
+            patch(
+                "app.services.background_private_refresh._active_live_discovery_accounts",
+                return_value=[
+                    (7, 11, "georgul", "enc-a"),
+                    (8, 12, "helping die", "enc-b"),
+                ],
+            ),
+            patch(
+                "app.services.background_private_refresh.decrypt_credential",
+                side_effect=["key-a", "key-b"],
             ),
             patch(
                 "app.services.background_private_refresh.PlanetsNuClient",
@@ -356,7 +421,7 @@ class BackgroundPrivateRefreshTests(unittest.TestCase):
             result = asyncio.run(discover_live_private_refresh_targets())
 
         self.assertEqual(result["accounts"], 2)
-        self.assertEqual(result["failures"], 1)
+        self.assertEqual(result["failures"], 2)
         self.assertEqual(result["targets"], [(8, 684653)])
 
 
