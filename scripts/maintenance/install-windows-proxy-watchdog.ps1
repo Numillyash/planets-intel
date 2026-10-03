@@ -76,15 +76,6 @@ function Restart-WslTinyproxy {
     return (Invoke-WslProxyTest)
 }
 
-function Get-PortProxyRule([string]$ListenAddress) {
-    $lines = netsh interface portproxy dump
-    return $lines | Where-Object {
-        $_ -match "add v4tov4" -and
-        $_ -match ("listenport={0}\\b" -f $Port) -and
-        $_ -match ("listenaddress={0}(\\s|$)" -f [regex]::Escape($ListenAddress))
-    } | Select-Object -First 1
-}
-
 function Test-BridgeTcp([string]$ListenAddress) {
     $listener = Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue | Where-Object {
         $_.LocalAddress -eq $ListenAddress -or $_.LocalAddress -eq "0.0.0.0"
@@ -134,12 +125,11 @@ function Run-WatchdogOnce {
         if (-not (Restart-WslTinyproxy)) { Fail "wsl_proxy_repair_failed" "Tinyproxy is still unusable after restart." 4 }
         Log "tinyproxy_repaired=true"
     }
-    $rule = Get-PortProxyRule $listenAddress
     $tcpOk = Test-BridgeTcp $listenAddress
     $httpOk = $false
     if ($tcpOk) { $httpOk = Test-BridgeHttp $listenAddress }
-    if ($rule -and $tcpOk -and $httpOk) { Log "DIAGNOSIS=windows_proxy_bridge_healthy"; exit 0 }
-    Log ("bridge unhealthy rule={0} tcp={1} http={2}; attempting repair" -f [bool]$rule, $tcpOk, $httpOk)
+    if ($tcpOk -and $httpOk) { Log "DIAGNOSIS=windows_proxy_bridge_healthy"; exit 0 }
+    Log ("bridge unhealthy tcp={0} http={1}; attempting repair" -f $tcpOk, $httpOk)
     if (-not (Repair-Bridge $listenAddress)) { Fail "windows_bridge_repair_failed" "Portproxy listener did not recover." 5 }
     if (-not (Test-BridgeHttp $listenAddress)) { Fail "windows_bridge_http_still_failed" "TCP bridge recovered but HTTP proxy traversal still fails." 6 }
     Log "DIAGNOSIS=windows_proxy_bridge_repaired"
