@@ -34,7 +34,7 @@ type PlayerTurnState =
     | "computer"
     | "empty";
 
-type GameListMode = "active" | "archive";
+type GameListMode = "active" | "home" | "private" | "archive";
 
 interface GameObserverEntry {
     account: PlanetsAccountResponse;
@@ -192,6 +192,38 @@ function isArchivedGame(
     details: GameDetailsResponse | undefined,
 ): boolean {
     return isFinished(entry.game) || allLocalObserversInactive(entry, details);
+}
+
+function isHomeSectorGame(game: AccountGameSummary): boolean {
+    const normalizedName = game.name.trim().toLowerCase();
+    const normalizedDescription = game.short_description.trim().toLowerCase();
+    return normalizedName === "home sector" || normalizedDescription === "home sector";
+}
+
+function gameListDescription(mode: GameListMode): string {
+    switch (mode) {
+        case "home":
+            return "Current Home Sector games are separated from the normal active list.";
+        case "private":
+            return "Current private games, excluding Home Sector games.";
+        case "archive":
+            return "Finished games and running games where every linked local observer is inactive / dead.";
+        default:
+            return "Current standard/public games, excluding Home Sector and private games.";
+    }
+}
+
+function gameListEmptyMessage(mode: GameListMode): string {
+    switch (mode) {
+        case "home":
+            return "No current Home Sector games were found for the linked observers.";
+        case "private":
+            return "No current private games were found for the linked observers.";
+        case "archive":
+            return "No finished or locally eliminated games are known yet.";
+        default:
+            return "No regular active games were found for the linked observers.";
+    }
 }
 
 function loadInfoTurnState(player: PlayerInfo): PlayerTurnState {
@@ -736,20 +768,50 @@ export function IntelboardGamePicker({ user, onLogout }: IntelboardGamePickerPro
         [accounts, gamesByAccountId],
     );
 
-    const { activeGames, archivedGames } = useMemo(() => {
+    const {
+        activeGames,
+        homeGames,
+        privateGames,
+        archivedGames,
+    } = useMemo(() => {
         const active: UnifiedGameEntry[] = [];
+        const home: UnifiedGameEntry[] = [];
+        const privateCurrent: UnifiedGameEntry[] = [];
         const archive: UnifiedGameEntry[] = [];
+
         for (const entry of games) {
             if (isArchivedGame(entry, detailsByGameId.get(entry.game.id))) {
                 archive.push(entry);
-            } else {
-                active.push(entry);
+                continue;
             }
+            if (isHomeSectorGame(entry.game)) {
+                home.push(entry);
+                continue;
+            }
+            if (entry.game.is_private) {
+                privateCurrent.push(entry);
+                continue;
+            }
+            active.push(entry);
         }
-        return { activeGames: active, archivedGames: archive };
+
+        return {
+            activeGames: active,
+            homeGames: home,
+            privateGames: privateCurrent,
+            archivedGames: archive,
+        };
     }, [games, detailsByGameId]);
 
-    const visibleGames = gameListMode === "archive" ? archivedGames : activeGames;
+    const visibleGames = (
+        gameListMode === "home"
+            ? homeGames
+            : gameListMode === "private"
+                ? privateGames
+                : gameListMode === "archive"
+                    ? archivedGames
+                    : activeGames
+    );
 
     const gameListWarnings = useMemo(() => accounts.flatMap((account) => {
         const accountError = errorsByAccountId[account.id] ?? null;
@@ -841,6 +903,24 @@ export function IntelboardGamePicker({ user, onLogout }: IntelboardGamePickerPro
                                     Active <span>{activeGames.length}</span>
                                 </button>
                                 <button
+                                    aria-selected={gameListMode === "home"}
+                                    className={`intelboard-game-tab${gameListMode === "home" ? " is-selected" : ""}`}
+                                    onClick={() => setGameListMode("home")}
+                                    role="tab"
+                                    type="button"
+                                >
+                                    Home <span>{homeGames.length}</span>
+                                </button>
+                                <button
+                                    aria-selected={gameListMode === "private"}
+                                    className={`intelboard-game-tab${gameListMode === "private" ? " is-selected" : ""}`}
+                                    onClick={() => setGameListMode("private")}
+                                    role="tab"
+                                    type="button"
+                                >
+                                    Private <span>{privateGames.length}</span>
+                                </button>
+                                <button
                                     aria-selected={gameListMode === "archive"}
                                     className={`intelboard-game-tab${gameListMode === "archive" ? " is-selected" : ""}`}
                                     onClick={() => setGameListMode("archive")}
@@ -849,18 +929,12 @@ export function IntelboardGamePicker({ user, onLogout }: IntelboardGamePickerPro
                                 >
                                     Archive <span>{archivedGames.length}</span>
                                 </button>
-                                <p>
-                                    {gameListMode === "archive"
-                                        ? "Finished games and running games where every linked local observer is inactive / dead."
-                                        : "Running and joining games with at least one local observer not factually known inactive."}
-                                </p>
+                                <p>{gameListDescription(gameListMode)}</p>
                             </nav>
 
                             {visibleGames.length === 0 ? (
                                 <div className="intelboard-game-menu-state">
-                                    {gameListMode === "archive"
-                                        ? "No finished or locally eliminated games are known yet."
-                                        : "No active games were found for the linked observers."}
+                                    {gameListEmptyMessage(gameListMode)}
                                 </div>
                             ) : (
                                 <section className="intelboard-game-grid">
