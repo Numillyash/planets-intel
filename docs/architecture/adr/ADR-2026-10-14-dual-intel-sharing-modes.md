@@ -75,3 +75,19 @@ remain native; explicit unrestricted confirmation is required at acceptance;
 confirmed consent alone does not grant private data; no user-to-user/global
 sharing leaks; per-game and revocation boundaries remain enforced. Real data
 must not be put in public tests, CI, logs or GitHub attachments.
+
+## Owner-only projected-field preview
+
+A grantor-only `GET /api/intel/games/{game_id}/grants/{grant_id}/preview`
+with `linked_account_id` returns current-turn, selected-source projections
+for review. This is a read-only owner preview: the grantee is NOT allowed
+to call it, and it does not authorize any live cross-player reads.
+
+The preliminary projection is fail-closed. Unknown keys, credentials,
+foreign objects' private attributes and undeclared scope families are
+omitted. Current object fields, selected message content, basic VCR
+metadata and third-party contact positions have independently classified
+paths. Full historical archives, full VCR replay payloads, detailed
+wormhole scans and game-wide shared map overlays require additional
+provenance/scope work before enabling live disclosure. Do not interpret
+checkbox consent as proof those domains are already available.

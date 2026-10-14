@@ -1,5 +1,5 @@
 """Game-specific consent ledger; never a raw private-intel API."""
-from fastapi import APIRouter, Depends, HTTPException, Path, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from app.api.dependencies.auth import require_user
 from app.models.user import AppUser
 from app.schemas.game_intel_grants import (
@@ -10,6 +10,8 @@ from app.services.game_intel_grants import (
     GrantConflict, GrantForbidden, GrantNotFound,
     list_game_grants, request_game_grant, consent_game_grant, revoke_game_grant,
 )
+
+from app.services.game_intel_preview import preview_game_grant
 
 router = APIRouter()
 
@@ -74,3 +76,20 @@ def revoke_grant(
     except (GrantNotFound, GrantForbidden, GrantConflict) as exc:
         raise _http_error(exc) from exc
     return GameGrantResponse(**record)
+
+
+@router.get("/intel/games/{game_id}/grants/{grant_id}/preview")
+def preview_grant(
+    game_id: int = Path(gt=0),
+    grant_id: int = Path(gt=0),
+    linked_account_id: int = Query(gt=0),
+    user: AppUser = Depends(require_user),
+) -> dict[str, object]:
+    """Owner-only preview. This never delegates a private read to the grantee."""
+    try:
+        return preview_game_grant(
+            user_id=user.id, game_id=game_id, grant_id=grant_id,
+            linked_account_id=linked_account_id,
+        )
+    except (GrantNotFound, GrantForbidden, GrantConflict) as exc:
+        raise _http_error(exc) from exc
