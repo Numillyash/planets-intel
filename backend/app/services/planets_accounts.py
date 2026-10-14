@@ -1,12 +1,13 @@
 from datetime import datetime, timezone
 from urllib.parse import urljoin
 
-from sqlalchemy import delete, or_, select
+from sqlalchemy import delete, or_, select, update
 
 from app.core.config import get_settings
 from app.core.credentials import encrypt_credential
 from app.db.session import SessionLocal
 from app.models.dashboard_intel_share import DashboardIntelShare
+from app.models.game_intel_grant import GameIntelGrant
 from app.models.planets_account import PlanetsAccount
 from app.planetsnu.client import PlanetsNuClient, PlanetsNuError
 
@@ -179,6 +180,20 @@ def unlink_planets_account(
                     == account.id,
                 )
             )
+        )
+
+        # P1: unlink permanently revokes open bilateral consent in every game.
+        # Keep old records for audit, never reactivate them upon re-link.
+        session.execute(
+            update(GameIntelGrant)
+            .where(
+                or_(
+                    GameIntelGrant.grantor_account_id == account.id,
+                    GameIntelGrant.grantee_account_id == account.id,
+                ),
+                GameIntelGrant.revoked_at.is_(None),
+            )
+            .values(status="revoked", revoked_at=now, updated_at=now)
         )
 
         account.api_key_encrypted = (
