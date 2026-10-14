@@ -12,13 +12,23 @@ DisclosureScope = Literal[
     "combat_vcr_evidence",
     "owned_planet_details",
     "owned_ship_details",
+    "ship_friendly_codes",
+    "planet_friendly_codes",
+    "ship_orders",
+    "ship_transfers",
+    "starbase_orders_inventory",
+    "planet_build_goals",
+    "ship_history",
+    "wormhole_scans",
+    "private_messages",
+    "financial_and_cargo",
 ]
 
 
 class GameGrantRequest(BaseModel):
     grantor_account_id: int = Field(gt=0)
     grantee_planets_username: str = Field(min_length=1, max_length=255)
-    requested_scopes: list[DisclosureScope] = Field(min_length=1, max_length=5)
+    requested_scopes: list[DisclosureScope] = Field(min_length=1, max_length=15)
     sharing_mode: SharingMode = "native"
 
 

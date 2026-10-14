@@ -136,6 +136,29 @@ class P1GameGrantTests(unittest.TestCase):
                     confirmation,
                 )
 
+    def test_extended_field_categories_are_strict_and_bounded(self):
+        all_scopes = [
+            "owned_unit_locations", "third_party_contacts", "combat_vcr_evidence",
+            "owned_planet_details", "owned_ship_details", "ship_friendly_codes",
+            "planet_friendly_codes", "ship_orders", "ship_transfers",
+            "starbase_orders_inventory", "planet_build_goals", "ship_history",
+            "wormhole_scans", "private_messages", "financial_and_cargo",
+        ]
+        request = GameGrantRequest(
+            grantor_account_id=11,
+            grantee_planets_username="fixture-other",
+            sharing_mode="unrestricted",
+            requested_scopes=all_scopes,
+        )
+        self.assertEqual(len(request.requested_scopes), 15)
+        with self.assertRaises(ValueError):
+            GameGrantRequest(
+                grantor_account_id=11,
+                grantee_planets_username="fixture-other",
+                sharing_mode="unrestricted",
+                requested_scopes=all_scopes + ["private_messages"],
+            )
+
     def test_game_scoped_consent_never_authorizes_raw_peer_reads(self):
         for game_id in (100, 101):
             self.assertFalse(has_private_read_authority_from_grant(

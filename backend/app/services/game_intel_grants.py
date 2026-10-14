@@ -17,6 +17,16 @@ ALLOWED_SCOPES = frozenset({
     "combat_vcr_evidence",
     "owned_planet_details",
     "owned_ship_details",
+    "ship_friendly_codes",
+    "planet_friendly_codes",
+    "ship_orders",
+    "ship_transfers",
+    "starbase_orders_inventory",
+    "planet_build_goals",
+    "ship_history",
+    "wormhole_scans",
+    "private_messages",
+    "financial_and_cargo",
 })
 
 

@@ -25,8 +25,14 @@ orders/private inventory are included). It is NOT equivalent to a Host setting
 and does not modify upstream diplomacy or the game's maxallies limit.
 
 In this first narrow implementation, a sender must **request** unrestricted
-mode for a specific game, and the recipient must **explicitly confirm** that
-mode rather than simply accept an older P1 consent. A P1 record remains in
+mode for a specific game with an explicit, reviewable subset of 15 field
+families and the recipient must **explicitly confirm** that mode rather than
+simply accept an older P1 consent. Extra optional groups include ship/planet
+Friendly Codes, ship orders, ship transfers, starbase inventory and orders,
+planet build goals, ship history, wormhole scans, finances/cargo and private
+in-game messages. `private_messages` can encompass correspondence with
+non-consenting third parties; it requires a separate explicit checkbox and
+must never imply those correspondents agreed to redistribution. A P1 record remains in
 `consented_pending_policy`; response contains `authorizes_private_intel=false`.
 The P0 selected-owned-observer access boundary is unchanged. No code reads
 unrestricted data from other observers yet.
