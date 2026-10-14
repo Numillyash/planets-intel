@@ -68,7 +68,7 @@ def get_vcr_only_ship_threat_analysis(
     ship observation exists elsewhere.
     """
 
-    accessible = accessible_intel_accounts(user_id=user_id)
+    accessible = accessible_intel_accounts(user_id=user_id, game_id=game_id, linked_account_id=linked_account_id)
     accessible_ids = {account.id for account in accessible}
     if linked_account_id not in accessible_ids or not accessible_ids:
         return None

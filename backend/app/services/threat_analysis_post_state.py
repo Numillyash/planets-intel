@@ -60,6 +60,7 @@ def get_ship_threat_analysis_with_post_state(
     replay = latest_ship_replay_state(
         user_id=user_id,
         game_id=game_id,
+        linked_account_id=linked_account_id,
         ship_id=ship_id,
         through_turn=turn,
     )
