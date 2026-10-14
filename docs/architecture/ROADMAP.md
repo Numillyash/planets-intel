@@ -4,9 +4,9 @@ This roadmap describes the target product beyond the current read-only intellige
 
 The architectural invariant remains unchanged: factual observations, deterministic derived state, probabilistic inference, and user-issued orders are separate data domains with explicit provenance.
 
-## Current baseline
+## Current baseline (2026-10-14)
 
-The current production branch already provides public/private game loading, historical observations and provenance, multi-observer intel aggregation, PixiJS map, structured host-event evidence, factual VCR equipment, deterministic NuHost Classic VCR replay, post-combat tactical state, combat-confirmed contacts, threat analysis, and early loadout/military inference.
+Production provides public/private game loading, historical observations and provenance, **selected-owned-observer** intelligence, PixiJS map, structured host-event evidence, factual VCR equipment, deterministic NuHost Classic VCR replay, combat-confirmed contacts, threat analysis, and early loadout/military inference. Global cross-player aggregation was disabled in P0; the P1 game-scoped consent ledger never widens private read permissions. Historical analyst-confirmed combat state is temporarily quarantined for missing observer provenance. The original future phases below are goals, not an implementation checklist of already active features.
 
 ## MVP 0.7 — Combat intelligence completion
 
@@ -157,6 +157,6 @@ The Intelligence Engine must never silently submit an inferred action.
 - military-score and construction solver;
 - fleet grouping and destination inference;
 - tests using real saved game fixtures;
-- branch consolidation and CI;
+- branch consolidation completed 2026-10-14; retain CI, controlled branch hygiene, and reviewed release boundaries;
 - responsive desktop-first UI;
 - performance for long histories and large maps.

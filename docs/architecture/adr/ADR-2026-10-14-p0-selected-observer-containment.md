@@ -1,6 +1,6 @@
 # ADR 2026-10-14: P0 selected-observer containment
 
-**State:** Proposed for review; **not** a deployed authorization guarantee.
+**State:** Implemented and deployed (2026-10-14). P0 merged as PR #46; production `88a3282` validated, then superseded by production `616406c` retaining the P0 boundary. This is a code/runtime checkpoint, not a guarantee of comprehensive compliance with external game rules.
 
 Legacy IntelBoard global `DashboardIntelShare` approvals have no game ID,
 official diplomacy provenance, field-level disclosure or game-mode scope.
@@ -36,11 +36,7 @@ P0 is deliberately restrictive. Existing combined views may show fewer
 facts, and analyst combat-state editing is temporarily unavailable.
 It adds no schema migration and does not delete stored observations.
 
-P1 should introduce directional, revocable `GameIntelGrant` records with
-an explicit game, verified player/game membership, diplomacy provenance,
-game mode and independently reviewed field-level disclosure. Seek a
-written interpretation of native Share Intel/Full Alliance restrictions
-before enabling external cross-player aggregation.
+P1 has introduced directional, revocable `GameIntelGrant` consent records scoped to one game (migration `0020_game_scoped_intel_grants`). It intentionally provides **no cross-player read authority**. Upstream diplomacy provenance, verified disclosure fields and a written interpretation of external Share Intel/Full Alliance restrictions are still required before any private cross-player projection.
 
 ## Acceptance gates
 

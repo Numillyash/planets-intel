@@ -6,6 +6,15 @@ The current production stage is primarily read-only. The target product is a
 full Planets.nu-compatible turn workspace with intelligence layered on top of
 the ordinary game UI.
 
+## Current verified state — 2026-10-14
+
+- **GitHub:** `main` is the default/canonical branch. `main` and the production tracking branch `feature/operational-ui` both point to `616406cc47963a762f37da7839bf9c7d63540d67` at this checkpoint.
+- **Production:** operator-confirmed deploy of `616406cc47963a762f37da7839bf9c7d63540d67`, **350/350 backend tests**, Docker image build OK, migration `0020_game_scoped_intel_grants (head)`, backend recreate OK, HTTP health OK. The runtime log is `logs/deploy/20261014-161813-production.log` on the host (never commit it).
+- **Authorization:** P0 permits private observations from the **selected, active, locally owned** Planets.nu observer only. Former global pair-sharing grants no access. P1 adds a per-game, directional, revocable **consent ledger**, not cross-player disclosure authority. Every grant explicitly reports `authorizes_private_intel=false`.
+- **Still deliberately unavailable:** peer private `loadturn` aggregation and old analyst combat-state annotations lacking observer provenance. Only an independently reviewed diplomacy/field-policy design can change these boundaries.
+- **Deployment:** `scripts/deploy/production.sh` still tracks `feature/operational-ui`; **do not change its default or the server checkout just because `main` is canonical**. Check both branch HEADs and CI before any future release.
+- **Sources:** [repository operations](docs/operations/REPOSITORY_HYGIENE.md), [latest closeout](docs/handoff/2026-10-14-production-repository-closeout.md), [P0 ADR](docs/architecture/adr/ADR-2026-10-14-p0-selected-observer-containment.md), [P1 ADR](docs/architecture/adr/ADR-2026-10-14-p1-game-scoped-consent-ledger.md).
+
 ## Stack
 
 - Frontend: React + TypeScript + Vite + PixiJS
@@ -52,12 +61,11 @@ Existing services on the host include Apache and Minecraft.
 Ports 80/443 are owned by the host web stack and must not be bound directly
 by application containers.
 
-Planned application entry point:
+Current high-level route:
 
-    Apache
-      -> 127.0.0.1:18080
-      -> Planets Intel frontend gateway
-      -> backend / PostgreSQL Docker network
+    Apache (host, HTTPS)
+      -> 127.0.0.1:18080 (Docker backend serving API + built frontend)
+      -> PostgreSQL (private Compose network)
 
 PostgreSQL must not be exposed publicly.
 
@@ -95,7 +103,8 @@ before building the production image.
 
 ### MVP 0.4
 
-- Multi-user intelligence sharing
+- P1 game-scoped consent records implemented, **not** disclosure privileges
+- Cross-player private sharing remains disabled pending validated diplomacy and explicit per-field policy
 
 ### MVP 0.5
 
