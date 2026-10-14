@@ -1,12 +1,24 @@
 # Planets Intel — Project State
 
+## Verified current baseline — 2026-10-14
+
+- Default/canonical `main` and deployment branch `feature/operational-ui` were both at `616406cc47963a762f37da7839bf9c7d63540d67` when production was deployed.
+- **Production accepted:** 350 backend tests; Alembic `0020_game_scoped_intel_grants (head)`; backend health OK.
+- **P0:** private data reads restricted to the selected locally owned observer; legacy global dashboard sharing disabled.
+- **P1:** separate directional, game-scoped, revocable consent ledger is deployed, but `authorizes_private_intel=false` for every grant. Native diplomacy/field-level sharing validation is an outstanding policy gate.
+- Existing analyst-confirmed combat state with no immutable observer provenance remains quarantined.
+- All 1177 long-running operational commits have been reconciled with the 14 independent `main` commits, preserving full ancestry. No history rewrite.
+- Latest source: `docs/handoff/2026-10-14-production-repository-closeout.md`. Older production snapshots below are archival.
+
+## Historical project notes (August–September 2026)
+
 **2026-10-14 update:** Read `docs/handoff/2026-10-14-p1-mainline-security-and-consolidation.md` first. P0 is deployed at `88a3282649c7b6b8ca42d4271d765855ffc7ace9`; P1 consent ledger at `14d82068bb741c36b2c67c5cc3fbf1ef1ce0a957` is not yet deployed. Cross-player private sharing remains blocked. Historical September runtime checkpoints below are preserved as history, not current production state.
 
 This is the durable architectural state for `Numillyash/planets-intel`. Git history is the detailed implementation log. For the exact latest runtime/deploy checkpoint, also read `docs/architecture/CURRENT_HANDOFF.md` and the newest dated file under `docs/handoff/`.
 
 ## Active development
 
-- Branch: `feature/operational-ui`
+- At the time of these archived notes, development used `feature/operational-ui`. As of 2026-10-14, `main` is canonical while `feature/operational-ui` is retained for deployments.
 - Product direction: private Planets.nu operational client with factual intel, historical evidence, explicit read-time inference, local order drafting, bounded simulation/prediction and eventually reviewed upstream turn submission.
 - UI direction: Planets-style operational dashboard + Pixi starmap; facts and provenance stay first-class.
 - Source of truth across chats: GitHub repository and durable handoff docs. Never reconstruct current implementation from chat memory.
@@ -51,7 +63,7 @@ Detailed runtime records:
 - Linked Planets.nu accounts and game-centric chooser with deep-linked `/intelboard/<observer>/<game>` routes.
 - Automatic discovery/private refresh for active games.
 - Public `loadinfo` / `loadscores` ingestion, score history, scoreboard and activity tracking.
-- Private `loadturn` ingestion and combined multi-account intel with provenance.
+- Private `loadturn` ingestion and selected-observer combined/intel views with provenance. Cross-player source aggregation was disabled at P0.
 - Fullscreen Pixi starmap with operational entity panes and cached Planets.nu hull/planet artwork.
 - Historical private snapshots and Time Machine / historical mode.
 - Historical ship tracks with lifecycle splitting for reused numeric ship IDs.

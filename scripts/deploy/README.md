@@ -1,5 +1,16 @@
 # Deployment scripts
 
+## Branch contract (verified 2026-10-14)
+
+`main` is the canonical/default GitHub branch. The production checkout and
+self-updating script intentionally continue tracking `feature/operational-ui`.
+At the accepted 2026-10-14 deployment both references equalled
+`616406cc47963a762f37da7839bf9c7d63540d67`. The production host reported
+350 backend tests, Alembic `0020_game_scoped_intel_grants (head)` and health OK.
+Do **not** change `DEPLOY_BRANCH` or server checkout automatically just because
+`main` is now canonical. A branch/deploy change requires independent review.
+Docs-only repository housekeeping requires no production deploy.
+
 ## Production deploy
 
 Run from any directory on the production server:

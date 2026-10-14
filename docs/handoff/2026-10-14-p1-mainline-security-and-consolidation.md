@@ -1,4 +1,6 @@
-# 2026-10-14 IntelBoard: P0 deployed, P1 ledger and mainline integration
+# 2026-10-14 IntelBoard: P0 deployed, P1 ledger and mainline integration (intermediate checkpoint)
+
+**Superseded for current production state by:** `docs/handoff/2026-10-14-production-repository-closeout.md`. The statements below about P1 not yet being deployed and PR #49 pending are snapshots from *before* the final deployment/merge; preserved for chronology.
 
 ## Verified GitHub state
 

@@ -1,6 +1,15 @@
 # Planets Intel — Current Handoff
 
-**2026-10-14 update:** Read `docs/handoff/2026-10-14-p1-mainline-security-and-consolidation.md` first. P0 is deployed at `88a3282649c7b6b8ca42d4271d765855ffc7ace9`; P1 consent ledger at `14d82068bb741c36b2c67c5cc3fbf1ef1ce0a957` is not yet deployed. Cross-player private sharing remains blocked. Historical September runtime checkpoints below are preserved as history, not current production state.
+## Latest verified production and repository checkpoint — 2026-10-14
+
+- Production `616406cc47963a762f37da7839bf9c7d63540d67` deployed successfully on **2026-10-14**, 350 backend tests passed, build and health OK.
+- Alembic production revision `0020_game_scoped_intel_grants (head)`.
+- `main` is canonical/default; `feature/operational-ui` remains the deployment branch. Their tips matched at the recorded checkpoint.
+- PR #46 P0 closed global cross-player private reads; PR #48 P1 added game-scoped consent with **zero peer-private read authorization**; PR #49 preserved the long operational history in `main`.
+- Full evidence: `docs/handoff/2026-10-14-production-repository-closeout.md`.
+- The rest of this document captures the **2026-09-27 historical handoff**. Its statements about pending Commander deployment, multiple authorized source observers and the September production SHA are archived, **not current runtime guidance**.
+
+## Archived engineering handoff — 2026-09-27
 
 Updated: 2026-09-27
 

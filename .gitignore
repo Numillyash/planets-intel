@@ -22,6 +22,7 @@ frontend/.vite/
 .idea/
 
 # Runtime
+/log.txt
 logs/*
 !logs/.gitkeep
 

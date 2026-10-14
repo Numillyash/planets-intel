@@ -1,6 +1,6 @@
 # P1: game-bound consent ledger under official-diplomacy policy hold
 
-**Recorded:** 2026-10-14. **Status:** TECHNICAL CONSENT LEDGER; sharing remains BLOCKED.
+**Recorded:** 2026-10-14. **Status:** DEPLOYED technical consent ledger, production `616406c` with Alembic `0020`; **cross-player private sharing remains BLOCKED**.
 
 ## Security argument
 
