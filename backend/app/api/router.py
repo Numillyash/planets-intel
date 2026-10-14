@@ -5,6 +5,7 @@ from app.api.routes.auth import router as auth_router
 from app.api.routes.combat_replay import router as combat_replay_router
 from app.api.routes.commander_intelligence import router as commander_intelligence_router
 from app.api.routes.game_activity import router as game_activity_router
+from app.api.routes.game_intel_grants import router as game_intel_grants_router
 from app.api.routes.games import router as games_router
 from app.api.routes.health import router as health_router
 from app.api.routes.historical_intel import router as historical_intel_router
@@ -44,6 +45,11 @@ api_router.include_router(
 api_router.include_router(
     intel_sharing_router,
     tags=["intel-sharing"],
+)
+
+api_router.include_router(
+    game_intel_grants_router,
+    tags=["game-intel-grants"],
 )
 
 api_router.include_router(

@@ -20,12 +20,13 @@ def accessible_intel_accounts(
     game_id: int,
     linked_account_id: int,
 ) -> list[AccessibleIntelAccount]:
-    """P0 deny-by-default: exactly one selected locally owned observer.
+    """P0/P1 deny-by-default: exactly one selected locally owned observer.
 
     A global dashboard pair, even one approved by both parties, must never
     grant access to another observer's private game data. The game ID is
     mandatory and callers must also constrain their data queries to it.
     This restriction applies equally to public, private and team games.
+    P1's mutual game-scoped consent ledger grants NO read entitlements;
     """
     if user_id <= 0 or game_id <= 0 or linked_account_id <= 0:
         return []
