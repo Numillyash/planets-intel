@@ -17,9 +17,6 @@ class AccessibleIntelAccount:
 def accessible_intel_accounts(
     *,
     user_id: int,
-) -> list[Accessidef accessible_intel_accounts(
-    *,
-    user_id: int,
     game_id: int,
     linked_account_id: int,
 ) -> list[AccessibleIntelAccount]:
