@@ -1,0 +1,383 @@
+body.operational-page-dashboard-open {
+    overflow: auto;
+}
+
+body.operational-page-dashboard-open:has(.intel-map-panel) .app-shell {
+    position: relative;
+    inset: auto;
+    width: min(1500px, calc(100% - 40px));
+    height: auto;
+    min-height: 100vh;
+    margin: 0 auto;
+    padding: 36px 0 80px;
+    overflow: visible;
+}
+
+/* The fullscreen map shell keeps normal page siblings hidden. Dashboard mode
+   restores them while moving the map itself off the page. */
+body.operational-page-dashboard-open:has(.intel-map-panel)
+    .app-shell > :not(.intel-map-panel) {
+    display: block !important;
+}
+
+body.operational-page-dashboard-open:has(.intel-map-panel)
+    .app-shell > .topbar {
+    display: flex !important;
+}
+
+body.operational-page-dashboard-open:has(.intel-map-panel)
+    .app-shell > .summary-grid {
+    display: grid !important;
+}
+
+body.operational-page-dashboard-open:has(.intel-map-panel)
+    .app-shell > .game-dashboard-shell {
+    display: flex !important;
+}
+
+body.operational-page-dashboard-open .intel-map-panel {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-100vh);
+}
+
+.intel-map-panel {
+    transition:
+        transform 180ms ease,
+        opacity 140ms ease;
+}
+
+.operational-surface-nav {
+    display: flex;
+    align-items: stretch;
+    justify-content: flex-end;
+    gap: 7px;
+    min-width: 0;
+}
+
+.operational-surface-nav .operational-dashboard-map-button {
+    min-height: 38px;
+}
+
+.operational-surface-nav .operational-dashboard-map-button:disabled {
+    border-color: #35516c;
+    background: #132537;
+    color: #7ba8cf;
+    cursor: default;
+    opacity: 1;
+}
+
+.operational-map-hud.operational-surface-nav {
+    flex-wrap: nowrap;
+}
+
+/* Dashboard navigation is mounted into AuthenticatedSurface's utility strip.
+   It intentionally stays in normal document flow: no viewport-fixed chrome may
+   cover dashboard tables or cards while the page scrolls. */
+.operational-page-surface-nav {
+    position: static;
+    z-index: auto;
+    top: auto;
+    right: auto;
+    left: auto;
+    max-width: 100%;
+}
+
+/* Communications composer */
+.communications-compose-mode {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.communications-compose-mode button {
+    display: flex;
+    min-height: 62px;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 4px;
+    padding: 10px 12px;
+    border: 1px solid #2b3d54;
+    border-radius: 8px;
+    background: #0a131e;
+    color: #dce8f5;
+    text-align: left;
+    font: inherit;
+    cursor: pointer;
+}
+
+.communications-compose-mode button:hover:not(:disabled) {
+    border-color: #4f7095;
+    background: #101e2d;
+}
+
+.communications-compose-mode button.is-active {
+    border-color: #5d91c7;
+    background: #132a40;
+    box-shadow: inset 0 0 0 1px rgba(111, 169, 224, 0.16);
+}
+
+.communications-compose-mode button:disabled {
+    cursor: default;
+    opacity: 0.68;
+}
+
+.communications-compose-mode strong {
+    color: #eef5fd;
+    font-size: 0.82rem;
+}
+
+.communications-compose-mode span,
+.communications-compose-hint {
+    color: #8197b0;
+    font-size: 0.72rem;
+    line-height: 1.4;
+}
+
+.communications-message-textarea {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 126px;
+    margin-top: 8px;
+    padding: 11px 12px;
+    resize: vertical;
+    border: 1px solid #2c4058;
+    border-radius: 8px;
+    outline: none;
+    background: #07101a;
+    color: #e6eef8;
+    caret-color: #9fd0ff;
+    font: inherit;
+    line-height: 1.45;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.28);
+}
+
+.communications-message-textarea::placeholder {
+    color: #61758d;
+}
+
+.communications-message-textarea:focus {
+    border-color: #5e91c5;
+    box-shadow:
+        inset 0 1px 3px rgba(0, 0, 0, 0.28),
+        0 0 0 2px rgba(79, 139, 198, 0.14);
+}
+
+.communications-message-textarea:disabled {
+    color: #8392a4;
+    background: #0a1119;
+    opacity: 0.72;
+}
+
+/* Dashboard communications message cards. The migrated dashboard panel uses
+   its own semantic class rather than dashboard-report-item, so keep the visual
+   thread treatment here explicitly instead of depending on legacy markup. */
+.communications-message-card {
+    box-sizing: border-box;
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 12px;
+    border: 1px solid #50333a;
+    border-radius: 7px;
+    background: #160f14;
+    color: #e8eef6;
+}
+
+.communications-message-card > header {
+    display: flex;
+    min-width: 0;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.communications-message-card > header strong {
+    min-width: 0;
+    overflow: hidden;
+    color: #ffb6b6;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.communications-message-card > header small,
+.communications-message-card > footer small,
+.communications-message-card > small {
+    flex: 0 0 auto;
+    color: #879bb5;
+}
+
+.communications-message-card > div {
+    overflow-wrap: anywhere;
+    color: #eef3f9;
+    line-height: 1.45;
+}
+
+.communications-message-card > footer {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.communications-message-card > footer small {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.communications-message-card > footer .secondary-button {
+    flex: 0 0 auto;
+}
+
+/* A factual child activity has parent_id set by Planets.nu. Make that hierarchy
+   unmistakable: this is not another root message in the conversation. */
+.communications-message-card.is-reply {
+    position: relative;
+    width: calc(100% - 38px);
+    margin-left: 38px;
+    padding-top: 28px;
+    border-color: #3f5169;
+    border-left-width: 4px;
+    border-left-color: #6d9bc8;
+    background: #0d1621;
+    box-shadow: inset 12px 0 24px rgba(35, 86, 132, 0.08);
+}
+
+.communications-message-card.is-reply::before {
+    content: "↳ Reply";
+    position: absolute;
+    top: 8px;
+    left: 12px;
+    color: #78a9d7;
+    font-size: 0.67rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.communications-message-card.is-reply::after {
+    content: "";
+    position: absolute;
+    top: -9px;
+    left: -22px;
+    width: 17px;
+    height: 28px;
+    border-bottom: 2px solid #425f7b;
+    border-left: 2px solid #425f7b;
+    border-bottom-left-radius: 8px;
+    pointer-events: none;
+}
+
+.operational-vcr-popup-backdrop {
+    position: fixed;
+    z-index: 3600;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    background: rgba(2, 5, 9, 0.58);
+    backdrop-filter: blur(2px);
+}
+
+.operational-vcr-popup {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    width: min(1320px, calc(100vw - 48px));
+    height: min(900px, calc(100vh - 48px));
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    border: 1px solid rgba(74, 101, 132, 0.94);
+    border-radius: 12px;
+    background: rgba(7, 12, 19, 0.985);
+    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.56);
+}
+
+.operational-vcr-popup-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    min-height: 54px;
+    padding: 8px 12px 8px 16px;
+    border-bottom: 1px solid #26374c;
+    background: #0b1420;
+}
+
+.operational-vcr-popup-header > div {
+    display: grid;
+    gap: 2px;
+}
+
+.operational-vcr-popup-header span {
+    color: #7594b6;
+    font-size: 0.62rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+}
+
+.operational-vcr-popup-header strong {
+    color: #edf5fd;
+    font-size: 0.95rem;
+}
+
+.operational-vcr-popup-content {
+    min-width: 0;
+    min-height: 0;
+    padding: 12px;
+    overflow: auto;
+}
+
+.operational-vcr-popup-content > .vcr-dashboard-panel {
+    min-width: 0;
+    margin: 0;
+}
+
+@media (max-width: 900px) {
+    .operational-surface-nav {
+        flex-wrap: wrap;
+    }
+
+    .operational-page-surface-nav {
+        justify-content: center;
+    }
+}
+
+@media (max-width: 760px) {
+    .communications-compose-mode {
+        grid-template-columns: 1fr;
+    }
+
+    .communications-message-card.is-reply {
+        width: calc(100% - 18px);
+        margin-left: 18px;
+    }
+
+    .communications-message-card.is-reply::after {
+        left: -12px;
+        width: 8px;
+    }
+
+    .communications-message-card > footer {
+        align-items: flex-end;
+    }
+
+    .operational-vcr-popup-backdrop {
+        padding: 8px;
+    }
+
+    .operational-vcr-popup {
+        width: calc(100vw - 16px);
+        height: calc(100vh - 16px);
+    }
+
+    .operational-vcr-popup-content {
+        padding: 8px;
+    }
+}

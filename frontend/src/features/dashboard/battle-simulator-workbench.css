@@ -1,0 +1,90 @@
+.battle-sim-add-grid > .battle-sim-add-row {
+    display: flex;
+}
+
+/* Toggle controls sit beside two-line label/input fields. Keep them at input
+   height instead of stretching to the full grid-row height. */
+.battle-sim-fields > .battle-sim-toggle-field {
+    align-self: end;
+}
+
+.game-dashboard-stack > .panel > .panel-header + .battle-sim-mean-grid {
+    margin: 16px 22px;
+}
+
+.game-dashboard-stack > .panel > .panel-header + .battle-sim-mean-grid ~ .battle-sim-warning,
+.game-dashboard-stack > .panel > .panel-header + .battle-sim-mean-grid ~ .error-card {
+    margin-right: 22px;
+    margin-left: 22px;
+}
+
+.game-dashboard-stack > .panel > .panel-header + .battle-sim-mean-grid ~ .battle-sim-warning:last-child,
+.game-dashboard-stack > .panel > .panel-header + .battle-sim-mean-grid ~ .error-card:last-child {
+    margin-bottom: 16px;
+}
+
+.battle-planner-vcr-layout {
+    display: grid;
+    grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
+    gap: 16px;
+    align-items: start;
+    padding: 16px 22px 22px;
+}
+
+.battle-planner-vcr-baselines {
+    display: grid;
+    gap: 7px;
+}
+
+.battle-planner-vcr-detail {
+    min-width: 0;
+}
+
+.battle-planner-vcr-source {
+    margin-bottom: 12px;
+}
+
+/* Scenario panels already live in a stack with an explicit gap. The global
+   .panel top margin would otherwise add a second, asymmetric spacer. */
+.battle-planner-vcr-detail > .game-dashboard-stack > .panel:first-child {
+    margin-top: 0;
+}
+
+.battle-sim-queue-card {
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding: 0;
+}
+
+.battle-sim-queue-select {
+    appearance: none;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    padding: 8px;
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr);
+    gap: 8px;
+    align-items: center;
+    text-align: left;
+    cursor: pointer;
+    min-width: 0;
+}
+
+.battle-sim-queue-actions {
+    padding-right: 7px;
+}
+
+.battle-sim-result-panel .vcr-player {
+    border: 0;
+    background: transparent;
+}
+
+.battle-sim-result-panel .vcr-battlefield {
+    min-height: 220px;
+}
+
+@media (max-width: 760px) {
+    .battle-planner-vcr-layout {
+        grid-template-columns: 1fr;
+    }
+}

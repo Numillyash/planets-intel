@@ -1,0 +1,509 @@
+.vcr-dashboard-player-shell {
+    min-width: 0;
+    overflow: hidden;
+}
+
+.vcr-dashboard-player-heading {
+    box-sizing: border-box;
+    width: 100%;
+    padding: 14px 16px 12px;
+    align-items: flex-start;
+}
+
+.vcr-dashboard-player-heading > div:first-child {
+    min-width: 0;
+    flex: 1 1 auto;
+    overflow: hidden;
+}
+
+.vcr-dashboard-player-heading > div:first-child strong {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.vcr-dashboard-player-heading .vcr-nav-buttons {
+    flex: 0 0 auto;
+    margin-left: 12px;
+}
+
+.vcr-player .vcr-battlefield {
+    min-height: 330px;
+}
+
+.vcr-player .vcr-combat-object {
+    top: 50%;
+    display: block;
+    width: 220px;
+    height: 0;
+    gap: 0;
+    z-index: 4;
+    transform: translateX(-50%);
+    pointer-events: none;
+}
+
+.vcr-combat-visual {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    display: flex;
+    width: 200px;
+    height: 132px;
+    align-items: center;
+    justify-content: center;
+    transform: translate(-50%, -50%);
+}
+
+.vcr-combat-label {
+    position: absolute;
+    top: 72px;
+    left: 50%;
+    display: grid;
+    width: 210px;
+    gap: 3px;
+    transform: translateX(-50%);
+    text-align: center;
+}
+
+.vcr-combat-label.is-destroyed {
+    animation: vcr-destroyed-label 1350ms ease-out forwards;
+}
+
+.vcr-player .vcr-combat-object strong {
+    display: block;
+    max-width: 210px;
+    overflow: hidden;
+    margin: 0;
+    line-height: 1.15;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.vcr-player .vcr-combat-object small {
+    display: block;
+    line-height: 1.1;
+}
+
+.vcr-combat-label .is-destroyed-label {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: #ff8f70;
+    font: inherit;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+    pointer-events: auto;
+}
+
+.vcr-hull-artwork-shell {
+    position: relative;
+    display: flex;
+    width: 190px;
+    height: 122px;
+    flex: 0 0 122px;
+    align-items: center;
+    justify-content: center;
+    overflow: visible;
+}
+
+.vcr-hull-artwork {
+    display: block;
+    width: 190px;
+    height: 122px;
+    max-width: none;
+    object-fit: contain;
+    pointer-events: none;
+    user-select: none;
+    filter:
+        drop-shadow(0 0 2px rgba(220, 238, 255, 0.7))
+        drop-shadow(0 0 10px rgba(76, 147, 205, 0.35));
+}
+
+.vcr-hull-artwork-shell.is-facing-left .vcr-hull-artwork {
+    transform: scaleX(-1);
+}
+
+.vcr-hull-artwork-shell.is-planet-artwork {
+    width: 104px;
+    height: 104px;
+    flex-basis: 104px;
+}
+
+.vcr-hull-artwork-shell.is-planet-artwork .vcr-hull-artwork {
+    width: 86px;
+    height: 86px;
+    transform: none;
+    filter:
+        drop-shadow(0 0 2px rgba(220, 238, 255, 0.8))
+        drop-shadow(0 0 12px rgba(76, 147, 205, 0.42));
+}
+
+.vcr-combat-object.is-hit .vcr-hull-artwork {
+    filter:
+        drop-shadow(0 0 2px rgba(255, 239, 220, 0.95))
+        drop-shadow(0 0 14px rgba(255, 72, 42, 0.95));
+}
+
+.vcr-hull-artwork-shell > .vcr-object-marker[hidden],
+.vcr-hull-artwork-shell > .vcr-hull-artwork[hidden] {
+    display: none;
+}
+
+.vcr-hull-artwork-shell > .vcr-object-marker:not([hidden]) {
+    display: block;
+}
+
+.vcr-combat-object.is-destroyed .vcr-hull-artwork-shell,
+.vcr-combat-object.is-destroyed .vcr-object-marker {
+    animation: vcr-object-destroy 850ms ease-out forwards;
+}
+
+.vcr-destruction-burst {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    z-index: 12;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    background: radial-gradient(circle, #fffbd0 0 12%, #ffd154 20%, #ff6b32 48%, rgba(255, 55, 24, 0.25) 70%, transparent 72%);
+    box-shadow:
+        0 0 18px rgba(255, 229, 126, 1),
+        0 0 42px rgba(255, 104, 42, 0.95),
+        0 0 72px rgba(255, 54, 31, 0.55);
+    animation: vcr-destruction-burst 900ms ease-out forwards;
+    cursor: pointer;
+    pointer-events: auto;
+}
+
+.vcr-destruction-burst::before,
+.vcr-destruction-burst::after {
+    position: absolute;
+    inset: -12px;
+    border: 2px solid rgba(255, 184, 72, 0.8);
+    border-radius: 50%;
+    content: "";
+}
+
+.vcr-destruction-burst::after {
+    inset: -24px;
+    border-color: rgba(255, 89, 48, 0.55);
+}
+
+@keyframes vcr-object-destroy {
+    0% { opacity: 1; transform: scale(1); }
+    30% { opacity: 1; transform: scale(1.08); filter: brightness(2.2); }
+    100% { opacity: 0; transform: scale(0.18); filter: brightness(3); }
+}
+
+@keyframes vcr-destruction-burst {
+    0% { opacity: 0; visibility: visible; transform: translate(-50%, -50%) scale(0.2); }
+    18% { opacity: 1; visibility: visible; transform: translate(-50%, -50%) scale(1.35); }
+    99% { visibility: visible; }
+    100% { opacity: 0; visibility: hidden; transform: translate(-50%, -50%) scale(4.4); }
+}
+
+@keyframes vcr-destroyed-label {
+    0%, 55% { opacity: 1; visibility: visible; }
+    99% { visibility: visible; }
+    100% { opacity: 0; visibility: hidden; }
+}
+
+.vcr-shot-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 8;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+    pointer-events: none;
+}
+
+.vcr-shot-overlay line {
+    vector-effect: non-scaling-stroke;
+    stroke-linecap: round;
+}
+
+.vcr-beam-shot {
+    stroke: #d8fbff;
+    stroke-width: 2.2;
+    filter: drop-shadow(0 0 4px rgba(97, 219, 255, 0.98));
+}
+
+.vcr-beam-shot.is-right {
+    stroke: #fff0b8;
+    filter: drop-shadow(0 0 4px rgba(255, 179, 93, 0.98));
+}
+
+.vcr-beam-shot.is-fighter-target {
+    stroke-width: 1.6;
+    stroke-dasharray: 3 1.5;
+}
+
+.vcr-fighter-shot {
+    stroke: #72ddff;
+    stroke-width: 1.45;
+    stroke-dasharray: 2.3 1.2;
+    filter: drop-shadow(0 0 3px rgba(78, 199, 255, 0.95));
+}
+
+.vcr-fighter-shot.is-right {
+    stroke: #ffb66e;
+    filter: drop-shadow(0 0 3px rgba(255, 152, 72, 0.95));
+}
+
+.vcr-fighter-shot.is-dogfight {
+    stroke-width: 1.8;
+    stroke-dasharray: none;
+}
+
+.vcr-torpedo-projectile {
+    position: absolute;
+    z-index: 5;
+    display: block;
+    width: 34px;
+    height: 12px;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+}
+
+.vcr-torpedo-projectile > span {
+    position: absolute;
+    top: 50%;
+    right: 0;
+    width: 8px;
+    height: 4px;
+    border-radius: 50%;
+    background: #ffe98b;
+    box-shadow:
+        -7px 0 6px rgba(255, 184, 67, 0.85),
+        -16px 0 10px rgba(255, 105, 43, 0.45),
+        0 0 8px rgba(255, 241, 163, 0.95);
+    transform: translateY(-50%);
+}
+
+.vcr-torpedo-projectile.is-right {
+    transform: translate(-50%, -50%) scaleX(-1);
+}
+
+.vcr-torpedo-projectile.is-miss-course {
+    opacity: 0.78;
+}
+
+.vcr-fighter {
+    position: absolute;
+    z-index: 7;
+    display: block;
+    width: 13px;
+    height: 8px;
+    border: 1px solid rgba(222, 241, 255, 0.92);
+    background: #58b5ee;
+    clip-path: polygon(100% 50%, 0 0, 22% 50%, 0 100%);
+    transform: translate(-50%, -50%);
+    box-shadow: 0 0 7px rgba(91, 190, 255, 0.75);
+    pointer-events: none;
+    transition: left 45ms linear, top 45ms linear;
+}
+
+.vcr-fighter.is-right {
+    background: #f1a55d;
+    box-shadow: 0 0 7px rgba(255, 168, 91, 0.75);
+    transform: translate(-50%, -50%) scaleX(-1);
+}
+
+.vcr-fighter.is-returning.is-left {
+    transform: translate(-50%, -50%) scaleX(-1);
+}
+
+.vcr-fighter.is-returning.is-right {
+    transform: translate(-50%, -50%);
+}
+
+.vcr-dogfight-flash {
+    position: absolute;
+    z-index: 9;
+    display: flex;
+    width: 18px;
+    height: 18px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(255, 103, 47, 0.72);
+    color: #fff2b7;
+    font-size: 13px;
+    font-weight: 900;
+    box-shadow: 0 0 14px rgba(255, 79, 42, 0.95);
+    pointer-events: none;
+}
+
+.vcr-vital-bars {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.vcr-vital-bars label {
+    display: grid;
+    gap: 4px;
+}
+
+.vcr-vital-bars label > span {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 6px;
+    color: #7690ac;
+    font-size: 0.62rem;
+    text-transform: uppercase;
+}
+
+.vcr-vital-bars label > span strong {
+    color: #e9f3ff;
+    font-size: 0.75rem;
+}
+
+.vcr-vital-bars label > span small {
+    color: #667d97;
+    font-size: 0.52rem;
+    text-transform: none;
+}
+
+.vcr-vital-bars progress {
+    width: 100%;
+    height: 10px;
+    accent-color: #58a8e7;
+}
+
+.vcr-vital-bars .is-hull progress {
+    accent-color: #75c27f;
+}
+
+.vcr-status-card.is-destroyed .vcr-vital-bars .is-hull progress {
+    accent-color: #df654f;
+}
+
+.vcr-status-card dl {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.vcr-charge-bars {
+    gap: 7px;
+}
+
+.vcr-weapon-charge-row,
+.vcr-fighter-bays {
+    display: grid;
+    grid-template-columns: 70px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    color: #71869f;
+    font-size: 0.62rem;
+}
+
+.vcr-weapon-charge-slots {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(18px, 1fr));
+    gap: 3px;
+}
+
+.vcr-weapon-charge-slots progress {
+    width: 100%;
+    height: 8px;
+    accent-color: #72b7f0;
+}
+
+.vcr-fighter-bay-pips {
+    display: flex;
+    min-width: 0;
+    flex-wrap: wrap;
+    gap: 3px;
+}
+
+.vcr-fighter-bay-pips i {
+    display: block;
+    width: 7px;
+    height: 7px;
+    border: 1px solid #47789f;
+    border-radius: 2px;
+    background: #16344d;
+    box-shadow: 0 0 3px rgba(78, 162, 217, 0.3);
+}
+
+.vcr-fighter-bay-pips i.is-active {
+    border-color: #8ce8aa;
+    background: #2e9a58;
+    box-shadow: 0 0 8px rgba(80, 222, 130, 0.75);
+}
+
+.vcr-fighter-bays small {
+    color: #6a829d;
+    white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+    .vcr-dashboard-player-heading {
+        padding: 12px;
+    }
+
+    .vcr-dashboard-player-heading > div:first-child strong {
+        white-space: normal;
+    }
+
+    .vcr-dashboard-player-heading .vcr-nav-buttons {
+        margin-left: 0;
+    }
+
+    .vcr-player .vcr-battlefield {
+        min-height: 300px;
+    }
+
+    .vcr-player .vcr-combat-object {
+        width: 180px;
+    }
+
+    .vcr-combat-visual {
+        width: 170px;
+        height: 112px;
+    }
+
+    .vcr-combat-label {
+        top: 62px;
+        width: 175px;
+    }
+
+    .vcr-hull-artwork-shell,
+    .vcr-hull-artwork {
+        width: 160px;
+        height: 104px;
+    }
+
+    .vcr-hull-artwork-shell {
+        flex-basis: 104px;
+    }
+
+    .vcr-player .vcr-combat-object strong {
+        max-width: 175px;
+    }
+
+    .vcr-vital-bars {
+        grid-template-columns: 1fr;
+    }
+
+    .vcr-weapon-charge-row,
+    .vcr-fighter-bays {
+        grid-template-columns: 62px minmax(0, 1fr);
+    }
+
+    .vcr-fighter-bays small {
+        grid-column: 1 / -1;
+    }
+}

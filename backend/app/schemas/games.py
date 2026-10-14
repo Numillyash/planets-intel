@@ -10,11 +10,12 @@ class GameInfo(BaseModel):
     status_name: str
     turn: int
     slots: int
+    turn_status: str | None = None
     next_host: str
-    turns_per_week: int
+    turns_per_week: int | None
     is_private: bool
     is_custom: bool
-    win_condition_id: int
+    win_condition_id: int | None
 
 
 class GameSettingsInfo(BaseModel):
@@ -62,18 +63,21 @@ class GameSettingsInfo(BaseModel):
 
 class PlayerInfo(BaseModel):
     slot_id: int
-    account_id: int
+    account_id: int | None
     username: str
     race_id: int
 
     status: int
-    turn_status: int
+    turn_status: int | None
+    turns_missed: int | None = None
 
-    planets: int
-    ships: int
-    starbases: int
+    planets: int | None
+    ships: int | None
+    starbases: int | None
 
-    turn_ready: bool
+    turn_ready: bool | None
+    active_advantages: str = ""
+    active_hulls: str = ""
 
 
 class RelationInfo(BaseModel):

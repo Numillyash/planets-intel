@@ -1,0 +1,156 @@
+@import "./stellar-operational.css";
+
+.operational-entity-icon-hull,
+.operational-entity-icon-planet-artwork {
+    position: relative;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    border: 1px solid #34516f;
+    border-radius: 8px;
+    background: radial-gradient(circle, #172638 0, #09111b 70%);
+}
+
+.operational-entity-icon-planet-artwork {
+    border-radius: 50%;
+    border-color: #5e86ad;
+    background: radial-gradient(circle, #1e3348 0, #09111b 72%);
+}
+
+.operational-entity-icon-hull img,
+.operational-entity-icon-planet-artwork img {
+    position: relative;
+    z-index: 2;
+    display: block;
+    object-fit: contain;
+    object-position: center center;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.8));
+}
+
+.operational-entity-icon-hull img {
+    width: 40px;
+    height: 40px;
+    transform: none;
+}
+
+.operational-entity-icon-planet-artwork img {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+}
+
+.operational-entity-icon-hull-fallback {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    z-index: 1;
+    width: 24px;
+    height: 24px;
+    border: 1px solid rgba(174, 207, 239, 0.65);
+    background: rgba(87, 137, 180, 0.42);
+    clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+    transform: translate(-50%, -50%);
+    transform-origin: center;
+    transition: opacity 120ms ease;
+}
+
+.operational-entity-icon-planet-fallback {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    z-index: 1;
+    width: 30px;
+    height: 30px;
+    border: 1px solid rgba(176, 218, 249, 0.75);
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #d9f1ff 0 5%, #6aa6d2 9% 30%, #244766 58%, #0c1722 100%);
+    transform: translate(-50%, -50%);
+    transition: opacity 120ms ease;
+}
+
+.operational-entity-icon-hull-fallback.is-freighter {
+    clip-path: polygon(16% 22%, 84% 22%, 100% 50%, 84% 78%, 16% 78%, 0 50%);
+}
+.operational-entity-icon-hull-fallback.is-torpedo {
+    clip-path: polygon(50% 0, 92% 88%, 50% 70%, 8% 88%);
+}
+.operational-entity-icon-hull-fallback.is-carrier {
+    clip-path: polygon(50% 0, 100% 30%, 84% 88%, 50% 100%, 16% 88%, 0 30%);
+}
+.operational-entity-icon-hull-fallback.is-hidden,
+.operational-entity-icon-planet-fallback.is-hidden {
+    opacity: 0;
+}
+
+/* Starbases do not expose a stable public artwork id like hulls/planets.
+   Give them a dedicated Planets-style station glyph instead of the generic dot. */
+.operational-entity-icon-starbase {
+    display: grid;
+    place-items: center;
+    border: 1px solid #d7b86a;
+    border-radius: 8px;
+    background: radial-gradient(circle, #243443 0 22%, #111a25 23% 100%);
+    box-shadow: 0 0 14px rgba(219, 181, 86, 0.16);
+}
+
+.operational-entity-icon-starbase .operational-entity-icon-core {
+    position: relative;
+    width: 24px;
+    height: 24px;
+    border: 2px solid #e5c56e;
+    border-radius: 4px;
+    background: rgba(106, 132, 153, 0.22);
+    transform: rotate(45deg);
+}
+
+.operational-entity-icon-starbase .operational-entity-icon-core::before,
+.operational-entity-icon-starbase .operational-entity-icon-core::after {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    background: #d9e6ef;
+    content: "";
+    transform: translate(-50%, -50%);
+}
+.operational-entity-icon-starbase .operational-entity-icon-core::before {
+    width: 18px;
+    height: 3px;
+}
+.operational-entity-icon-starbase .operational-entity-icon-core::after {
+    width: 3px;
+    height: 18px;
+}
+
+.operational-entity-details-shell {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+}
+
+.operational-entity-close {
+    position: absolute;
+    z-index: 50;
+    top: 10px;
+    right: 10px;
+    display: grid;
+    width: 30px;
+    height: 30px;
+    place-items: center;
+    padding: 0;
+    border: 1px solid rgba(78, 101, 132, 0.88);
+    border-radius: 7px;
+    background: rgba(7, 13, 21, 0.86);
+    color: #b8c7d8;
+    font: inherit;
+    font-size: 1.15rem;
+    line-height: 1;
+    cursor: pointer;
+    backdrop-filter: blur(6px);
+}
+
+.operational-entity-close:hover {
+    border-color: #77a4cf;
+    background: rgba(17, 29, 44, 0.96);
+    color: #eef5ff;
+}

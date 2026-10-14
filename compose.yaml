@@ -37,7 +37,12 @@ services:
 
       PLANETSNU_API_BASE_URL: ${PLANETSNU_API_BASE_URL}
       PLANETSNU_PROXY_URL: ${PLANETSNU_PROXY_URL:-}
+      PLANETSNU_HULL_ASSET_BASE_URL: ${PLANETSNU_HULL_ASSET_BASE_URL:-https://mobile.planets.nu/img/hulls}
+      PRIVATE_ASSET_CACHE_DIR: /app/private_assets
       CREDENTIAL_ENCRYPTION_KEY: ${CREDENTIAL_ENCRYPTION_KEY}
+
+    volumes:
+      - private_assets:/app/private_assets
 
     depends_on:
       postgres:
@@ -57,3 +62,4 @@ networks:
 
 volumes:
   postgres_data:
+  private_assets:

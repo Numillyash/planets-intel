@@ -1,0 +1,374 @@
+/*
+ * Fullscreen operational shell based on the interaction model observed in the
+ * saved Planets.nu client: the starmap owns the viewport; object screens and
+ * the dashboard are overlays rather than page-flow columns/cards.
+ */
+
+html,
+body,
+#root {
+    width: 100%;
+    height: 100%;
+}
+
+body:has(.intel-map-panel) {
+    overflow: hidden;
+    background: #05080d;
+}
+
+body:has(.intel-map-panel) .app-shell {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+}
+
+/* During the migration, keep the old dashboard DOM alive as a data source but
+ * remove it from the visual application surface. */
+body:has(.intel-map-panel) .app-shell > :not(.intel-map-panel) {
+    display: none !important;
+}
+
+body:has(.intel-map-panel) .intel-map-panel {
+    position: fixed !important;
+    inset: 0;
+    z-index: 1;
+    width: 100vw;
+    height: 100vh;
+    margin: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    background: #05080d !important;
+    box-shadow: none !important;
+    overflow: hidden !important;
+}
+
+body:has(.intel-map-panel) .intel-map-header {
+    display: none !important;
+}
+
+body:has(.intel-map-panel) .intel-map-layout {
+    position: absolute;
+    inset: 0;
+    display: block !important;
+    width: 100%;
+    height: 100%;
+    min-height: 0 !important;
+}
+
+body:has(.intel-map-panel) .intel-map-stage-wrap {
+    position: absolute !important;
+    inset: 0;
+    width: auto !important;
+    height: auto !important;
+    min-width: 0;
+    min-height: 0 !important;
+    border: 0 !important;
+    background: #05080d;
+}
+
+/* Selected Planet/Ship screen: equivalent of the original client's
+ * LeftContent — overlay over the map, never a permanent grid column. */
+body:has(.intel-map-panel) .intel-map-details {
+    position: absolute !important;
+    z-index: 60;
+    top: 12px;
+    right: auto !important;
+    bottom: 12px;
+    left: 12px !important;
+    display: flex;
+    width: min(430px, calc(100vw - 24px)) !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    padding: 0 !important;
+    border: 1px solid rgba(72, 94, 122, 0.86);
+    border-radius: 9px;
+    background: rgba(8, 14, 23, 0.97) !important;
+    box-shadow: 9px 12px 38px rgba(0, 0, 0, 0.48);
+    overflow: hidden !important;
+    backdrop-filter: blur(9px);
+}
+
+body:has(.intel-map-panel)
+    .intel-map-details:has(.operational-empty-selection) {
+    display: none !important;
+}
+
+body:has(.intel-map-panel) .intel-map-details > .eyebrow,
+body:has(.intel-map-panel) .intel-map-details > .intel-provenance-note {
+    display: none !important;
+}
+
+body:has(.intel-map-panel) .operational-entity-panel {
+    width: 100%;
+    height: 100%;
+    min-height: 0 !important;
+}
+
+body:has(.intel-map-panel) .operational-entity-content {
+    min-height: 0;
+    overflow-y: auto;
+}
+
+/* Keep only lightweight map chrome. */
+body:has(.intel-map-panel) .intel-map-legend {
+    top: auto !important;
+    right: 14px !important;
+    bottom: 14px !important;
+    left: auto !important;
+    z-index: 12 !important;
+    max-width: min(760px, calc(100vw - 520px)) !important;
+    opacity: 0.48;
+    transition: opacity 120ms ease;
+}
+
+body:has(.intel-map-panel) .intel-map-legend:hover {
+    opacity: 0.96;
+}
+
+body:has(.intel-map-panel) .intel-map-help {
+    right: auto !important;
+    bottom: 14px !important;
+    left: 14px !important;
+    z-index: 12 !important;
+    opacity: 0.58;
+}
+
+/* Old trail/history toolbar is removed from the permanent map surface. */
+body:has(.intel-map-panel)
+    .intel-map-stage-wrap
+    > div[style*="top: 52px"][style*="right: 12px"] {
+    display: none !important;
+}
+
+.operational-map-hud {
+    position: absolute;
+    z-index: 120;
+    top: 12px;
+    right: 12px;
+    display: flex;
+    align-items: stretch;
+    gap: 7px;
+    pointer-events: auto;
+}
+
+.operational-map-menu-button,
+.operational-map-turn {
+    min-height: 42px;
+    border: 1px solid rgba(77, 101, 132, 0.9);
+    border-radius: 8px;
+    background: rgba(8, 13, 21, 0.92);
+    color: #dbe7f5;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(8px);
+}
+
+.operational-map-menu-button {
+    width: 46px;
+    padding: 0;
+    font-size: 1.24rem;
+    line-height: 1;
+}
+
+.operational-map-menu-button:hover {
+    border-color: #78a6cf;
+    background: rgba(18, 30, 45, 0.97);
+}
+
+.operational-map-turn {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 0 10px;
+}
+
+.operational-map-turn span {
+    color: #7188a5;
+    font-size: 0.58rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+}
+
+.operational-map-turn strong {
+    color: #eef5ff;
+    font-size: 0.98rem;
+}
+
+/* Dashboard mirrors the original showDashboard/showMap model: it is a
+ * viewport-sized layer that slides over the map, not a side card. */
+.operational-dashboard-overlay {
+    position: fixed;
+    z-index: 300;
+    inset: 0;
+    display: grid;
+    grid-template-rows: 58px 44px minmax(0, 1fr);
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    background:
+        radial-gradient(
+            circle at 18% 0%,
+            rgba(48, 88, 126, 0.18),
+            transparent 36rem
+        ),
+        #080d14;
+    color: #e6edf7;
+    transform: translateY(-102%);
+    visibility: hidden;
+    transition:
+        transform 180ms ease,
+        visibility 0s linear 180ms;
+}
+
+.operational-dashboard-overlay.is-open {
+    transform: translateY(0);
+    visibility: visible;
+    transition:
+        transform 180ms ease,
+        visibility 0s linear 0s;
+}
+
+.operational-dashboard-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 0 18px;
+    border-bottom: 1px solid #26374c;
+    background: rgba(12, 19, 29, 0.97);
+}
+
+.operational-dashboard-header > div {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+}
+
+.operational-dashboard-header span {
+    color: #6f8daf;
+    font-size: 0.64rem;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+}
+
+.operational-dashboard-header strong {
+    color: #f1f6fc;
+    font-size: 1rem;
+}
+
+.operational-dashboard-map-button {
+    min-height: 34px;
+    padding: 5px 14px;
+    border: 1px solid #477095;
+    border-radius: 7px;
+    background: #14283a;
+    color: #cce5fb;
+    font: inherit;
+    font-weight: 700;
+}
+
+.operational-dashboard-map-button:hover {
+    background: #1b344a;
+}
+
+.operational-dashboard-tabs {
+    display: flex;
+    align-items: stretch;
+    padding-left: 12px;
+    overflow-x: auto;
+    border-bottom: 1px solid #1f2c3d;
+    background: #0a111a;
+}
+
+.operational-dashboard-tabs button {
+    position: relative;
+    flex: 0 0 auto;
+    min-width: 120px;
+    padding: 0 15px;
+    border: 0;
+    border-right: 1px solid #1e2a39;
+    background: transparent;
+    color: #8193aa;
+    font: inherit;
+    font-size: 0.74rem;
+    font-weight: 700;
+}
+
+.operational-dashboard-tabs button:hover,
+.operational-dashboard-tabs button.is-active {
+    background: #101c29;
+    color: #e3edf8;
+}
+
+.operational-dashboard-tabs button.is-active::after {
+    position: absolute;
+    right: 12px;
+    bottom: 0;
+    left: 12px;
+    height: 2px;
+    background: #6ea4d2;
+    content: "";
+}
+
+.operational-dashboard-content {
+    position: relative;
+    min-width: 0;
+    min-height: 0;
+    padding: 18px;
+    overflow: auto;
+}
+
+.operational-dashboard-pane {
+    display: none;
+    position: relative;
+    min-height: calc(100vh - 138px);
+}
+
+.operational-dashboard-pane.is-active {
+    display: block;
+}
+
+/* Existing analytical widgets are content renderers now. Neutralize only
+ * their old absolute-on-map placement while we migrate each of them. */
+.operational-dashboard-pane.is-active
+    > div[style*="position: absolute"] {
+    position: relative !important;
+    z-index: auto !important;
+    top: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    left: auto !important;
+    width: min(960px, 100%) !important;
+    max-width: none !important;
+    max-height: none !important;
+    margin: 0 auto 14px !important;
+}
+
+.operational-dashboard-pane.is-active
+    > button[style*="position: absolute"] {
+    position: relative !important;
+    z-index: auto !important;
+    top: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    left: auto !important;
+    margin: 0 auto !important;
+}
+
+@media (max-width: 760px) {
+    body:has(.intel-map-panel) .intel-map-details {
+        top: 62px;
+        right: 8px !important;
+        bottom: 8px;
+        left: 8px !important;
+        width: auto !important;
+    }
+
+    body:has(.intel-map-panel) .intel-map-legend,
+    body:has(.intel-map-panel) .intel-map-help {
+        display: none !important;
+    }
+}

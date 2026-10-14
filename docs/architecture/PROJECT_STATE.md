@@ -1,0 +1,285 @@
+# Planets Intel — Project State
+
+**2026-10-14 update:** Read `docs/handoff/2026-10-14-p1-mainline-security-and-consolidation.md` first. P0 is deployed at `88a3282649c7b6b8ca42d4271d765855ffc7ace9`; P1 consent ledger at `14d82068bb741c36b2c67c5cc3fbf1ef1ce0a957` is not yet deployed. Cross-player private sharing remains blocked. Historical September runtime checkpoints below are preserved as history, not current production state.
+
+This is the durable architectural state for `Numillyash/planets-intel`. Git history is the detailed implementation log. For the exact latest runtime/deploy checkpoint, also read `docs/architecture/CURRENT_HANDOFF.md` and the newest dated file under `docs/handoff/`.
+
+## Active development
+
+- Branch: `feature/operational-ui`
+- Product direction: private Planets.nu operational client with factual intel, historical evidence, explicit read-time inference, local order drafting, bounded simulation/prediction and eventually reviewed upstream turn submission.
+- UI direction: Planets-style operational dashboard + Pixi starmap; facts and provenance stay first-class.
+- Source of truth across chats: GitHub repository and durable handoff docs. Never reconstruct current implementation from chat memory.
+- Current product focus: provenance-safe Turn Review and reconciliation of proven `planets-lab` mechanics into the existing prediction/Battle Planner stack.
+- Current research focus is separate: `planets-lab` continues Host combat ordering/orchestration and other unresolved Host mechanics.
+
+## Production checkpoint
+
+On 2026-09-21 production was successfully deployed at:
+
+```text
+d0aca955914db38abf6d49cac61a8df7e0de4b82
+```
+
+with 306 backend tests passing, DB head `0018_tow_target_ship_id`, successful backend recreation and healthy `/api/health`.
+
+The Commander Intelligence foundation is newer development and introduces DB
+target `0019_commander_intel_cache`; it is not yet a production checkpoint
+until deployed and runtime-accepted.
+
+This checkpoint includes:
+
+- corpus-reconciled Federation shield recovery;
+- corpus-reconciled native planet beam-tech rounding;
+- total private-refresh failure surfacing;
+- fail-closed current dashboard behavior when the factual private snapshot turn differs from the canonical game turn;
+- the first production Turn Review / evidence ledger using the existing unified movement prediction stack;
+- structured provenance for UNKNOWN movement rows, distinguishing unavailable phase-state, implementation gaps, missing facts, unresolved dependencies, order ambiguity and unsupported Host rules;
+- lab-verified true-partial normal-speed Move Most fuel semantics with Host major/minor-axis endpoint projection and continuous nominal one-turn fuel basis;
+- accepted Tow runtime/rendering through the one-label-per-pair UX, with target geometry retained and duplicate `PREDICTED TOWED` text suppressed;
+- accepted strict unlimited-fuel Tow + unambiguous ordinary planetary warp-well resolution, including shared post-well tower/target position and post-well Intercept dependency propagation.
+
+Detailed runtime records:
+
+- `docs/handoff/2026-09-11-turn-review-blockers-production.md`
+- `docs/handoff/2026-09-12-true-partial-move-most-production.md`
+- `docs/handoff/2026-09-18-tow-ux-production-acceptance.md`
+- `docs/handoff/2026-09-20-unlimited-tow-warp-well-production-closure.md`
+
+## Stable baseline
+
+- Linked Planets.nu accounts and game-centric chooser with deep-linked `/intelboard/<observer>/<game>` routes.
+- Automatic discovery/private refresh for active games.
+- Public `loadinfo` / `loadscores` ingestion, score history, scoreboard and activity tracking.
+- Private `loadturn` ingestion and combined multi-account intel with provenance.
+- Fullscreen Pixi starmap with operational entity panes and cached Planets.nu hull/planet artwork.
+- Historical private snapshots and Time Machine / historical mode.
+- Historical ship tracks with lifecycle splitting for reused numeric ship IDs.
+- VCR ingestion, combat evidence and Battle Planner infrastructure.
+- Threat analysis and military attribution/read-time inference layers with visible evidence provenance.
+- Bounded Commander Intelligence foundation: backend-cached public player history, replacement-aware participation reconstruction, pairwise turn overlap API and Commander Dossier UI.
+- Communications with accepted private grouping / race-first display behavior.
+- Local ship, planet and starbase order drafts.
+- Unified movement-turn state and movement prediction across Tow, Move Most and Intercept.
+- Explicit Tow target draft field and related prediction plumbing.
+- Provenance-safe Turn Review separating current facts, prediction and UNKNOWN output.
+- Structured blocker provenance for uncertain movement output.
+- Verified true-partial normal-speed Move Most projection/fuel semantics.
+- Production deployment script with build/test/migration/health gates.
+
+## Evidence architecture
+
+The product must preserve these separations:
+
+```text
+factual observation
+    != historical observation merely because an ID matches
+    != analyst confirmation
+    != inference
+    != local order draft
+    != simulation / prediction
+```
+
+Additional invariants:
+
+- known zero != unknown;
+- missing != zero;
+- current fact != historical fact;
+- combat-time evidence != current object state;
+- hull capacity != factual current weapons;
+- snapshot neutronium != automatically movement-phase neutronium;
+- unsupported Host behavior fails closed.
+
+Combined intel is a factual aggregation layer. It may select the freshest known factual value per field while retaining source provenance; it must not silently turn inference or prediction into facts.
+
+## Movement state
+
+The unified movement implementation is already present; do not create a parallel prediction subsystem.
+
+Core concepts/files include:
+
+- `movement_turn_state.py`
+- `movement_prediction.py`
+- `movement_prediction_runtime.py`
+- `movement_prediction_unified_runtime.py`
+- `movement_prediction_blockers.py`
+- `movement_tow.py`
+- `movement_move_most.py`
+- `movement_intercept.py`
+- `movement_fuel.py` / `movement_fuel_policy.py`
+- frontend movement-prediction API/hook/state and order-vector scenes.
+
+The response contract explicitly marks movement output as derived and `host_final: false`.
+
+UNKNOWN movement output must preserve the reason boundary. The product distinguishes a missing phase-state input, a missing factual field, an unresolved dependency/order ambiguity, a lab-verified rule that has not yet been integrated safely, and a genuinely unsupported Host rule. This classification is provenance metadata only; it must never increase endpoint certainty by itself.
+
+The deployed blocker classes are:
+
+```text
+phase_state_required
+implementation_gap
+missing_fact
+dependency_unresolved
+order_ambiguity
+unsupported_host_rule
+```
+
+### Research status imported from planets-lab
+
+Ordinary Classic movement is now a comparatively mature research area. Historical differential work has supported true-partial normal movement geometry/fuel semantics and base finite-fuel Tow movement.
+
+Base finite-fuel Tow movement is supported in `planets-lab` as:
+
+`DOCUMENTED + CORPUS_OBSERVED + TESTED + DIFF_VERIFIED`.
+
+The cleaned historical discriminator supports:
+
+- post-Alchemy movement mass;
+- combined tower + towed-ship mass;
+- proportional distance reduction under insufficient Tow fuel.
+
+Production caveat: knowing the formula does not mean the product knows the Tow-phase fuel value. IntelBoard must continue to fail closed where only a non-phase-aligned snapshot is available.
+
+Finite-fuel Intercept likewise has a supported fuel formula in the lab evidence, but the production client must not treat snapshot neutronium as Intercept-phase fuel. A withheld endpoint in this case is a `phase_state_required` blocker, not evidence that the formula itself is unknown.
+
+True-partial normal-movement fuel semantics are supported by the lab evidence as `CORPUS_OBSERVED + TESTED + DIFF_VERIFIED`. The verified path charges a geometrically partial route for the continuous nominal one-turn leg before Host integer endpoint rasterization; positive insufficient fuel then prorates that one-turn leg and applies Host major/minor-axis projection.
+
+That exact **normal-speed Move Most** path is now deployed in production. It is covered by the historical `360690/T164/ship41` discriminator and no longer emits `unsupported_partial_waypoint` in the supported normal-speed path. The old enum/classifier value remains only for compatibility with older rows.
+
+Zero-fuel normal movement and insufficient-fuel Gravitonic movement remain outside the supported production subset and continue to fail closed. Tow and Intercept remain phase-state-sensitive even where their underlying fuel formulas are supported.
+
+Tow contests/chains/cycles, web-hit interruption details and other special interactions remain separately scoped and must not be smuggled into the base rule.
+
+### Current blocker-driven transfer
+
+The bounded unlimited-fuel Tow + ordinary planetary warp-well transfer is now
+deployed and runtime-accepted.
+
+Before the transfer, the current effective facade emitted 48 Tow rows: 34
+PREDICTED and 14 UNKNOWN, with the 14 UNKNOWN rows representing seven Tow pairs
+blocked solely by the Tow + warp-well guard.
+
+After deploy, the same read-only audit returned:
+
+```text
+prediction_items 48
+predicted_items  48
+unknown_items     0
+blocker_counts   {}
+```
+
+No overlapping-well ambiguity occurred in this current population. Finite-fuel
+Tow, Tow contests/chains/cycles, overlapping-well tie-breaks and special
+interaction ordering remain outside the promotion.
+
+### Movement acceptance
+
+The explicit Tow draft path is accepted for the currently scoped product
+workflow: target save, drafted-target precedence, mission switching,
+Tow/Intercept mutual exclusion, factual Tow visibility and resolved pair
+rendering have all been checked. The accepted map presentation uses a single
+`PREDICTED TOW` text label per pair while still drawing the target prediction
+geometry.
+
+## Combat / Battle Planner
+
+The low-level combat simulation and historical replay stack is materially advanced, but this is not yet a complete reconstructed Host combat phase.
+
+Two previously stale production formulas were independently rechecked against immutable downloaded historical games in `planets-lab` and corrected:
+
+### Federation recovery
+
+```text
+next_shield = min(100 - damage, shield + 25)
+```
+
+Corpus recheck: 48/48 corrected vs 38/48 old formula; 10 corrected-only discriminators and no old-only counterexample.
+
+### Native planet beam tech
+
+```text
+ROUND(SQRT(DP / 2))
+```
+
+Corpus recheck: 1036/1036 corrected vs 712/1036 old truncation; 324 corrected-only discriminators and no old-only counterexample in the ordinary Classic scope.
+
+Both corrected rules are deployed and have dedicated IntelBoard regression tests.
+
+Remaining Host-combat research is mostly orchestration rather than these formulas: engagement eligibility, opponent/queue selection, side assignment, priority/mission/diplomacy interactions, capture continuation, repair boundaries and planet/base participation order.
+
+## Private refresh / stale-state safety
+
+The production client refreshes running games automatically. A successful transport-level HTTP response is not considered proof that all private observers refreshed successfully.
+
+Current behavior:
+
+- total per-observer refresh failure is surfaced as a user-visible warning with concrete detail;
+- stale private snapshots are not fed into current-turn fact tables when their turn differs from canonical game turn;
+- an explicit mismatch warning shows canonical and factual turns;
+- map display of the stale factual snapshot remains allowed because the map identifies its own factual turn.
+
+The earlier stale-map incident caused by a stale proxy endpoint is considered operationally resolved. Reopen it only on a concrete regression.
+
+## Communications
+
+Communications remain closed absent regression. Accepted runtime/browser behavior includes canonical private grouping, race-first labels, the Robots three-message case and correct Message-vs-Reply handling for the historical unresolved root. Visual grouping never changes factual recipient provenance.
+
+## Threat / inference layer
+
+Existing threat analysis is useful product infrastructure and should be developed in place. It can combine historical mass observations, VCR-revealed weapons, constrained loadout possibilities, likely target/attack-group context, defender/base context, ETA and military-score evidence.
+
+Deterministic post-combat replay state and analyst-confirmed state may enrich analysis, but both remain separate from factual observations and must be labelled accordingly.
+
+## Planned Commander Intelligence and operator-map extension
+
+A separate product workstream is now recorded for intelligence about **players/commanders themselves**, derived from public Planets.nu history, plus richer operator-facing map layers.
+
+External references reviewed on 2026-09-21:
+
+- T-Continuum Analyser — historical-game/replay/statistics ideas and Host-settings-oriented corpus browsing;
+- chmeee.org Planets.nu tools — map filtering, spatial messages/events and notes as operator-UX precedents;
+- `derblondehans/player-affinity-tool` — public-game-history intersection, replacement/dead-player recovery from event logs and turn-overlap calculation.
+
+The bounded product direction is:
+
+- add a **Commander / Player Dossier** backed by public factual game history;
+- preserve replacement-aware participation intervals rather than treating mere membership in the same game as simultaneous play;
+- expose factual pairwise history such as shared games and overlapping turns;
+- keep any higher-level labels such as "historically associated", "likely coordinated" or "rival" explicitly inferential and separately provenance-tagged;
+- consider race-history, repeat-game and co-presence summaries only from attributable public observations;
+- add optional operator map filters/layers, spatial event markers and analyst annotations without mixing them into factual game state.
+
+This work must reuse the existing fact/provenance architecture. Public Planets.nu API responses are observations; derived relationship summaries are derived data; analyst notes are analyst-authored state; behavioral interpretation remains inference.
+
+Do **not** duplicate the existing Time Machine / historical snapshot / ship-track stack merely to imitate external replay tools. Do **not** treat third-party statistics as Host evidence. External implementations are references for product ideas only; source code must not be copied into this repository without an explicit license review.
+
+Detailed scope and proposed implementation boundaries are recorded in:
+
+- `docs/handoff/2026-09-21-external-tools-intelligence-workstreams.md`
+- `docs/handoff/2026-09-21-commander-intelligence-foundation.md`
+- `docs/handoff/2026-09-21-operator-map-layers-design.md`
+
+The first Commander slice now implements the factual/derived foundation. Public
+`games/list` and historical `loadinfo` payloads are cached backend-side;
+participation intervals preserve multiple join/drop periods and unknown bounds;
+pairwise overlap counts are exact only when reconstruction is complete.
+Behavioral inference remains absent by design.
+
+## Current next priorities
+
+1. Deploy and runtime/browser-accept the Commander Intelligence foundation, including one traceable pairwise overlap case.
+2. Preserve the Commander boundary: public fact/cache != derived overlap summary != analyst annotation != behavioral inference.
+3. Continue the independent operator-map visibility/event/annotation workstream on top of existing Time Machine/VCR/history infrastructure.
+4. Preserve phase-state and special-interaction fail-closed boundaries in movement; reopen accepted Tow only on concrete regression/evidence.
+5. Continue analyst/threat UX using existing factual, VCR and military-score provenance.
+6. Let `planets-lab` continue Host combat ordering research independently.
+
+## Deliberately not claimed
+
+- Full Host combat ordering is not reconstructed end-to-end.
+- Every race-specific ability is not reconstructed.
+- Full minefield lifecycle / RNG is not reconstructed.
+- Every Tow contest/chain/cycle interaction is not reconstructed.
+- A prediction is not factual just because it is deterministic.
+- A snapshot field is not assumed to be a phase-state field without evidence.
+- Upstream turn submission is not considered complete until an explicit review/write/reconciliation workflow is implemented and accepted.

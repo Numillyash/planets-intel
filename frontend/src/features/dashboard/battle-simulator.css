@@ -1,0 +1,477 @@
+.battle-sim-shell {
+    display: grid;
+    gap: 14px;
+}
+
+.battle-sim-builder,
+.battle-sim-editor,
+.battle-sim-controls,
+.battle-sim-result-panel {
+    border: 1px solid #22354b;
+    border-radius: 12px;
+    background: #0c1521;
+    overflow: hidden;
+}
+
+.battle-sim-builder,
+.battle-sim-editor,
+.battle-sim-result-panel {
+    padding: 16px;
+}
+
+.battle-sim-controls {
+    padding: 14px 16px;
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 18px;
+    flex-wrap: wrap;
+}
+
+.battle-sim-controls h3,
+.battle-sim-editor h3,
+.battle-sim-section-header h3,
+.battle-sim-result-panel h3,
+.battle-sim-stat-card h4 {
+    margin: 4px 0;
+}
+
+.battle-sim-section-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    align-items: start;
+    margin-bottom: 14px;
+}
+
+.battle-sim-section-header p {
+    margin: 5px 0 0;
+    color: #91a9c8;
+}
+
+.battle-sim-add-grid,
+.battle-sim-queues,
+.battle-sim-mean-grid,
+.battle-sim-sequence-stats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.battle-sim-add-grid {
+    margin-bottom: 10px;
+}
+
+.battle-sim-add-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+}
+
+.battle-sim-input,
+.battle-sim-select {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    border: 1px solid #314761;
+    border-radius: 7px;
+    background: #0b1725;
+    color: #eaf2ff;
+    min-height: 36px;
+    padding: 7px 9px;
+    font: inherit;
+    outline: none;
+}
+
+.battle-sim-input:hover,
+.battle-sim-select:hover {
+    border-color: #4f7097;
+}
+
+.battle-sim-input:focus,
+.battle-sim-select:focus {
+    border-color: #6aa9ea;
+    box-shadow: 0 0 0 2px rgba(72, 136, 209, 0.16);
+}
+
+.battle-sim-input:disabled,
+.battle-sim-select:disabled {
+    color: #8296ad;
+    background: #101925;
+    border-color: #273547;
+}
+
+.battle-sim-select option,
+.battle-sim-select optgroup {
+    background: #0b1725;
+    color: #eaf2ff;
+}
+
+.battle-sim-field {
+    min-width: 0;
+    display: grid;
+    gap: 5px;
+}
+
+.battle-sim-field > span,
+.battle-sim-toggle-field > span {
+    color: #91a9c8;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.battle-sim-field-wide {
+    grid-column: span 2;
+}
+
+.battle-sim-fields {
+    display: grid;
+    gap: 9px;
+}
+
+.battle-sim-fields-4 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.battle-sim-fields-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    margin-top: 10px;
+}
+
+/* The VCR-derived planner has exactly two editable ammo values per side.
+   Keep its cards balanced without changing the real three-toggle modifier
+   grid used by the standalone simulator. */
+.battle-sim-mean-grid .battle-sim-fields-3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.battle-sim-queue-column {
+    border: 1px solid #1e3146;
+    border-radius: 10px;
+    background: #08111c;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.battle-sim-queue-heading {
+    padding: 9px 11px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid #1b2d40;
+    color: #82a8d4;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.battle-sim-queue-list {
+    display: grid;
+    gap: 6px;
+    padding: 8px;
+}
+
+.battle-sim-queue-card {
+    appearance: none;
+    border: 1px solid #263d56;
+    border-radius: 8px;
+    background: #0e1b29;
+    color: #e8f1ff;
+    padding: 8px;
+    width: 100%;
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: center;
+    text-align: left;
+    cursor: pointer;
+}
+
+.battle-sim-queue-card:hover {
+    border-color: #46698f;
+    background: #102236;
+}
+
+.battle-sim-queue-card.is-selected {
+    border-color: #5a91cc;
+    background: #142a42;
+    box-shadow: inset 3px 0 0 #4b91db;
+}
+
+.battle-sim-order {
+    width: 25px;
+    height: 25px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: #172b41;
+    color: #9fc9f7;
+    font-weight: 700;
+}
+
+.battle-sim-queue-card-main {
+    min-width: 0;
+    display: grid;
+    gap: 2px;
+}
+
+.battle-sim-queue-card-main strong,
+.battle-sim-queue-card-main small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.battle-sim-queue-card-main small {
+    color: #8ea8c6;
+}
+
+.battle-sim-queue-actions {
+    display: flex;
+    gap: 3px;
+}
+
+.battle-sim-queue-actions button {
+    border: 1px solid #314761;
+    border-radius: 5px;
+    background: #122033;
+    color: #bcd5ef;
+    width: 27px;
+    height: 27px;
+    cursor: pointer;
+}
+
+.battle-sim-queue-actions button:disabled {
+    opacity: 0.35;
+    cursor: default;
+}
+
+.battle-sim-editor header {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.battle-sim-editor header small {
+    color: #809bb9;
+}
+
+.battle-sim-editor-body {
+    display: grid;
+    gap: 12px;
+}
+
+.battle-sim-warnings {
+    display: grid;
+    gap: 3px;
+    margin: 9px 0 12px;
+    padding: 8px 10px;
+    border: 1px solid rgba(214, 164, 85, 0.38);
+    border-radius: 7px;
+    background: rgba(82, 57, 22, 0.2);
+    color: #e6bd79;
+    font-size: 12px;
+}
+
+.battle-sim-warning {
+    margin-top: 10px;
+    padding: 9px 11px;
+    border: 1px solid rgba(222, 162, 73, 0.42);
+    border-radius: 7px;
+    background: rgba(77, 54, 21, 0.24);
+    color: #e8c27f;
+}
+
+.battle-sim-derived-strip {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.battle-sim-derived-strip > span {
+    border: 1px solid #20354b;
+    border-radius: 999px;
+    padding: 5px 9px;
+    background: #0a1420;
+    color: #8da7c4;
+    font-size: 11px;
+}
+
+.battle-sim-derived-strip strong {
+    color: #e4effc;
+    font-weight: 600;
+}
+
+.battle-sim-weapon-row {
+    display: grid;
+    grid-template-columns: minmax(120px, 0.65fr) minmax(220px, 1.5fr) minmax(120px, 0.65fr);
+    gap: 9px;
+    align-items: end;
+    padding-top: 10px;
+    border-top: 1px solid #1b2c3e;
+}
+
+.battle-sim-toggle-field {
+    min-height: 36px;
+    display: grid;
+    grid-template-columns: auto auto 1fr;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 9px;
+    border: 1px solid #314761;
+    border-radius: 7px;
+    background: #0b1725;
+}
+
+.battle-sim-toggle-field input {
+    accent-color: #4e94df;
+}
+
+.battle-sim-control-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: end;
+}
+
+.battle-sim-control-row .battle-sim-field {
+    width: 130px;
+}
+
+.battle-sim-result-panel {
+    border-color: rgba(84, 137, 192, 0.62);
+}
+
+.battle-sim-result-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.battle-sim-outcome-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 8px;
+    margin: 10px 0 12px;
+}
+
+.battle-sim-outcome-grid > div {
+    border: 1px solid #243c55;
+    border-radius: 8px;
+    background: #091522;
+    padding: 10px;
+    display: grid;
+    gap: 3px;
+}
+
+.battle-sim-outcome-grid strong {
+    font-size: 20px;
+    color: #dcecff;
+}
+
+.battle-sim-outcome-grid span {
+    text-transform: capitalize;
+}
+
+.battle-sim-outcome-grid small {
+    color: #819bb8;
+}
+
+.battle-sim-stat-card {
+    border: 1px solid #213750;
+    border-radius: 9px;
+    background: #0a1623;
+    padding: 11px;
+}
+
+.battle-sim-stat-card > span {
+    color: #7fa4ce;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.battle-sim-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.battle-sim-stat-grid > div {
+    display: grid;
+    gap: 2px;
+    padding: 7px;
+    border-radius: 6px;
+    background: #0d1d2c;
+}
+
+.battle-sim-stat-grid small {
+    color: #8099b5;
+}
+
+.battle-sim-stat-grid strong {
+    color: #e8f2ff;
+}
+
+.battle-sim-sequence-stats > div {
+    display: grid;
+    gap: 8px;
+}
+
+.battle-sim-engagement-list {
+    display: grid;
+    gap: 7px;
+    margin-top: 10px;
+}
+
+.battle-sim-engagement-list > div {
+    display: grid;
+    gap: 2px;
+    border: 1px solid #20364e;
+    border-radius: 7px;
+    background: #091522;
+    padding: 9px;
+}
+
+.battle-sim-engagement-list span {
+    color: #91a9c8;
+}
+
+.battle-sim-replay-player {
+    margin-top: 10px;
+}
+
+@media (max-width: 1050px) {
+    .battle-sim-add-grid,
+    .battle-sim-queues,
+    .battle-sim-mean-grid,
+    .battle-sim-sequence-stats {
+        grid-template-columns: 1fr;
+    }
+
+    .battle-sim-fields-4,
+    .battle-sim-fields-3 {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 680px) {
+    .battle-sim-fields-4,
+    .battle-sim-fields-3,
+    .battle-sim-mean-grid .battle-sim-fields-3,
+    .battle-sim-weapon-row {
+        grid-template-columns: 1fr;
+    }
+
+    .battle-sim-field-wide {
+        grid-column: auto;
+    }
+
+    .battle-sim-controls {
+        align-items: stretch;
+    }
+}

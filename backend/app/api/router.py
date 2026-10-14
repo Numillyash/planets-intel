@@ -2,8 +2,17 @@ from fastapi import APIRouter
 
 from app.api.routes.account_games import router as account_games_router
 from app.api.routes.auth import router as auth_router
+from app.api.routes.combat_replay import router as combat_replay_router
+from app.api.routes.commander_intelligence import router as commander_intelligence_router
+from app.api.routes.game_activity import router as game_activity_router
+from app.api.routes.game_intel_grants import router as game_intel_grants_router
 from app.api.routes.games import router as games_router
 from app.api.routes.health import router as health_router
+from app.api.routes.historical_intel import router as historical_intel_router
+from app.api.routes.intel_sharing import router as intel_sharing_router
+from app.api.routes.movement_prediction import router as movement_prediction_router
+from app.api.routes.order_drafts import router as order_drafts_router
+from app.api.routes.private_assets import router as private_assets_router
 from app.api.routes.private_intel import router as private_intel_router
 from app.api.routes.planets_accounts import (
     router as planets_accounts_router,
@@ -34,6 +43,21 @@ api_router.include_router(
 )
 
 api_router.include_router(
+    intel_sharing_router,
+    tags=["intel-sharing"],
+)
+
+api_router.include_router(
+    game_intel_grants_router,
+    tags=["game-intel-grants"],
+)
+
+api_router.include_router(
+    private_assets_router,
+    tags=["private-assets"],
+)
+
+api_router.include_router(
     games_router,
     tags=["games"],
 )
@@ -41,6 +65,36 @@ api_router.include_router(
 api_router.include_router(
     private_intel_router,
     tags=["private-intel"],
+)
+
+api_router.include_router(
+    game_activity_router,
+    tags=["communications"],
+)
+
+api_router.include_router(
+    historical_intel_router,
+    tags=["historical-intel"],
+)
+
+api_router.include_router(
+    order_drafts_router,
+    tags=["order-drafts"],
+)
+
+api_router.include_router(
+    movement_prediction_router,
+    tags=["movement-prediction"],
+)
+
+api_router.include_router(
+    combat_replay_router,
+    tags=["combat-replay"],
+)
+
+api_router.include_router(
+    commander_intelligence_router,
+    tags=["commander-intelligence"],
 )
 
 api_router.include_router(

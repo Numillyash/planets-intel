@@ -19,6 +19,7 @@ class PlanetsAccountResponse(BaseModel):
     id: int
     planets_username: str
     planets_account_id: int | None
+    profile_image_url: str | None = None
     is_active: bool
 
     last_verified_at: datetime | None

@@ -1,0 +1,249 @@
+param(
+    [int]$Port = 18088,
+    [string]$PreferredNetworkPrefix = "10.147.17.",
+    [string]$ApiTestUrl = "https://api.planets.nu/time?version=1",
+    [switch]$RunOnce,
+    [switch]$Uninstall
+)
+
+$ErrorActionPreference = "Stop"
+$TaskName = "Planets Intel Proxy Bridge Watchdog"
+$InstallRoot = Join-Path $env:ProgramData "PlanetsIntel"
+$InstalledScript = Join-Path $InstallRoot "proxy-bridge-watchdog.ps1"
+$InstalledLauncher = Join-Path $InstallRoot "proxy-bridge-watchdog.vbs"
+$LogRoot = Join-Path $InstallRoot "logs"
+$LogPath = Join-Path $LogRoot "proxy-bridge-watchdog.log"
+
+function Ensure-Dirs {
+    New-Item -ItemType Directory -Path $InstallRoot -Force | Out-Null
+    New-Item -ItemType Directory -Path $LogRoot -Force | Out-Null
+}
+
+function Rotate-Log {
+    if (-not (Test-Path $LogPath)) { return }
+    $file = Get-Item $LogPath
+    if ($file.Length -lt 2MB) { return }
+    $backup = $LogPath + ".1"
+    Remove-Item $backup -Force -ErrorAction SilentlyContinue
+    Move-Item $LogPath $backup -Force
+}
+
+function Log([string]$Message) {
+    Ensure-Dirs
+    Rotate-Log
+    $line = "{0} {1}" -f (Get-Date -Format "yyyy-MM-ddTHH:mm:ssK"), $Message
+    Add-Content -Path $LogPath -Value $line -Encoding UTF8
+    Write-Host $line
+}
+
+function Is-Admin {
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = New-Object Security.Principal.WindowsPrincipal($identity)
+    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+function Restart-Elevated([switch]$ForUninstall) {
+    if (-not $PSCommandPath) {
+        throw "Cannot determine script source path for elevation."
+    }
+
+    $quotedScript = '"' + $PSCommandPath.Replace('"', '""') + '"'
+    $quotedPrefix = '"' + $PreferredNetworkPrefix.Replace('"', '""') + '"'
+    $quotedUrl = '"' + $ApiTestUrl.Replace('"', '""') + '"'
+
+    $args = @(
+        "-NoLogo",
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-File", $quotedScript,
+        "-Port", [string]$Port,
+        "-PreferredNetworkPrefix", $quotedPrefix,
+        "-ApiTestUrl", $quotedUrl
+    )
+    if ($ForUninstall) {
+        $args += "-Uninstall"
+    }
+
+    Write-Host "Requesting administrator privileges for watchdog setup..."
+    Start-Process powershell.exe -Verb RunAs -ArgumentList ($args -join " ")
+    exit 0
+}
+
+function Fail([string]$Diagnosis, [string]$Message, [int]$Code) {
+    Log ("DIAGNOSIS={0} {1}" -f $Diagnosis, $Message)
+    exit $Code
+}
+
+function Get-ZeroTierListenAddress {
+    $adapters = Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object {
+        ($_.Name -match "ZeroTier" -or $_.InterfaceDescription -match "ZeroTier") -and $_.Status -eq "Up"
+    }
+    $addresses = @()
+    foreach ($adapter in $adapters) {
+        $addresses += Get-NetIPAddress -AddressFamily IPv4 -InterfaceIndex $adapter.ifIndex -ErrorAction SilentlyContinue | Select-Object InterfaceAlias, IPAddress, PrefixLength
+    }
+    $preferred = @($addresses | Where-Object { $_.IPAddress.StartsWith($PreferredNetworkPrefix) })
+    if ($preferred.Count -eq 1) { return $preferred[0].IPAddress }
+    if ($preferred.Count -gt 1) { Fail "zerotier_address_ambiguous" ("More than one ZeroTier address matches {0}" -f $PreferredNetworkPrefix) 20 }
+    if ($addresses.Count -eq 1) { return $addresses[0].IPAddress }
+    Fail "zerotier_address_missing" ("No unique active ZeroTier IPv4 address found; expected prefix {0}" -f $PreferredNetworkPrefix) 21
+}
+
+function Invoke-WslProxyTest {
+    $command = 'set +e; curl -sS --connect-timeout 6 --max-time 15 --proxy http://127.0.0.1:{0} "{1}" -o /dev/null; exit $?' -f $Port, $ApiTestUrl
+    & wsl.exe -u root -e bash -lc $command *> $null
+    return ($LASTEXITCODE -eq 0)
+}
+
+function Restart-WslTinyproxy {
+    Log "tinyproxy local probe failed; restarting WSL tinyproxy"
+    $command = "if command -v systemctl >/dev/null 2>&1; then systemctl restart tinyproxy; else service tinyproxy restart; fi"
+    & wsl.exe -u root -e bash -lc $command *> $null
+    if ($LASTEXITCODE -ne 0) { return $false }
+    Start-Sleep -Seconds 2
+    return (Invoke-WslProxyTest)
+}
+
+function Test-BridgeTcp([string]$ListenAddress) {
+    $listener = Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue | Where-Object {
+        $_.LocalAddress -eq $ListenAddress -or $_.LocalAddress -eq "0.0.0.0"
+    } | Select-Object -First 1
+    if (-not $listener) { return $false }
+    $result = Test-NetConnection -ComputerName $ListenAddress -Port $Port -InformationLevel Quiet -WarningAction SilentlyContinue
+    return [bool]$result
+}
+
+function Test-BridgeHttp([string]$ListenAddress) {
+    $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
+    if (-not $curl) { return $true }
+    & $curl.Source -sS --connect-timeout 6 --max-time 15 --proxy ("http://{0}:{1}" -f $ListenAddress, $Port) $ApiTestUrl -o NUL
+    return ($LASTEXITCODE -eq 0)
+}
+
+function Backup-BridgeState {
+    $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
+    $backup = Join-Path $InstallRoot ("backup-" + $stamp)
+    New-Item -ItemType Directory -Path $backup -Force | Out-Null
+    netsh interface portproxy dump | Out-File -Encoding utf8 (Join-Path $backup "portproxy.txt")
+    Get-NetFirewallRule -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -like "Planets Intel*" } | Format-List * | Out-File -Encoding utf8 (Join-Path $backup "firewall.txt")
+    Log ("bridge_state_backup={0}" -f $backup)
+}
+
+function Repair-Bridge([string]$ListenAddress) {
+    Backup-BridgeState
+    Log ("repairing Windows bridge listen={0}:{1}" -f $ListenAddress, $Port)
+    netsh interface portproxy delete v4tov4 listenaddress=$ListenAddress listenport=$Port *> $null
+    netsh interface portproxy add v4tov4 listenaddress=$ListenAddress listenport=$Port connectaddress=127.0.0.1 connectport=$Port *> $null
+    if ($LASTEXITCODE -ne 0) { return $false }
+    $firewallName = "Planets Intel ZeroTier Proxy $Port"
+    Get-NetFirewallRule -DisplayName $firewallName -ErrorAction SilentlyContinue | Remove-NetFirewallRule -ErrorAction SilentlyContinue
+    New-NetFirewallRule -DisplayName $firewallName -Direction Inbound -Action Allow -Protocol TCP -LocalAddress $ListenAddress -LocalPort $Port -Profile Any | Out-Null
+    $ipHelper = Get-Service -Name iphlpsvc -ErrorAction Stop
+    if ($ipHelper.Status -eq "Running") { Restart-Service -Name iphlpsvc -Force } else { Start-Service -Name iphlpsvc }
+    Start-Sleep -Seconds 2
+    return (Test-BridgeTcp $ListenAddress)
+}
+
+function Run-WatchdogOnce {
+    if (-not (Is-Admin)) { Fail "watchdog_requires_admin" "The watchdog must run elevated." 2 }
+    if (-not (Get-Command wsl.exe -ErrorAction SilentlyContinue)) { Fail "wsl_unavailable" "wsl.exe is unavailable." 3 }
+    $listenAddress = Get-ZeroTierListenAddress
+    Log ("check listen_address={0} port={1}" -f $listenAddress, $Port)
+    if (-not (Invoke-WslProxyTest)) {
+        if (-not (Restart-WslTinyproxy)) { Fail "wsl_proxy_repair_failed" "Tinyproxy is still unusable after restart." 4 }
+        Log "tinyproxy_repaired=true"
+    }
+    $tcpOk = Test-BridgeTcp $listenAddress
+    $httpOk = $false
+    if ($tcpOk) { $httpOk = Test-BridgeHttp $listenAddress }
+    if ($tcpOk -and $httpOk) { Log "DIAGNOSIS=windows_proxy_bridge_healthy"; exit 0 }
+    Log ("bridge unhealthy tcp={0} http={1}; attempting repair" -f $tcpOk, $httpOk)
+    if (-not (Repair-Bridge $listenAddress)) { Fail "windows_bridge_repair_failed" "Portproxy listener did not recover." 5 }
+    if (-not (Test-BridgeHttp $listenAddress)) { Fail "windows_bridge_http_still_failed" "TCP bridge recovered but HTTP proxy traversal still fails." 6 }
+    Log "DIAGNOSIS=windows_proxy_bridge_repaired"
+    exit 0
+}
+
+function Install-Watchdog {
+    if (-not (Is-Admin)) {
+        if (-not $PSCommandPath) {
+            Fail "installer_path_unknown" "Cannot determine script source path." 11
+        }
+
+        $elevatedArgs = @(
+            "-NoLogo",
+            "-NoProfile",
+            "-ExecutionPolicy", "Bypass",
+            "-File", ('"{0}"' -f $PSCommandPath),
+            "-Port", [string]$Port,
+            "-PreferredNetworkPrefix", ('"{0}"' -f $PreferredNetworkPrefix),
+            "-ApiTestUrl", ('"{0}"' -f $ApiTestUrl)
+        )
+
+        Write-Host "Requesting administrator privileges for watchdog setup..."
+        Start-Process powershell.exe -Verb RunAs -ArgumentList ($elevatedArgs -join " ")
+        exit 0
+    }
+
+    Ensure-Dirs
+    if (-not $PSCommandPath) {
+        Fail "installer_path_unknown" "Cannot determine script source path." 11
+    }
+
+    Copy-Item -LiteralPath $PSCommandPath -Destination $InstalledScript -Force
+
+    $launcherCommand = (
+        'powershell.exe -NoLogo -NonInteractive -NoProfile -ExecutionPolicy Bypass ' +
+        '-File ""{0}"" -RunOnce -Port {1} -PreferredNetworkPrefix ""{2}"" -ApiTestUrl ""{3}""'
+    ) -f $InstalledScript, $Port, $PreferredNetworkPrefix, $ApiTestUrl
+
+    $launcherContent = @(
+        'Set shell = CreateObject("WScript.Shell")'
+        ('rc = shell.Run("{0}", 0, True)' -f $launcherCommand.Replace('"', '""'))
+        'WScript.Quit rc'
+    )
+    Set-Content -Path $InstalledLauncher -Value $launcherContent -Encoding ASCII
+
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent().Name
+    $action = New-ScheduledTaskAction -Execute "$env:WINDIR\System32\wscript.exe" -Argument ('//B //NoLogo "{0}"' -f $InstalledLauncher)
+    $logon = New-ScheduledTaskTrigger -AtLogOn -User $identity
+    $repeat = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 2) -RepetitionDuration (New-TimeSpan -Days 3650)
+    $principal = New-ScheduledTaskPrincipal -UserId $identity -LogonType Interactive -RunLevel Highest
+    $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -MultipleInstances IgnoreNew
+
+    Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger @($logon, $repeat) -Principal $principal -Settings $settings -Force | Out-Null
+
+    $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction Stop
+    $taskAction = $task.Actions | Select-Object -First 1
+    Log ("watchdog_installed task={0} user={1} execute={2} arguments={3}" -f $TaskName, $identity, $taskAction.Execute, $taskAction.Arguments)
+
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $InstalledScript -RunOnce -Port $Port -PreferredNetworkPrefix $PreferredNetworkPrefix -ApiTestUrl $ApiTestUrl
+    $initialRc = $LASTEXITCODE
+    if ($initialRc -ne 0) {
+        Fail "watchdog_installed_initial_repair_failed" ("Task installed, but initial health/repair run failed rc={0}. See {1}" -f $initialRc, $LogPath) 12
+    }
+
+    Log ("DIAGNOSIS=windows_proxy_watchdog_installed log={0}" -f $LogPath)
+    exit 0
+}
+
+function Uninstall-Watchdog {
+    if (-not (Is-Admin)) {
+        if (-not $PSCommandPath) {
+            Fail "installer_path_unknown" "Cannot determine script source path." 31
+        }
+        $elevatedArgs = @("-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ('"{0}"' -f $PSCommandPath), "-Uninstall")
+        Start-Process powershell.exe -Verb RunAs -ArgumentList ($elevatedArgs -join " ")
+        exit 0
+    }
+
+    Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction SilentlyContinue
+    Remove-Item $InstalledScript -Force -ErrorAction SilentlyContinue
+    Remove-Item $InstalledLauncher -Force -ErrorAction SilentlyContinue
+    Log "DIAGNOSIS=windows_proxy_watchdog_uninstalled"
+    exit 0
+}
+
+if ($Uninstall) { Uninstall-Watchdog }
+if ($RunOnce) { Run-WatchdogOnce }
+Install-Watchdog

@@ -3,6 +3,7 @@ import type {
     ChangePasswordResponse,
     CurrentUserResponse,
     GameDetailsResponse,
+    LatestPrivateIntelResponse,
     LoginResponse,
     LogoutResponse,
     PlanetsAccountResponse,
@@ -10,7 +11,35 @@ import type {
     ScoreHistoryResponse,
     UnlinkPlanetsAccountResponse,
 } from "../types/api";
+import type {
+    CombinedPrivateIntelResponse,
+    DashboardIntelShareResponse,
+    DashboardIntelShareRevokeResponse,
+    DashboardIntelSharesResponse,
+} from "../types/intel";
 
+export interface AccessiblePrivateIntelRefreshResult {
+    linked_account_id: number;
+    planets_username: string;
+    status: "refreshed" | "cached" | "skipped" | "failed";
+    detail: string | null;
+}
+
+export interface AccessiblePrivateIntelRefreshResponse {
+    game_id: number;
+    turn: number;
+    public_sync: {
+        status: string;
+        source: string;
+        detail: string | null;
+    };
+    accounts: number;
+    refreshed: number;
+    cached: number;
+    skipped: number;
+    failed: number;
+    results: AccessiblePrivateIntelRefreshResult[];
+}
 
 async function parseErrorMessage(
     response: Response,
@@ -30,7 +59,6 @@ async function parseErrorMessage(
     return `${response.status} ${response.statusText}`;
 }
 
-
 async function apiGet<T>(url: string): Promise<T> {
     const response = await fetch(url, {
         credentials: "same-origin",
@@ -47,7 +75,6 @@ async function apiGet<T>(url: string): Promise<T> {
 
     return response.json() as Promise<T>;
 }
-
 
 async function apiGetOptional<T>(
     url: string,
@@ -72,7 +99,6 @@ async function apiGetOptional<T>(
     return response.json() as Promise<T>;
 }
 
-
 export async function getCurrentUser(): Promise<CurrentUserResponse | null> {
     const response = await fetch("/api/auth/me", {
         credentials: "same-origin",
@@ -93,7 +119,6 @@ export async function getCurrentUser(): Promise<CurrentUserResponse | null> {
 
     return response.json() as Promise<CurrentUserResponse>;
 }
-
 
 export async function login(
     username: string,
@@ -123,7 +148,6 @@ export async function login(
     return payload.user;
 }
 
-
 export async function logout(): Promise<void> {
     const response = await fetch("/api/auth/logout", {
         method: "POST",
@@ -145,7 +169,6 @@ export async function logout(): Promise<void> {
         throw new Error("Logout failed");
     }
 }
-
 
 export async function changePassword(
     currentPassword: string,
@@ -177,13 +200,11 @@ export async function changePassword(
     }
 }
 
-
 export function getPlanetsAccounts(): Promise<PlanetsAccountsResponse> {
     return apiGet<PlanetsAccountsResponse>(
         "/api/planets/accounts",
     );
 }
-
 
 export async function linkPlanetsAccount(
     username: string,
@@ -210,7 +231,6 @@ export async function linkPlanetsAccount(
 
     return response.json() as Promise<PlanetsAccountResponse>;
 }
-
 
 export async function unlinkPlanetsAccount(
     accountId: number,
@@ -239,6 +259,93 @@ export async function unlinkPlanetsAccount(
     }
 }
 
+export function getDashboardIntelShares(): Promise<DashboardIntelSharesResponse> {
+    return apiGet<DashboardIntelSharesResponse>(
+        "/api/intel/shares",
+    );
+}
+
+export async function requestDashboardIntelShare(
+    sourceAccountId: number,
+    targetPlanetsUsername: string,
+): Promise<DashboardIntelShareResponse> {
+    const response = await fetch("/api/intel/shares", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+            source_account_id: sourceAccountId,
+            target_planets_username: targetPlanetsUsername,
+        }),
+    });
+
+    if (!response.ok) {
+        throw new Error(
+            await parseErrorMessage(response),
+        );
+    }
+
+    return response.json() as Promise<DashboardIntelShareResponse>;
+}
+
+export async function acceptDashboardIntelShare(
+    shareId: number,
+    accountId: number,
+): Promise<DashboardIntelShareResponse> {
+    const response = await fetch(
+        `/api/intel/shares/${shareId}/accept`,
+        {
+            method: "POST",
+            credentials: "same-origin",
+            headers: {
+                Accept: "application/json",
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                account_id: accountId,
+            }),
+        },
+    );
+
+    if (!response.ok) {
+        throw new Error(
+            await parseErrorMessage(response),
+        );
+    }
+
+    return response.json() as Promise<DashboardIntelShareResponse>;
+}
+
+export async function revokeDashboardIntelShare(
+    shareId: number,
+    accountId: number,
+): Promise<void> {
+    const response = await fetch(
+        `/api/intel/shares/${shareId}?account_id=${accountId}`,
+        {
+            method: "DELETE",
+            credentials: "same-origin",
+            headers: {
+                Accept: "application/json",
+            },
+        },
+    );
+
+    if (!response.ok) {
+        throw new Error(
+            await parseErrorMessage(response),
+        );
+    }
+
+    const payload = await response.json() as DashboardIntelShareRevokeResponse;
+
+    if (!payload.success) {
+        throw new Error("Failed to revoke dashboard intel share");
+    }
+}
 
 export function getAccountGames(
     accountId: number,
@@ -248,7 +355,6 @@ export function getAccountGames(
     );
 }
 
-
 export function getGame(
     gameId: number,
 ): Promise<GameDetailsResponse> {
@@ -257,11 +363,95 @@ export function getGame(
     );
 }
 
-
 export function getScoreHistory(
     gameId: number,
 ): Promise<ScoreHistoryResponse | null> {
     return apiGetOptional<ScoreHistoryResponse>(
         `/api/games/${gameId}/scores/history`,
+    );
+}
+
+export function getLatestPrivateIntel(
+    gameId: number,
+    linkedAccountId: number,
+): Promise<LatestPrivateIntelResponse | null> {
+    return apiGetOptional<LatestPrivateIntelResponse>(
+        `/api/games/${gameId}/private-intel/latest?linked_account_id=${linkedAccountId}`,
+    );
+}
+
+export async function refreshPrivateIntel(
+    gameId: number,
+    linkedAccountId: number,
+): Promise<LatestPrivateIntelResponse> {
+    const response = await fetch(
+        `/api/games/${gameId}/private-intel/refresh?linked_account_id=${linkedAccountId}`,
+        {
+            method: "POST",
+            credentials: "same-origin",
+            headers: {
+                Accept: "application/json",
+            },
+        },
+    );
+
+    if (!response.ok) {
+        throw new Error(
+            `Private intel refresh failed: ${await parseErrorMessage(response)}`,
+        );
+    }
+
+    return response.json() as Promise<LatestPrivateIntelResponse>;
+}
+
+export async function refreshAccessiblePrivateIntel(
+    gameId: number,
+): Promise<AccessiblePrivateIntelRefreshResponse> {
+    const response = await fetch(
+        `/api/games/${gameId}/private-intel/refresh-accessible`,
+        {
+            method: "POST",
+            credentials: "same-origin",
+            headers: {
+                Accept: "application/json",
+            },
+        },
+    );
+
+    if (!response.ok) {
+        throw new Error(
+            `Private intel auto-refresh failed: ${await parseErrorMessage(response)}`,
+        );
+    }
+
+    const payload = await response.json() as AccessiblePrivateIntelRefreshResponse;
+    const eligibleAccounts = Math.max(0, payload.accounts - payload.skipped);
+    const noFreshOrCachedResult = payload.refreshed === 0 && payload.cached === 0;
+
+    if (
+        eligibleAccounts > 0 &&
+        payload.failed >= eligibleAccounts &&
+        noFreshOrCachedResult
+    ) {
+        const failureDetails = payload.results
+            .filter((item) => item.status === "failed")
+            .map((item) =>
+                `${item.planets_username}: ${item.detail ?? "private synchronization failed"}`,
+            )
+            .join("; ");
+        throw new Error(
+            `Private intel auto-refresh failed for all accessible observers${failureDetails ? `: ${failureDetails}` : ""}`,
+        );
+    }
+
+    return payload;
+}
+
+export function getCombinedPrivateIntel(
+    gameId: number,
+    linkedAccountId: number,
+): Promise<CombinedPrivateIntelResponse | null> {
+    return apiGetOptional<CombinedPrivateIntelResponse>(
+        `/api/games/${gameId}/private-intel/combined?linked_account_id=${linkedAccountId}`,
     );
 }

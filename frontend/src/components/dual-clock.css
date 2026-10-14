@@ -1,0 +1,137 @@
+.global-utility-strip {
+    position: relative;
+    z-index: 40;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: start;
+    width: min(1500px, calc(100% - 40px));
+    min-height: 58px;
+    margin: 0 auto;
+    padding-top: 7px;
+}
+
+.global-time-strip {
+    grid-column: 2;
+    grid-row: 1;
+    display: flex;
+    justify-content: center;
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    pointer-events: none;
+}
+
+.global-page-nav-slot {
+    grid-column: 3;
+    grid-row: 1;
+    display: flex;
+    min-width: 0;
+    justify-content: flex-end;
+    padding-top: 5px;
+    pointer-events: auto;
+}
+
+/* The starmap owns the whole viewport and has its own map HUD. The utility
+ * strip belongs to normal page flow only, so it disappears completely while
+ * the fullscreen starmap is the active surface. */
+body:has(.intel-map-panel):not(.operational-page-dashboard-open) .global-utility-strip {
+    display: none;
+}
+
+.dual-clock {
+    display: flex;
+    align-items: stretch;
+    gap: 6px;
+    min-width: 0;
+}
+
+.dual-clock > span {
+    display: grid;
+    min-width: 118px;
+    gap: 1px;
+    padding: 6px 9px;
+    border: 1px solid #25394f;
+    border-radius: 7px;
+    background: rgba(8, 18, 29, 0.94);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+    text-align: right;
+}
+
+.dual-clock small {
+    overflow: hidden;
+    color: #7088a3;
+    font-size: 0.54rem;
+    letter-spacing: 0.07em;
+    text-overflow: ellipsis;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.dual-clock strong {
+    color: #dceaf7;
+    font-variant-numeric: tabular-nums;
+    font-size: 0.82rem;
+    letter-spacing: 0.03em;
+}
+
+.dual-clock em {
+    color: #66819d;
+    font-size: 0.52rem;
+    font-style: normal;
+    font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 1100px) {
+    .global-utility-strip {
+        grid-template-columns: minmax(0, 1fr);
+        row-gap: 6px;
+        min-height: 0;
+        padding-bottom: 7px;
+    }
+
+    .global-time-strip {
+        grid-column: 1;
+        grid-row: 1;
+    }
+
+    .global-page-nav-slot {
+        grid-column: 1;
+        grid-row: 2;
+        justify-content: center;
+        padding-top: 0;
+    }
+}
+
+@media (max-width: 900px) {
+    .dual-clock {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .dual-clock > span {
+        min-width: 105px;
+    }
+}
+
+@media (max-width: 620px) {
+    .global-utility-strip {
+        width: calc(100% - 24px);
+        padding-top: 6px;
+    }
+
+    .global-time-strip {
+        width: 100%;
+    }
+
+    .dual-clock {
+        width: 100%;
+        justify-content: stretch;
+    }
+
+    .dual-clock > span {
+        min-width: 0;
+        flex: 1 1 0;
+        text-align: left;
+    }
+}

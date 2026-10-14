@@ -11,17 +11,24 @@ import {
 import type {
     PlanetsAccountResponse,
 } from "../../types/api";
+import { IntelSharingSettings } from "./IntelSharingSettings";
 
 
 interface AccountSettingsProps {
     accounts: PlanetsAccountResponse[];
     onAccountsChanged: () => void;
+    onSharesChanged?: () => void;
 }
 
 
 export function AccountSettings({
     accounts,
     onAccountsChanged,
+    onSharesChanged = () => {
+        window.dispatchEvent(
+            new Event("dashboard-intel-shares-changed"),
+        );
+    },
 }: AccountSettingsProps) {
     const [planetsUsername, setPlanetsUsername] =
         useState("");
@@ -91,6 +98,7 @@ export function AccountSettings({
                 account.id
             );
             onAccountsChanged();
+            onSharesChanged();
         } catch (reason) {
             setLinkError(
                 reason instanceof Error
@@ -287,6 +295,11 @@ export function AccountSettings({
                         </button>
                     </form>
                 </section>
+
+                <IntelSharingSettings
+                    accounts={accounts}
+                    onSharesChanged={onSharesChanged}
+                />
 
                 <section>
                     <h2>Local password</h2>

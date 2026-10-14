@@ -2,27 +2,14 @@ import type {
     PlayerInfo,
     ScoreHistoryItem,
 } from "../../types/api";
+import { raceName } from "../../lib/races";
 
 
 interface PlayersTableProps {
     players: PlayerInfo[];
     latestScores: Map<number, ScoreHistoryItem>;
+    snapshotTurn?: number | null;
 }
-
-
-const raceNames: Record<number, string> = {
-    1: "Federation",
-    2: "Lizards",
-    3: "Bird Men",
-    4: "Fascists",
-    5: "Privateers",
-    6: "Cyborg",
-    7: "Crystal People",
-    8: "Evil Empire",
-    9: "Robots",
-    10: "Rebels",
-    11: "Colonies",
-};
 
 
 function formatDelta(
@@ -43,13 +30,20 @@ function formatDelta(
 export function PlayersTable({
     players,
     latestScores,
+    snapshotTurn = null,
 }: PlayersTableProps) {
+    const historical = snapshotTurn !== null;
+
     return (
         <section className="panel">
             <div className="panel-header">
                 <div>
                     <h2>Players</h2>
-                    <p>Current public score snapshot</p>
+                    <p>
+                        {historical
+                            ? `Public score snapshot · turn ${snapshotTurn}`
+                            : "Current public score snapshot"}
+                    </p>
                 </div>
             </div>
 
@@ -74,10 +68,14 @@ export function PlayersTable({
                             const score = latestScores.get(
                                 player.slot_id,
                             );
+                            const scoreShips = score === undefined
+                                ? null
+                                : score.capital_ships + score.freighters;
 
-                            const isDead =
+                            const isDead = !historical && (
                                 player.status !== 1 ||
-                                player.username === "dead";
+                                player.username === "dead"
+                            );
 
                             return (
                                 <tr
@@ -97,24 +95,22 @@ export function PlayersTable({
                                     </td>
 
                                     <td>
-                                        {raceNames[
-                                            player.race_id
-                                        ] ??
-                                            `Race ${player.race_id}`}
+                                        {raceName(player.race_id)}
                                     </td>
 
                                     <td>
                                         {score?.planets ??
-                                            player.planets}
+                                            (historical ? "—" : player.planets)}
                                     </td>
 
                                     <td>
-                                        {player.ships}
+                                        {scoreShips ??
+                                            (historical ? "—" : player.ships)}
                                     </td>
 
                                     <td>
                                         {score?.starbases ??
-                                            player.starbases}
+                                            (historical ? "—" : player.starbases)}
                                     </td>
 
                                     <td className="numeric-important">
@@ -143,9 +139,11 @@ export function PlayersTable({
                                     </td>
 
                                     <td>
-                                        {player.turn_ready
-                                            ? "Ready"
-                                            : "—"}
+                                        {historical
+                                            ? "—"
+                                            : player.turn_ready
+                                                ? "Ready"
+                                                : "—"}
                                     </td>
                                 </tr>
                             );

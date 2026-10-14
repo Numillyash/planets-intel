@@ -1,0 +1,371 @@
+# Planets Intel — Current Handoff
+
+**2026-10-14 update:** Read `docs/handoff/2026-10-14-p1-mainline-security-and-consolidation.md` first. P0 is deployed at `88a3282649c7b6b8ca42d4271d765855ffc7ace9`; P1 consent ledger at `14d82068bb741c36b2c67c5cc3fbf1ef1ce0a957` is not yet deployed. Cross-player private sharing remains blocked. Historical September runtime checkpoints below are preserved as history, not current production state.
+
+Updated: 2026-09-27
+
+GitHub is the source of truth. Active development remains on `feature/operational-ui`. A fresh chat must inspect the actual branch HEAD before making current-code claims or writes, then read this file together with `NEW_CHAT_START.md`, `PROJECT_STATE.md` and the newest dated handoff under `docs/handoff/`.
+
+## Repository / runtime
+
+- Repository: `Numillyash/planets-intel`
+- Active branch: `feature/operational-ui`
+- Server checkout: `/opt/planets-intel`
+- Health endpoint: `http://127.0.0.1:18080/api/health`
+- Production backend image embeds the React/Vite frontend.
+- Deployment entrypoint: `/opt/planets-intel/scripts/deploy/production.sh`
+- Never infer production HEAD from chat history; inspect it before every deploy.
+
+Production runtime checkpoint at this handoff:
+
+```text
+d0aca955914db38abf6d49cac61a8df7e0de4b82
+```
+
+Production was deployed successfully at that exact SHA on 2026-09-21:
+
+```text
+Build: OK
+Backend tests: OK (306)
+DB: 0018_tow_target_ship_id (head)
+Backend recreate: OK
+Health: {"status":"ok","service":"planets-intel-backend"}
+DEPLOY OK
+Log: /opt/planets-intel/logs/deploy/20260921-122316-production.log
+```
+
+Active GitHub development may be ahead of this production checkpoint. Always
+inspect the actual `feature/operational-ui` HEAD separately before code work.
+
+Latest Commander work:
+`docs/handoff/2026-09-21-commander-intelligence-foundation.md`.
+
+Latest external-tool/product reference catalog:
+`docs/handoff/2026-09-27-external-planets-tools-reference-catalog.md`.
+
+## Current product state
+
+### Private intel ingestion / refresh
+
+The earlier stale-map incident was traced to a stale `PLANETSNU_PROXY_URL`, not to malformed historical requests from this project. Private sync was restored after the proxy was corrected.
+
+Current safety behavior:
+
+- canonical roster status `1` is the active-player state for current private refresh; a matched observer with another status remains historical membership evidence but is skipped for current `loadturn` refresh because Planets.nu may still allow account login while denying the dead/removed game slot current-turn access;
+- a stale snapshot for such an inactive/dead selected observer is presented as an observer archive, not as an unexplained transport failure; the old snapshot is never relabelled as the current turn, while the combined map may still use other authorized current observers;
+- total accessible-private refresh failure is surfaced to the frontend even when the refresh endpoint itself returns HTTP 200;
+- concrete server failure detail is retained for the user-facing warning;
+- if canonical game turn and factual private snapshot turn differ, current-turn private fact tables fail closed instead of relabelling stale facts as current;
+- the mismatch warning names both turns;
+- the map may still show the factual stale snapshot because the map labels its snapshot turn explicitly.
+
+The stale-turn warning is deployed. An intentionally reproduced browser mismatch has not yet been recorded as separate visual acceptance.
+
+### Historical / provenance behavior
+
+Historical mode is read-only and uses stored turn-indexed evidence. Current mutable metadata is not silently substituted for historical state where a historical snapshot does not exist.
+
+Combined intel preserves source/batch/turn provenance and uses the freshest-known factual value per field. Visual aggregation must never rewrite factual recipient or observer provenance.
+
+### Communications
+
+Communications are considered CLOSED absent regression:
+
+- canonical private grouping and race-first labels were browser/runtime-confirmed;
+- Robots (`spaceshepherd`) showed 3 messages in the acceptance case;
+- unresolved root `#7649938` renders as `Message`, not `Reply`;
+- visual thread merge must not change factual recipient provenance.
+
+### Turn Review / movement provenance
+
+The first production Turn Review / evidence ledger is deployed. It uses the existing unified movement pipeline rather than a parallel simulator and keeps factual observations, local planning state and derived movement output separate.
+
+Movement rows expose why an endpoint is UNKNOWN through structured blocker provenance:
+
+- `phase_state_required` — the formula is supported, but the factual state at that Host phase is not available;
+- `implementation_gap` — the rule is supported by the lab evidence but has not yet been integrated safely into that production path;
+- `missing_fact` — a required factual input is missing or unknown;
+- `dependency_unresolved` — the row depends on an earlier unresolved movement result;
+- `order_ambiguity` — Host ordering/target selection is ambiguous;
+- `unsupported_host_rule` — the applicable Host behavior remains outside the supported model.
+
+The blocker classification is provenance metadata only. It must never turn an uncertain endpoint into a certain one.
+
+### Movement / local order drafts
+
+A unified movement-prediction pipeline already exists. Do not rebuild it from scratch.
+
+Relevant implementation includes:
+
+- `movement_turn_state.py`
+- `movement_prediction.py`
+- `movement_prediction_runtime.py`
+- `movement_prediction_unified_runtime.py`
+- `movement_prediction_blockers.py`
+- Tow / Move Most / Intercept phase services
+- local ship / planet / starbase order drafts
+- frontend movement-prediction API, map hook, prediction state and draft panels.
+
+Facts, local drafts and derived predictions remain separate. Prediction output is explicitly non-Host-final.
+
+Tow draft/browser acceptance is now closed for the currently scoped workflow.
+Target selection/save, drafted-target precedence, mission switching, Tow/Intercept
+mutual exclusion, factual Tow visibility and resolved pair rendering were all
+runtime/browser checked. The accepted map UX uses one `PREDICTED TOW` text
+label per resolved Tow pair while retaining the target prediction geometry;
+`PREDICTED TOWED` is intentionally suppressed as duplicate text.
+
+### Current blocker inventory — 2026-09-20
+
+The pre-transfer read-only inventory found 48 effective Tow rows: 34 PREDICTED
+and 14 UNKNOWN. The 14 UNKNOWN rows were exactly seven Tow pairs blocked by the
+old Tow + planetary warp-well guard, all in unlimited-fuel games.
+
+After the bounded unlimited-fuel Tow warp-well transfer was deployed at
+`88a420d334710b6e756f10b52d35a2c303846bdc`, the same inventory was rerun:
+
+```text
+prediction_items 48
+predicted_items  48
+unknown_items     0
+blocker_counts   {}
+```
+
+The seven prior pairs therefore resolved exactly as intended. No overlapping
+warp-well ambiguity was present in the current runtime population.
+
+This does not prove that every possible stored Move Most/Intercept/Tow state is
+solved; the diagnostic measures rows emitted by the effective production facade.
+
+Detailed checkpoints:
+- `docs/handoff/2026-09-20-movement-blocker-runtime-and-tow-warp-well-transfer.md`
+- `docs/handoff/2026-09-20-unlimited-tow-warp-well-production-closure.md`
+
+### Movement research reconciliation
+
+The adjacent research repository `Numillyash/planets-lab` is the evidence source for reconstructed Host mechanics. Always inspect its actual `main` before relying on a checkpoint SHA from documentation.
+
+Base finite-fuel Tow movement in ordinary Classic/Nu scope is supported as:
+
+`DOCUMENTED + CORPUS_OBSERVED + TESTED + DIFF_VERIFIED`.
+
+The cleaned historical discriminator supports post-Alchemy combined tower+towed movement mass and proportional insufficient-fuel movement.
+
+Important production boundary: this does **not** automatically make every finite-fuel Tow prediction safe in IntelBoard. The product still must know the actual Tow-phase fuel state. Snapshot neutronium is not automatically movement-phase neutronium. Finite-fuel Tow therefore remains fail-closed when that phase-aligned state is unavailable.
+
+For normal movement, the lab evidence supports the continuous nominal one-turn fuel basis for true-partial Move Most / Intercept as:
+
+`CORPUS_OBSERVED + TESTED + DIFF_VERIFIED`.
+
+The true-partial **normal-speed Move Most** production path is now integrated and deployed. For a waypoint beyond one-turn range it:
+
+- uses the Host major/minor-axis integer endpoint projection;
+- charges fuel for the continuous nominal one-turn leg before endpoint rasterization;
+- under positive insufficient fuel, prorates that nominal one-turn leg and then applies the same Host projection;
+- keeps missing movement-mass/engine facts fail-closed;
+- keeps zero-fuel and insufficient-fuel Gravitonic movement outside the supported subset.
+
+The historical `360690/T164/ship41` discriminator is locked in production regression coverage: origin `(1949,2950)`, waypoint `(2008,3067)`, W9, movement mass 517 KT, snapshot fuel 11 KT, nominal 81-ly fuel cost 41 KT -> endpoint `(1959,2969)`.
+
+`unsupported_partial_waypoint` remains only as a compatibility enum/classifier value for older rows. The supported normal-speed Move Most path no longer emits it.
+
+Finite-fuel Intercept likewise has a supported fuel formula, but snapshot neutronium is not automatically Intercept-phase fuel. Those withheld endpoints are `phase_state_required` rather than evidence that the formula is unknown.
+
+Tow contests/chains/cycles, web-hit interruption details and other special interactions remain separately scoped and must not be smuggled into the base rule.
+
+### Battle Planner / combat rules
+
+Two previously stale IntelBoard formulas were independently rechecked against immutable downloaded historical games in `planets-lab`, then corrected and deployed:
+
+- Federation recovery: `min(100 - damage, shield + 25)`;
+- native planet beam tech: nearest-integer `ROUND(SQRT(DP / 2))`.
+
+Cross-repo corpus recheck:
+
+- Federation: corrected 48/48 vs old 38/48; 10 corrected-only discriminators; 0 old-only;
+- native beam tech: corrected 1036/1036 vs old 712/1036; 324 corrected-only discriminators; 0 old-only.
+
+The corrected rules are isolated in `battle_simulator_verified_rules.py` and exercised by dedicated regression tests.
+
+Do not infer that the whole Host combat orchestration is solved. Low-level combat resolution is materially advanced, while engagement selection/order/side assignment and several Host-order interactions remain research work in `planets-lab`.
+
+### Threat / military intelligence
+
+The existing product already contains useful intelligence infrastructure and should be extended rather than replaced:
+
+- threat analysis from historical mass, VCR-revealed weapons and constrained loadout hypotheses;
+- attack-group / target-planet context;
+- defender and starbase context;
+- military score attribution;
+- deterministic post-combat replay state where inputs are sufficient;
+- analyst-confirmed state layered separately from factual observations.
+
+Inference must remain visibly distinct from facts.
+
+### Commander / Player Intelligence
+
+The first bounded Commander Intelligence vertical slice is implemented on the
+active development branch and is pending production deployment/acceptance.
+
+It reuses the existing public Planets.nu adapter and canonical current-game
+roster, while adding backend-side transport caches for public player history and
+historical `loadinfo` responses. Replacement-aware participation intervals are
+derived at read time from public join/drop events with roster fallback. Unknown
+interval edges remain UNKNOWN.
+
+Pairwise output separates:
+
+```text
+shared game
+!= proven simultaneous participation
+!= behavioral relationship
+```
+
+Exact overlapping-turn totals are exposed only when every relevant interval
+bound is known. Partial reconstructions expose bounded known overlap separately.
+
+New API/UI surface:
+
+```text
+GET /api/games/{game_id}/commander-intelligence
+Game Dashboard -> Commander intel
+```
+
+The result is explicitly marked
+`analysis_kind=derived_historical_summary`,
+`behavioral_inference=false` and `facts_unchanged=true`.
+
+Migration `0019_commander_intel_cache` adds only public transport-cache tables;
+it does not materialize alliances, affinity scores or behavioral inference.
+
+Detailed handoff:
+`docs/handoff/2026-09-21-commander-intelligence-foundation.md`.
+
+## Private-refresh transport resilience — 2026-10-03
+
+A recurring operational failure mode is the Windows/WSL/ZeroTier bridge becoming
+unreachable while the backend and Tinyproxy process remain otherwise healthy.
+The private collector now treats that transport as an explicit dependency:
+
+- the scheduler probes the intended private transport before game/account fan-out;
+- a failed probe short-circuits the whole private-refresh iteration instead of
+  creating a timeout storm across games and observers;
+- degraded transport is retried every 60 seconds, while healthy collection keeps
+  the normal five-minute cadence;
+- recovery is automatic on the first successful probe;
+- `/api/health/private-refresh` exposes non-secret in-memory scheduler/transport
+  state for diagnostics;
+- Planets.nu read transport failures have a dedicated
+  `PlanetsNuTransportError`, so private-sync retry logic can distinguish actual
+  transport loss from API/data errors;
+- the production diagnostic accepts an exact game id and reports scheduler health;
+- `scripts/maintenance/install-windows-proxy-watchdog.ps1` can install a
+  self-healing Windows Scheduled Task that checks the WSL Tinyproxy, ZeroTier
+  listener and end-to-end proxy path every two minutes and repairs the bridge
+  only when checks fail.
+
+The Windows watchdog is an operator-installed host integration. It must not be
+assumed present merely because its script exists in Git.
+
+## Authenticated private-game discovery — 2026-10-03
+
+The public `games/list?username=...` path is insufficient as the sole live-game
+discovery source for linked observers: a current private/custom game can be
+visible to the authenticated Planets.nu account while absent from the public
+username listing.
+
+The dashboard game picker and background collector therefore use two independent
+sources:
+
+- public `games/list?username=...` for broad public/history metadata;
+- authenticated `account/mygames?version=2` for the linked account's current
+  active memberships, including private/custom games.
+
+Authenticated records are normalized into the existing game-picker shape and
+retain their factual player slot/status. The background scheduler unions both
+sources before canonical public sync/private collection. One source failing does
+not discard records returned by the other, but the iteration remains visibly
+degraded.
+
+This avoids requiring a manual dashboard open or hard-coded game id to seed a
+new private custom game.
+
+## Live combined source-turn boundary — 2026-10-03
+
+The live Combined dashboard map must not mix observation batches from different
+turns as if they were co-current facts.
+
+A concrete failure mode was an inactive/dead local observer whose last private
+snapshot was from an older turn: that historical batch continued contributing
+ships and starbases to a newer live Combined map because the aggregator loaded
+the latest batch from every accessible observer regardless of batch turn.
+
+The live Combined endpoint now applies a source-turn gate:
+
+- only private observation batches whose `batch.turn` equals the canonical
+  current game turn may contribute entities to the live Combined union;
+- an inactive/dead primary observer's latest historical batch may still provide
+  observer identity metadata so the user can open a current Combined view
+  supplied by another authorized current observer;
+- stale observer batches remain available through observer archive/history and
+  Time Machine paths, but they are not current-map sources;
+- this gate is on the observation **batch turn**, not entity `info_turn`.
+  A current-turn observer snapshot may legitimately carry an older last-seen
+  enemy entity, and that remains factual current knowledge with its older
+  `info_turn` provenance.
+
+Do not implement "player is inactive/dead => delete every entity owned by that
+race" as a map rule without Host/evidence support. Roster status and entity
+existence are separate factual domains.
+
+## Immediate product priorities
+- Operator map layer controls are implemented on the existing Pixi stack.
+- The next bounded slice is observer-scoped spatial messages from existing private message observations; raw message text remains selected-observer-only and is not widened by dashboard intel sharing.
+
+1. Continue the operator-map layer/filter workstream on the existing Pixi stack; use Planets-Console plus McNimble Redraw/Filter, Show Messages and Show Notes as UX references, not as a second map implementation.
+2. Follow layer visibility with spatial-message/event markers from already-authorized factual observations; keep analyst annotations separate from facts and predictions.
+3. Keep Commander Intelligence factual/derived history separate from behavioral inference; the external player-affinity matrix is a comparison/UX reference, not a relationship oracle.
+4. Leave the accepted unlimited-fuel Tow + ordinary warp-well path closed absent regression and preserve all finite-fuel/special-interaction fail-closed boundaries.
+5. Route third-party combat/mechanics candidates (nu-replayer, Kecupo VCR sim, nupilot, c2nu) through `planets-lab` before production adoption.
+
+### Operator diagnostics workflow
+
+When a targeted refresh reaches Planets.nu but one linked account still fails, use the read-only raw `game/loadturn` diagnostic under `scripts/maintenance/diagnose-private-loadturn-account.sh`. It auto-selects the highest-turn stale in-game observer, keeps the API key redacted, and distinguishes HTTP/API/JSON-response failures without persisting a new batch.\n\nThe bridge acceptance path now avoids a full silent scheduler iteration. The
+production-side bridge diagnostic delegates to
+`scripts/maintenance/diagnose-private-refresh-target.sh`, which inventories
+stale private observers, probes Planets.nu from inside the backend container,
+selects one stale game, prints progress before the refresh, applies a bounded
+per-target timeout and verifies post-refresh turns. Known non-members are not
+counted as stale observers. The backend-container proxy probe treats
+`/time` as an HTTP transport probe only because Planets.nu returns JavaScript-like
+text there rather than JSON.
+
+Production SSH is commonly reached through PowerShell. Large pasted shell blocks
+are unreliable in that path. For future diagnostics/repairs, prefer committing a
+versioned script under `scripts/maintenance/`, merging it, and asking the
+operator to run that script rather than sending a multiline command batch.
+
+Current bridge diagnostics:
+
+```text
+scripts/maintenance/diagnose-private-refresh-bridge.sh
+scripts/maintenance/diagnose-wsl-proxy-bridge.sh
+scripts/maintenance/diagnose-windows-proxy-bridge.ps1
+```
+
+The production-side script first checks backend health and the configured
+`PLANETSNU_PROXY_URL`; after proxy transport succeeds it runs one bounded,
+targeted stale-game refresh rather than a whole scheduler iteration.
+
+## Working rules
+
+- GitHub branch state is authoritative; documentation SHA examples are checkpoints, not permission to skip inspection.
+- A successful HTTP request is not proof that all per-account sync work succeeded.
+- Known zero != unknown; missing != zero.
+- Fact != inference != simulation != local draft.
+- Current fact != historical fact.
+- Combat-time evidence != current ship state.
+- Hull capacity != factual current weapons.
+- Snapshot fuel != automatically movement-phase fuel.
+- Unsupported Host behavior fails closed.
+- Do not deploy documentation-only commits merely to make production match docs.

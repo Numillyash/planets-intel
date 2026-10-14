@@ -11,6 +11,8 @@ from app.models.game import Game
 from app.models.game_player_slot import GamePlayerSlot
 from app.models.score_observation import ScoreObservation
 from app.planetsnu.client import PlanetsNuClient, PlanetsNuError
+from app.services.game_rule_catalog import persist_public_game_settings
+from app.services.player_activity import persist_public_player_activity
 
 
 SCORE_SOURCE = "planets.nu/loadscores"
@@ -155,6 +157,7 @@ async def sync_public_game(
     )
 
     game = load_info.get("game")
+    settings = load_info.get("settings")
     players = load_info.get("players")
 
     if not isinstance(game, dict):
@@ -165,6 +168,11 @@ async def sync_public_game(
     if game.get("id") != game_id:
         raise PlanetsNuError(
             "loadinfo returned a different game id"
+        )
+
+    if not isinstance(settings, dict):
+        raise PlanetsNuError(
+            "loadinfo has no valid settings object"
         )
 
     if not isinstance(players, list):
@@ -191,6 +199,21 @@ async def sync_public_game(
                 players=players,
             )
 
+            persist_public_game_settings(
+                session,
+                game_id=game_id,
+                turn=game["turn"],
+                settings_raw=settings,
+            )
+
+            activity_inserted = persist_public_player_activity(
+                session,
+                game_id=game_id,
+                game=game,
+                settings=settings,
+                players=players,
+            )
+
             scores_inserted = insert_scores(
                 session,
                 game_id=game_id,
@@ -209,4 +232,5 @@ async def sync_public_game(
         "slots_seen": len(players),
         "scores_received": len(scores),
         "scores_inserted": scores_inserted,
+        "activity_observations_inserted": activity_inserted,
     }

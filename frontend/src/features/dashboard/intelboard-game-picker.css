@@ -1,0 +1,682 @@
+.intelboard-game-menu {
+    min-height: 100vh;
+    padding: 28px clamp(18px, 3vw, 48px) 44px;
+    background:
+        radial-gradient(circle at 15% 0%, rgba(47, 92, 132, 0.16), transparent 34rem),
+        #070c13;
+    color: #e6eef8;
+}
+
+.intelboard-game-menu-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 24px;
+    max-width: 1720px;
+    margin: 0 auto 22px;
+}
+
+.intelboard-game-menu-header h1 {
+    margin: 4px 0 6px;
+    font-size: clamp(2rem, 4vw, 3.3rem);
+}
+
+.intelboard-game-menu-header p {
+    margin: 0;
+    color: #8fa4bd;
+}
+
+.intelboard-game-menu-user {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.intelboard-game-menu-user > div {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    text-align: right;
+}
+
+.intelboard-game-menu-user span {
+    color: #7187a3;
+    font-size: 0.67rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.intelboard-account-settings-wrap {
+    max-width: 1720px;
+    margin: 0 auto 14px;
+}
+
+.intelboard-observer-strip {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+    gap: 10px;
+    max-width: 1720px;
+    margin: 0 auto 16px;
+}
+
+.intelboard-observer-choice {
+    display: grid;
+    grid-template-columns: 50px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+    padding: 10px 12px;
+    border: 1px solid #25374c;
+    border-radius: 11px;
+    background:
+        linear-gradient(100deg, rgba(24, 39, 56, 0.96), rgba(12, 22, 34, 0.96));
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 120ms ease, background 120ms ease, box-shadow 120ms ease;
+}
+
+.intelboard-observer-choice:hover {
+    border-color: #3d5d7d;
+    background:
+        linear-gradient(100deg, rgba(31, 49, 69, 0.98), rgba(15, 27, 41, 0.98));
+}
+
+.intelboard-observer-choice.is-selected {
+    border-color: #4676a5;
+    box-shadow: 0 0 0 1px rgba(76, 125, 173, 0.18);
+}
+
+.intelboard-account-avatar {
+    display: grid;
+    width: 46px;
+    height: 46px;
+    overflow: hidden;
+    place-items: center;
+    border: 1px solid #4d789f;
+    border-radius: 9px;
+    background:
+        radial-gradient(circle at 32% 28%, rgba(86, 180, 225, 0.55), transparent 32%),
+        linear-gradient(145deg, #183b53, #0d1825 70%);
+    color: #d9efff;
+    font-size: 0.84rem;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    box-shadow: inset 0 0 18px rgba(83, 186, 229, 0.12);
+}
+
+.intelboard-account-avatar img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.intelboard-account-avatar > span {
+    color: #d9efff;
+    font-size: 0.84rem;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+}
+
+.intelboard-observer-choice-copy {
+    display: grid;
+    min-width: 0;
+    gap: 1px;
+}
+
+.intelboard-observer-choice-copy small {
+    color: #7187a3;
+    font-size: 0.58rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.intelboard-observer-choice-copy strong {
+    overflow: hidden;
+    color: #f1f6fb;
+    font-size: 0.98rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.intelboard-observer-choice-copy em {
+    overflow: hidden;
+    color: #859bb3;
+    font-size: 0.66rem;
+    font-style: normal;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.intelboard-account-current {
+    align-self: start;
+    padding: 4px 7px;
+    border: 1px solid #315b7d;
+    border-radius: 999px;
+    color: #8fc7f1;
+    font-size: 0.58rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.intelboard-account-warning {
+    padding: 9px 16px;
+    border: 1px solid #4f442a;
+    border-radius: 8px;
+    background: #211c11;
+    color: #d5bd7a;
+    font-size: 0.68rem;
+    line-height: 1.35;
+}
+
+.intelboard-global-warning {
+    max-width: 1720px;
+    margin: 0 auto 14px;
+}
+
+.intelboard-game-tabs {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 1720px;
+    margin: 0 auto 14px;
+    padding: 5px;
+    border: 1px solid #223247;
+    border-radius: 10px;
+    background: rgba(10, 18, 28, 0.74);
+}
+
+.intelboard-game-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 10px;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    background: transparent;
+    color: #8fa4ba;
+    font-size: 0.7rem;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.intelboard-game-tab:hover {
+    border-color: #30465e;
+    color: #cfdeed;
+}
+
+.intelboard-game-tab.is-selected {
+    border-color: #466d91;
+    background: #132234;
+    color: #e1edf8;
+}
+
+.intelboard-game-tab span {
+    min-width: 20px;
+    padding: 2px 5px;
+    border-radius: 999px;
+    background: #223247;
+    color: #9fb6ce;
+    font-size: 0.61rem;
+    text-align: center;
+}
+
+.intelboard-game-tabs p {
+    min-width: 0;
+    margin: 0 5px 0 auto;
+    color: #70859c;
+    font-size: 0.64rem;
+    line-height: 1.25;
+    text-align: right;
+}
+
+.intelboard-game-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    max-width: 1720px;
+    margin: 0 auto;
+    align-items: start;
+}
+
+.intelboard-game-card {
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid #25374c;
+    border-radius: 12px;
+    background: #0d1622;
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.16);
+}
+
+.intelboard-game-card-main {
+    display: grid;
+    gap: 8px;
+    width: 100%;
+    padding: 13px 15px 11px;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: background 120ms ease, box-shadow 120ms ease;
+}
+
+.intelboard-game-card-main:hover {
+    background: #121e2c;
+    box-shadow: inset 3px 0 0 #4b82b5;
+}
+
+.intelboard-game-row-main {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.intelboard-game-row-title {
+    min-width: 0;
+}
+
+.intelboard-game-card h2 {
+    overflow: hidden;
+    margin: 2px 0 1px;
+    color: #f0f5fb;
+    font-size: 1rem;
+    line-height: 1.2;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.intelboard-game-row-title p {
+    overflow: hidden;
+    margin: 0;
+    color: #8198b0;
+    font-size: 0.72rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.intelboard-game-id {
+    color: #6685a5;
+    font-size: 0.58rem;
+    font-weight: 800;
+    letter-spacing: 0.09em;
+}
+
+.intelboard-game-status {
+    padding: 3px 7px;
+    border: 1px solid #3d4b5e;
+    border-radius: 999px;
+    color: #9eb0c5;
+    font-size: 0.64rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.intelboard-game-status.is-running {
+    border-color: #25573f;
+    background: #10261d;
+    color: #62dc9a;
+}
+
+.intelboard-game-row-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px 12px;
+    color: #879bb2;
+    font-size: 0.69rem;
+}
+
+.intelboard-game-row-meta strong {
+    color: #dce8f5;
+}
+
+.intelboard-next-host {
+    color: #a8bdd3;
+}
+
+.intelboard-game-observer-bar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px 15px;
+    border-top: 1px solid #1c2a3b;
+    background: rgba(9, 16, 25, 0.44);
+}
+
+.intelboard-game-observer-label {
+    margin-right: 2px;
+    color: #6f849c;
+    font-size: 0.58rem;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+}
+
+.intelboard-game-observer-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    padding: 4px 8px;
+    border: 1px solid #2c3d51;
+    border-radius: 999px;
+    background: #111d2a;
+    color: #a9bbce;
+    cursor: pointer;
+}
+
+.intelboard-game-observer-chip:hover,
+.intelboard-game-observer-chip.is-preferred {
+    border-color: #466d91;
+    color: #dceafb;
+}
+
+.intelboard-game-observer-chip i {
+    width: 7px;
+    height: 7px;
+    flex: 0 0 auto;
+    border-radius: 50%;
+    background: #748394;
+}
+
+.intelboard-game-observer-chip i.is-ready { background: #2ac76e; }
+.intelboard-game-observer-chip i.is-viewed { background: #df8d2e; }
+.intelboard-game-observer-chip i.is-unopened { background: #c7d2df; }
+.intelboard-game-observer-chip i.is-inactive { background: #56606d; }
+.intelboard-game-observer-chip i.is-computer { background: #6d7bc2; }
+.intelboard-game-observer-chip i.is-unknown {
+    box-sizing: border-box;
+    border: 1px dashed #748394;
+    background: transparent;
+}
+
+.intelboard-game-observer-chip strong {
+    overflow: hidden;
+    max-width: 150px;
+    font-size: 0.67rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.intelboard-game-observer-chip.is-archive {
+    border-color: #4b4a45;
+    background: #15181d;
+    color: #9aa3ad;
+}
+
+.intelboard-game-observer-state {
+    color: #7f8b98;
+    font-size: 0.55rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.intelboard-turn-rail {
+    display: flex;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 5px;
+    padding: 9px 15px 11px;
+    border-top: 1px solid #1c2a3b;
+}
+
+.intelboard-turn-slot {
+    display: inline-grid;
+    min-width: 42px;
+    justify-items: center;
+    gap: 4px;
+}
+
+.intelboard-turn-slot.is-managed {
+    min-width: 54px;
+}
+
+.intelboard-turn-cell {
+    position: relative;
+    display: inline-grid;
+    width: auto;
+    min-width: 42px;
+    height: 24px;
+    padding: 0 5px;
+    place-items: center;
+    border: 1px solid rgba(255, 255, 255, 0.13);
+    border-radius: 3px;
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 0.58rem;
+    font-weight: 800;
+    line-height: 1;
+    cursor: help;
+    user-select: none;
+    white-space: nowrap;
+}
+
+.intelboard-managed-account-marker {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    max-width: 76px;
+    overflow: hidden;
+    color: #8597aa;
+    font-size: 0.54rem;
+    font-weight: 700;
+    line-height: 1;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.intelboard-managed-account-marker b {
+    font-size: 0.68rem;
+    line-height: 0.8;
+}
+
+.intelboard-managed-account-marker.is-ready { color: #5fdc96; }
+.intelboard-managed-account-marker.is-viewed { color: #e7a450; }
+.intelboard-managed-account-marker.is-unopened { color: #c7d2df; }
+.intelboard-managed-account-marker.is-unknown { color: #8192a5; }
+.intelboard-managed-account-marker.is-inactive {
+    color: #697582;
+    text-decoration: line-through;
+    text-decoration-thickness: 1px;
+}
+.intelboard-managed-account-marker.is-computer { color: #9aa8e7; }
+
+.intelboard-turn-rail.is-dense .intelboard-turn-slot {
+    min-width: 34px;
+}
+
+.intelboard-turn-rail.is-dense .intelboard-turn-slot.is-managed {
+    min-width: 48px;
+}
+
+.intelboard-turn-rail.is-dense .intelboard-turn-cell {
+    min-width: 34px;
+    height: 21px;
+    padding: 0 4px;
+    font-size: 0.52rem;
+}
+
+.intelboard-turn-rail.is-very-dense {
+    gap: 3px;
+}
+
+.intelboard-turn-rail.is-very-dense .intelboard-turn-cell {
+    min-width: 28px;
+    height: 18px;
+    padding: 0 3px;
+    font-size: 0.46rem;
+}
+
+.intelboard-turn-rail.is-very-dense .intelboard-turn-slot {
+    min-width: 28px;
+}
+
+.intelboard-turn-rail.is-very-dense .intelboard-turn-slot.is-managed {
+    min-width: 42px;
+}
+
+.intelboard-turn-rail.is-very-dense .intelboard-managed-account-marker {
+    max-width: 60px;
+    font-size: 0.48rem;
+}
+
+.intelboard-turn-cell.is-ready {
+    border-color: #38d47c;
+    background: #178347;
+    box-shadow: inset 0 0 8px rgba(73, 239, 137, 0.16);
+}
+
+.intelboard-turn-cell.is-viewed {
+    border-color: #e39a43;
+    background: #9b5a1f;
+    box-shadow: inset 0 0 8px rgba(255, 166, 67, 0.14);
+}
+
+.intelboard-turn-cell.is-unopened {
+    border-color: #8c9bab;
+    background: #344251;
+    color: #eef3f7;
+}
+
+.intelboard-turn-cell.is-unknown {
+    border-style: dotted;
+    border-color: #617184;
+    background: #18222d;
+    color: #8090a2;
+}
+
+.intelboard-turn-cell.is-inactive {
+    border-color: #3b434d;
+    background: #20262e;
+    color: #697582;
+}
+
+.intelboard-turn-cell.is-inactive::after {
+    content: "";
+    position: absolute;
+    width: 78%;
+    height: 1px;
+    border-radius: 999px;
+    background: #8c97a3;
+    transform: rotate(-35deg);
+    pointer-events: none;
+}
+
+.intelboard-turn-cell.is-computer {
+    border-color: #6979b7;
+    background: #3a456f;
+    color: #dce2ff;
+}
+
+.intelboard-turn-cell.is-empty {
+    border-style: dashed;
+    border-color: #303d4c;
+    background: transparent;
+    color: #526171;
+}
+
+/* Fill color remains the factual current-turn state. The outer outline is a
+   second signal: Planets.nu's consecutive missed-turn streak. */
+.intelboard-turn-cell.is-missed-watch {
+    outline: 2px solid #d8bd4e;
+    outline-offset: 1px;
+}
+
+.intelboard-turn-cell.is-missed-warning {
+    outline: 2px solid #e8832f;
+    outline-offset: 1px;
+}
+
+.intelboard-turn-cell.is-missed-critical,
+.intelboard-turn-cell.is-missed-critical-risk {
+    outline: 2px solid #e24a4a;
+    outline-offset: 1px;
+}
+
+.intelboard-turn-cell.is-missed-critical-risk {
+    filter: drop-shadow(0 0 3px rgba(226, 74, 74, 0.42));
+}
+
+.intelboard-game-menu-state {
+    max-width: 1720px;
+    margin: 24px auto;
+    padding: 24px;
+    border: 1px solid #26374b;
+    border-radius: 10px;
+    background: #101824;
+    color: #9cb0c6;
+}
+
+.intelboard-game-menu-state.is-error {
+    border-color: #6c343d;
+    color: #e19ca7;
+}
+
+@media (max-width: 1120px) {
+    .intelboard-game-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 720px) {
+    .intelboard-game-menu-header {
+        flex-direction: column;
+    }
+
+    .intelboard-game-menu-user {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .intelboard-game-menu-user > div {
+        text-align: left;
+    }
+
+    .intelboard-observer-strip {
+        grid-template-columns: 1fr;
+    }
+
+    .intelboard-observer-choice {
+        grid-template-columns: 44px minmax(0, 1fr);
+    }
+
+    .intelboard-account-avatar {
+        width: 40px;
+        height: 40px;
+    }
+
+    .intelboard-account-current {
+        display: none;
+    }
+
+    .intelboard-game-tabs {
+        align-items: stretch;
+        flex-wrap: wrap;
+    }
+
+    .intelboard-game-tabs p {
+        width: 100%;
+        margin: 2px 5px 1px;
+        text-align: left;
+    }
+
+    .intelboard-game-card-main,
+    .intelboard-game-observer-bar,
+    .intelboard-turn-rail {
+        padding-right: 12px;
+        padding-left: 12px;
+    }
+
+    .intelboard-turn-slot.is-managed {
+        min-width: 48px;
+    }
+
+    .intelboard-managed-account-marker {
+        max-width: 62px;
+        font-size: 0.5rem;
+    }
+}

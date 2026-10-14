@@ -1,7 +1,9 @@
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Path
+from fastapi import APIRouter, Depends, HTTPException, Path, status
 
+from app.api.dependencies.auth import require_user
+from app.models.user import AppUser
 from app.planetsnu.client import PlanetsNuClient, PlanetsNuError
 from app.schemas.games import (
     GameDetailsResponse,
@@ -10,11 +12,23 @@ from app.schemas.games import (
     PlayerInfo,
     RelationInfo,
 )
+from app.services.cached_game_details import get_cached_game_details_payload
+from app.services.rule_catalog_view import get_game_rule_catalog_view
 
 
 router = APIRouter(
     prefix="/games",
 )
+
+
+def _optional_nonnegative_int(value: Any) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return None
+    return value
+
+
+def _optional_string(value: Any) -> str | None:
+    return value if isinstance(value, str) else None
 
 
 def build_game_info(raw: dict[str, Any]) -> GameInfo:
@@ -27,6 +41,7 @@ def build_game_info(raw: dict[str, Any]) -> GameInfo:
         status_name=raw["statusname"],
         turn=raw["turn"],
         slots=raw["slots"],
+        turn_status=_optional_string(raw.get("turnstatus")),
         next_host=raw["nexthost"],
         turns_per_week=raw["turnsperweek"],
         is_private=raw["isprivate"],
@@ -85,10 +100,13 @@ def build_player_info(
         race_id=raw["raceid"],
         status=raw["status"],
         turn_status=raw["turnstatus"],
+        turns_missed=_optional_nonnegative_int(raw.get("turnsmissed")),
         planets=raw["planets"],
         ships=raw["ships"],
         starbases=raw["starbases"],
         turn_ready=raw["turnready"],
+        active_advantages=str(raw.get("activeadvantages", "")),
+        active_hulls=str(raw.get("activehulls", "")),
     )
 
 
@@ -107,6 +125,22 @@ def build_relation_info(
 
 
 @router.get(
+    "/{game_id}/rule-catalog",
+)
+def get_rule_catalog(
+    game_id: int = Path(gt=0),
+    _user: AppUser = Depends(require_user),
+) -> dict[str, Any]:
+    result = get_game_rule_catalog_view(game_id=game_id)
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Game rule catalog not found",
+        )
+    return result
+
+
+@router.get(
     "/{game_id}",
     response_model=GameDetailsResponse,
 )
@@ -116,10 +150,13 @@ async def get_game(
     try:
         payload = await PlanetsNuClient().load_info(game_id)
     except PlanetsNuError as exc:
-        raise HTTPException(
-            status_code=502,
-            detail=str(exc),
-        ) from exc
+        cached = get_cached_game_details_payload(game_id)
+        if cached is None:
+            raise HTTPException(
+                status_code=502,
+                detail=str(exc),
+            ) from exc
+        payload = cached
 
     game_raw = payload.get("game")
     settings_raw = payload.get("settings")
@@ -129,35 +166,36 @@ async def get_game(
     if not isinstance(game_raw, dict):
         raise HTTPException(
             status_code=502,
-            detail="Invalid game object from Planets.nu",
+            detail="Invalid game object from Planets.nu/cache",
         )
 
     if game_raw.get("id") != game_id:
         raise HTTPException(
             status_code=502,
-            detail="Planets.nu returned a different game id",
+            detail="Game details returned a different game id",
         )
 
     if not isinstance(settings_raw, dict):
         raise HTTPException(
             status_code=502,
-            detail="Invalid settings object from Planets.nu",
+            detail="Invalid settings object from Planets.nu/cache",
         )
 
     if not isinstance(players_raw, list):
         raise HTTPException(
             status_code=502,
-            detail="Invalid players list from Planets.nu",
+            detail="Invalid players list from Planets.nu/cache",
         )
 
     if not isinstance(relations_raw, list):
         raise HTTPException(
             status_code=502,
-            detail="Invalid relations list from Planets.nu",
+            detail="Invalid relations list from Planets.nu/cache",
         )
 
     try:
         return GameDetailsResponse(
+            source=str(payload.get("source", "planets.nu/loadinfo")),
             game=build_game_info(game_raw),
             settings=build_settings_info(settings_raw),
             players=[
@@ -178,7 +216,6 @@ async def get_game(
         raise HTTPException(
             status_code=502,
             detail=(
-                "Planets.nu loadinfo response does not match "
-                "the expected schema"
+                "Game details do not match the expected schema"
             ),
         ) from exc
