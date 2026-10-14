@@ -94,6 +94,8 @@ def _record(grant: GameIntelGrant) -> dict:
         "grantee_slot_id": grant.grantee_slot_id,
         "membership_verified_turn": grant.membership_verified_turn,
         "requested_scopes": grant.requested_scopes,
+        "sharing_mode": grant.sharing_mode,
+        "expanded_disclosure_confirmed_at": grant.expanded_disclosure_confirmed_at,
         "status": grant.status,
         "authorizes_private_intel": False,
         "consented_at": grant.consented_at,
@@ -124,7 +126,10 @@ def list_game_grants(*, user_id: int, game_id: int) -> list[dict]:
 def request_game_grant(
     *, user_id: int, game_id: int, grantor_account_id: int,
     grantee_planets_username: str, requested_scopes: list[str],
+    sharing_mode: str = "native",
 ) -> dict:
+    if sharing_mode not in ("native", "unrestricted"):
+        raise GrantConflict("Unknown game intelligence sharing mode")
     scopes = sorted(set(requested_scopes))
     if not scopes or len(scopes) != len(requested_scopes) or not set(scopes) <= ALLOWED_SCOPES:
         raise GrantConflict("Invalid or duplicate requested disclosure scopes")
@@ -164,6 +169,7 @@ def request_game_grant(
             grantee_slot_id=target_slot,
             membership_verified_turn=turn,
             requested_scopes=scopes,
+            sharing_mode=sharing_mode,
             status="pending",
         )
         session.add(row)
@@ -178,6 +184,7 @@ def request_game_grant(
 
 def consent_game_grant(
     *, user_id: int, game_id: int, grant_id: int, grantee_account_id: int,
+    confirm_unrestricted: bool = False,
 ) -> dict:
     with SessionLocal() as session:
         grantee = _owned(session, user_id, grantee_account_id)
@@ -191,6 +198,12 @@ def consent_game_grant(
             raise GrantNotFound("Game grant not found")
         if row.status != "pending" or row.revoked_at is not None:
             raise GrantConflict("Grant is not pending")
+        if row.sharing_mode not in ("native", "unrestricted"):
+            raise GrantConflict("Unknown sharing mode; consent denied")
+        if row.sharing_mode == "unrestricted" and not confirm_unrestricted:
+            raise GrantConflict("Unrestricted sharing requires explicit recipient confirmation")
+        if row.sharing_mode == "native" and confirm_unrestricted:
+            raise GrantConflict("Cannot confirm expanded disclosure for native-only mode")
         grantor = session.get(PlanetsAccount, row.grantor_account_id)
         if grantor is None or not grantor.is_active:
             raise GrantConflict("Grantor is no longer active")
@@ -200,6 +213,8 @@ def consent_game_grant(
         row.membership_verified_turn = turn
         row.status = "consented_pending_policy"
         row.consented_at = datetime.now(timezone.utc)
+        if row.sharing_mode == "unrestricted":
+            row.expanded_disclosure_confirmed_at = row.consented_at
         row.updated_at = row.consented_at
         session.commit()
         session.refresh(row)

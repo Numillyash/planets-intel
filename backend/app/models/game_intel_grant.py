@@ -28,6 +28,8 @@ class GameIntelGrant(Base):
     grantee_slot_id: Mapped[int] = mapped_column(SmallInteger, nullable=False)
     membership_verified_turn: Mapped[int] = mapped_column(Integer, nullable=False)
     requested_scopes: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
+    sharing_mode: Mapped[str] = mapped_column(String(24), nullable=False, default="native")
+    expanded_disclosure_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
     consented_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

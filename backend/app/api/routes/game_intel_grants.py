@@ -38,6 +38,7 @@ def request_grant(
             grantor_account_id=payload.grantor_account_id,
             grantee_planets_username=payload.grantee_planets_username,
             requested_scopes=list(payload.requested_scopes),
+            sharing_mode=payload.sharing_mode,
         )
     except (GrantNotFound, GrantForbidden, GrantConflict) as exc:
         raise _http_error(exc) from exc
@@ -53,6 +54,7 @@ def consent_grant(
         record = consent_game_grant(
             user_id=user.id, game_id=game_id,
             grant_id=grant_id, grantee_account_id=payload.grantee_account_id,
+            confirm_unrestricted=payload.confirm_unrestricted,
         )
     except (GrantNotFound, GrantForbidden, GrantConflict) as exc:
         raise _http_error(exc) from exc
