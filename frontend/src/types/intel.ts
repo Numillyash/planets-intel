@@ -18,7 +18,7 @@ export interface DashboardIntelShareAccount {
 
 export interface DashboardIntelShareResponse {
     id: number;
-    status: "pending" | "active";
+    status: "pending" | "active" | "disabled";
     account_a: DashboardIntelShareAccount;
     account_b: DashboardIntelShareAccount;
     created_at: string;
