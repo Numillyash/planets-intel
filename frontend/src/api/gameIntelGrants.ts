@@ -107,3 +107,29 @@ export function revokeGameIntelGrant(
         { account_id: linkedAccountId },
     );
 }
+
+export interface GameIntelGrantPreview {
+    game_id: number;
+    grant_id: number;
+    mode: GameIntelMode;
+    turn: number;
+    source_batch_id: number | null;
+    preview_only: true;
+    planets: Array<{ planet_id: number; fields: Record<string, unknown> }>;
+    ships: Array<{ ship_id: number; fields: Record<string, unknown> }>;
+    starbases: Array<{ starbase_id: number; fields: Record<string, unknown> }>;
+    messages: Array<Record<string, unknown>>;
+    combat_events: Array<Record<string, unknown>>;
+    third_party_contacts: Array<Record<string, unknown>>;
+}
+
+export function getGameIntelGrantPreview(
+    gameId: number,
+    grantId: number,
+    grantorAccountId: number,
+): Promise<GameIntelGrantPreview> {
+    return request<GameIntelGrantPreview>(
+        "/api/intel/games/" + gameId + "/grants/" + grantId +
+        "/preview?linked_account_id=" + grantorAccountId,
+    );
+}

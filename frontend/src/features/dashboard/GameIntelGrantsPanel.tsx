@@ -2,11 +2,13 @@ import { useEffect, useState, type FormEvent } from "react";
 import {
     consentGameIntelGrant,
     getGameIntelGrants,
+    getGameIntelGrantPreview,
     requestGameIntelGrant,
     revokeGameIntelGrant,
     type GameIntelGrant,
     type GameIntelMode,
     type GameIntelScope,
+    type GameIntelGrantPreview,
 } from "../../api/gameIntelGrants";
 
 const OPTIONAL_SCOPES: Array<{
@@ -45,6 +47,7 @@ export function GameIntelGrantsPanel({
     linkedAccountId: number;
 }) {
     const [grants, setGrants] = useState<GameIntelGrant[]>([]);
+    const [preview, setPreview] = useState<GameIntelGrantPreview | null>(null);
     const [mode, setMode] = useState<GameIntelMode>("native");
     const [target, setTarget] = useState("");
     const [selected, setSelected] = useState<GameIntelScope[]>([]);
@@ -57,6 +60,7 @@ export function GameIntelGrantsPanel({
         let cancelled = false;
         setLoading(true);
         setError(null);
+        setPreview(null);
         void getGameIntelGrants(gameId)
             .then((items) => { if (!cancelled) setGrants(items); })
             .catch((reason: unknown) => {
@@ -98,6 +102,23 @@ export function GameIntelGrantsPanel({
             setRevision((old) => old + 1);
         } catch (reason) {
             setError(reason instanceof Error ? reason.message : "Cannot create request");
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    async function showPreview(grant: GameIntelGrant) {
+        if (grant.grantor_account_id !== linkedAccountId) return;
+        setBusy(true);
+        setError(null);
+        try {
+            const result = await getGameIntelGrantPreview(
+                gameId, grant.id, linkedAccountId,
+            );
+            setPreview(result);
+        } catch (reason) {
+            setError(reason instanceof Error
+                ? reason.message : "Unable to preview consent scope");
         } finally {
             setBusy(false);
         }
@@ -234,6 +255,8 @@ export function GameIntelGrantsPanel({
             ) : (
                 <div style={groupStyle}>
                     {grants.map((grant) => {
+                        const canPreview = grant.grantor_account_id === linkedAccountId &&
+                            grant.status !== "revoked";
                         const canAccept = grant.grantee_account_id === linkedAccountId &&
                             grant.status === "pending";
                         const canRevoke = grant.status !== "revoked" &&
@@ -259,6 +282,16 @@ export function GameIntelGrantsPanel({
                                     Private data access: blocked pending separate policy.
                                 </small>
                                 <div style={{ display: "flex", gap: 8 }}>
+                                    {canPreview && (
+                                        <button
+                                            className="secondary-button"
+                                            disabled={busy}
+                                            onClick={() => void showPreview(grant)}
+                                            type="button"
+                                        >
+                                            Preview fields (owner only)
+                                        </button>
+                                    )}
                                     {canAccept && (
                                         <button
                                             className="primary-button"
@@ -284,6 +317,28 @@ export function GameIntelGrantsPanel({
                         );
                     })}
                 </div>
+            )}
+            {preview !== null && (
+                <section className="panel" aria-live="polite">
+                    <h3>Private owner preview — request #{preview.grant_id}</h3>
+                    <p className="subtitle">
+                        Current turn T{preview.turn}. This is not data shared
+                        with the recipient; no peer read permission is active.
+                    </p>
+                    <div className="game-dashboard-settings-grid">
+                        <div><span>Planets</span><strong>{preview.planets.length}</strong></div>
+                        <div><span>Ships</span><strong>{preview.ships.length}</strong></div>
+                        <div><span>Starbases</span><strong>{preview.starbases.length}</strong></div>
+                        <div><span>Messages</span><strong>{preview.messages.length}</strong></div>
+                        <div><span>VCR summaries</span><strong>{preview.combat_events.length}</strong></div>
+                        <div><span>Third-party contacts</span><strong>{preview.third_party_contacts.length}</strong></div>
+                    </div>
+                    <p className="subtitle">
+                        Fields classified in this preview are selected individually.
+                        Unknown fields and account credentials are never passed
+                        through the generic entity projection.
+                    </p>
+                </section>
             )}
             {error !== null && (
                 <p className="auth-error" role="alert">{error}</p>
