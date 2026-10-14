@@ -62,6 +62,14 @@ def _slot(session, game: Game, account: PlanetsAccount) -> int | None:
     matches = [r for r in rows if normalize_planets_username(r.username) == username]
     if len(rows) != 1 or len(matches) != 1:
         return None
+    if (
+        account.planets_account_id is not None
+        and account.planets_account_id > 0
+        and matches[0].account_id is not None
+        and matches[0].account_id > 0
+        and account.planets_account_id != matches[0].account_id
+    ):
+        return None
     return int(matches[0].slot_id)
 
 
