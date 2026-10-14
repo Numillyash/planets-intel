@@ -184,8 +184,9 @@ export function IntelSharingSettings({
         <section>
             <h2>Dashboard intel sharing</h2>
             <p className="subtitle">
-                This is separate from Planets.nu diplomacy. Both linked accounts
-                must consent before their stored factual snapshots are combined.
+                Legacy dashboard-wide sharing is disabled for safety. Private intel is
+                restricted to one selected observer per request. Existing links
+                can be revoked, but new sharing requires a game-scoped policy.
             </p>
 
             <form
@@ -197,7 +198,7 @@ export function IntelSharingSettings({
                     <span>Share from</span>
                     <select
                         className="secondary-button"
-                        disabled={submitting || accounts.length === 0}
+                        disabled={true}
                         onChange={(event) =>
                             setSourceAccountId(Number(event.target.value))
                         }
@@ -215,7 +216,7 @@ export function IntelSharingSettings({
                     <span>Target Planets.nu username</span>
                     <input
                         autoComplete="off"
-                        disabled={submitting || sourceAccountId === null}
+                        disabled={true}
                         onChange={(event) => setTargetUsername(event.target.value)}
                         placeholder="Exact linked Planets.nu username"
                         required
@@ -226,11 +227,7 @@ export function IntelSharingSettings({
 
                 <button
                     className="primary-button"
-                    disabled={
-                        submitting ||
-                        sourceAccountId === null ||
-                        !targetUsername.trim()
-                    }
+                    disabled={true}
                     type="submit"
                 >
                     {submitting ? "Requesting…" : "Request intel sharing"}
@@ -277,7 +274,7 @@ export function IntelSharingSettings({
                                         {share.account_b.planets_username}
                                     </strong>
                                     <span className="user-label">
-                                        {share.status === "active" ? "ACTIVE" : "PENDING"}
+                                        {share.status.toUpperCase()}
                                     </span>
                                     <span className="subtitle">
                                         {accountLabel(share.account_a)}
@@ -297,7 +294,7 @@ export function IntelSharingSettings({
                                     {acceptAccounts.map((account) => (
                                         <button
                                             className="primary-button"
-                                            disabled={busyShareId === share.id}
+                                            disabled={true}
                                             key={account.linked_account_id}
                                             onClick={() => {
                                                 void handleAccept(share, account);

@@ -11,7 +11,6 @@ from app.models.game_player_slot import GamePlayerSlot
 from app.models.planets_account import PlanetsAccount
 from app.models.private_observation_batch import PrivateObservationBatch
 from app.planetsnu.client import PlanetsNuError
-from app.services.intel_sharing import active_dashboard_peer_account_ids
 from app.services.private_sync import (
     PrivateSyncError,
     PrivateSyncTransportError,
@@ -25,37 +24,18 @@ MAX_CONCURRENT_PRIVATE_REFRESHES = 3
 
 
 def _accessible_accounts(user_id: int) -> list[dict[str, Any]]:
-    with SessionLocal() as session:
-        owned = list(
-            session.execute(
-                select(PlanetsAccount)
-                .where(
-                    PlanetsAccount.user_id == user_id,
-                    PlanetsAccount.is_active.is_(True),
-                )
-                .order_by(PlanetsAccount.id)
-            ).scalars().all()
-        )
+    """P0: only local user's own linked observers may be refreshed.
 
-    owned_ids = {account.id for account in owned}
-    peer_ids: set[int] = set()
-    for account_id in owned_ids:
-        peer_ids.update(
-            active_dashboard_peer_account_ids(
-                linked_account_id=account_id,
-            )
-        )
-
-    all_ids = sorted(owned_ids | peer_ids)
-    if not all_ids:
-        return []
-
+    In particular, a global dashboard share must never trigger private
+    loadturn or persist another user's observations, including in the
+    background scheduler.
+    """
     with SessionLocal() as session:
         accounts = list(
             session.execute(
                 select(PlanetsAccount)
                 .where(
-                    PlanetsAccount.id.in_(all_ids),
+                    PlanetsAccount.user_id == user_id,
                     PlanetsAccount.is_active.is_(True),
                 )
                 .order_by(PlanetsAccount.id)
@@ -67,14 +47,14 @@ def _accessible_accounts(user_id: int) -> list[dict[str, Any]]:
                 "id": account.id,
                 "planets_username": account.planets_username,
                 "planets_account_id": account.planets_account_id,
-                "is_owned": account.id in owned_ids,
+                "is_owned": True,
             }
             for account in accounts
         ]
 
 
 def accessible_refresh_account_ids(user_id: int) -> tuple[int, ...]:
-    """Return the linked observer ids a local user may refresh/share."""
+    """Return only owned linked observers; never global-share peers."""
 
     return tuple(int(account["id"]) for account in _accessible_accounts(user_id))
 
@@ -243,13 +223,11 @@ async def refresh_accessible_private_intel(
     user_id: int,
     game_id: int,
 ) -> dict[str, Any]:
-    """Refresh every private observer the user is allowed to combine.
+    """Refresh only private observers locally owned by the requesting user.
 
-    Owned linked accounts are always eligible. Accounts owned by another
-    local user are eligible only through an active, mutually approved
-    dashboard intel share. The combined result itself remains a read-time
-    aggregation; this service only refreshes observer-specific factual
-    snapshots.
+    Dashboard-wide peer approvals are deliberately ignored. Refresh does
+    not confer authorization to aggregate two distinct observers, even if
+    both observers are owned by one site user.
 
     Public game synchronization is best-effort here. A public outage must not
     prevent current private loadturn observations from refreshing when a

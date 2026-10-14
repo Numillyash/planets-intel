@@ -23,7 +23,7 @@ def historical_intel_status(
     if primary is None:
         return None
 
-    accessible = accessible_intel_accounts(user_id=user_id)
+    accessible = accessible_intel_accounts(user_id=user_id, game_id=game_id, linked_account_id=linked_account_id)
     accessible_ids = [account.id for account in accessible]
 
     with SessionLocal() as session:

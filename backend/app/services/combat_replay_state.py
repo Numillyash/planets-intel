@@ -48,8 +48,8 @@ def _state(replay: dict[str, Any], side_name: str, *, turn: int, vcr_id: int, sh
     }
 
 
-def _inputs(user_id: int, game_id: int, through_turn: int) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any], list[dict[str, Any]]]:
-    accessible_ids = {account.id for account in accessible_intel_accounts(user_id=user_id)}
+def _inputs(user_id: int, game_id: int, linked_account_id: int, through_turn: int) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any], list[dict[str, Any]]]:
+    accessible_ids = {account.id for account in accessible_intel_accounts(user_id=user_id, game_id=game_id, linked_account_id=linked_account_id)}
     if not accessible_ids:
         return [], [], {}, []
 
@@ -87,8 +87,8 @@ def _inputs(user_id: int, game_id: int, through_turn: int) -> tuple[list[dict[st
         return list(catalog.beams), list(catalog.torpedos), dict(catalog.settings), records
 
 
-def replay_state_map(*, user_id: int, game_id: int, turn: int) -> dict[tuple[int, int], dict[str, Any]]:
-    beams, torpedoes, settings, records = _inputs(user_id, game_id, turn)
+def replay_state_map(*, user_id: int, game_id: int, linked_account_id: int, turn: int) -> dict[tuple[int, int], dict[str, Any]]:
+    beams, torpedoes, settings, records = _inputs(user_id, game_id, linked_account_id, turn)
     result: dict[tuple[int, int], dict[str, Any]] = {}
     seen: set[tuple[int, int]] = set()
 
@@ -117,8 +117,8 @@ def replay_state_map(*, user_id: int, game_id: int, turn: int) -> dict[tuple[int
     return result
 
 
-def latest_ship_replay_state(*, user_id: int, game_id: int, ship_id: int, through_turn: int) -> dict[str, Any] | None:
-    beams, torpedoes, settings, records = _inputs(user_id, game_id, through_turn)
+def latest_ship_replay_state(*, user_id: int, game_id: int, linked_account_id: int, ship_id: int, through_turn: int) -> dict[str, Any] | None:
+    beams, torpedoes, settings, records = _inputs(user_id, game_id, linked_account_id, through_turn)
     seen: set[tuple[int, int]] = set()
 
     for record in records:

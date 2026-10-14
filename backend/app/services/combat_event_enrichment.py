@@ -52,7 +52,7 @@ def _attach_factual_vcr_equipment(
     raw observation and expose its side equipment as a read-time evidence
     object.  This does not turn combat-time state into a current ship fact.
     """
-    accessible = accessible_intel_accounts(user_id=user_id)
+    accessible = accessible_intel_accounts(user_id=user_id, game_id=game_id, linked_account_id=linked_account_id)
     accessible_ids = {account.id for account in accessible}
     if linked_account_id not in accessible_ids or not accessible_ids:
         return
@@ -159,6 +159,7 @@ def enrich_combat_events(
     replay_states = replay_state_map(
         user_id=user_id,
         game_id=game_id,
+        linked_account_id=linked_account_id,
         turn=turn,
     )
 

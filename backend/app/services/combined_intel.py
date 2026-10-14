@@ -4,7 +4,6 @@ from typing import Any, Iterable
 from sqlalchemy import or_, select
 
 from app.db.session import SessionLocal
-from app.models.dashboard_intel_share import DashboardIntelShare
 from app.models.planet_observation import PlanetObservation
 from app.models.planets_account import PlanetsAccount
 from app.models.private_observation_batch import PrivateObservationBatch
@@ -408,68 +407,13 @@ def get_combined_private_intel(
     game_id: int,
     linked_account_id: int,
 ) -> dict[str, Any] | None:
-    with SessionLocal() as session:
-        primary_account = session.execute(
-            select(PlanetsAccount).where(
-                PlanetsAccount.id == linked_account_id,
-                PlanetsAccount.user_id == user_id,
-                PlanetsAccount.is_active.is_(True),
-            )
-        ).scalar_one_or_none()
-        if primary_account is None:
-            return None
+    """Legacy entry point delegates to the P0 selected-observer guard."""
+    from app.services.accessible_combined_intel import (
+        get_accessible_combined_private_intel,
+    )
 
-        shares = session.execute(
-            select(DashboardIntelShare).where(
-                or_(
-                    DashboardIntelShare.account_low_id == linked_account_id,
-                    DashboardIntelShare.account_high_id == linked_account_id,
-                ),
-                DashboardIntelShare.approved_low_at.is_not(None),
-                DashboardIntelShare.approved_high_at.is_not(None),
-            )
-        ).scalars().all()
-
-        peer_ids = [
-            share.account_high_id
-            if share.account_low_id == linked_account_id
-            else share.account_low_id
-            for share in shares
-        ]
-        peer_accounts: list[PlanetsAccount] = []
-        if peer_ids:
-            peer_accounts = list(
-                session.execute(
-                    select(PlanetsAccount)
-                    .where(
-                        PlanetsAccount.id.in_(peer_ids),
-                        PlanetsAccount.is_active.is_(True),
-                    )
-                    .order_by(PlanetsAccount.id)
-                ).scalars().all()
-            )
-
-        primary_snapshot = _load_latest_snapshot(
-            session,
-            account=primary_account,
-            game_id=game_id,
-        )
-        if primary_snapshot is None:
-            return None
-
-        snapshots = [primary_snapshot]
-        for peer_account in peer_accounts:
-            peer_snapshot = _load_latest_snapshot(
-                session,
-                account=peer_account,
-                game_id=game_id,
-            )
-            if peer_snapshot is not None:
-                snapshots.append(peer_snapshot)
-
-        return _combined_result(
-            game_id=game_id,
-            primary_account=primary_account,
-            primary_snapshot=primary_snapshot,
-            snapshots=snapshots,
-        )
+    return get_accessible_combined_private_intel(
+        user_id=user_id,
+        game_id=game_id,
+        linked_account_id=linked_account_id,
+    )

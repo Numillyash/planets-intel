@@ -92,7 +92,7 @@ def _load_replay_context(
 ] | None:
     accessible_ids = {
         account.id
-        for account in accessible_intel_accounts(user_id=user_id)
+        for account in accessible_intel_accounts(user_id=user_id, game_id=game_id, linked_account_id=linked_account_id)
     }
     if linked_account_id not in accessible_ids:
         return None

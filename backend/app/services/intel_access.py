@@ -4,7 +4,6 @@ from sqlalchemy import select
 
 from app.db.session import SessionLocal
 from app.models.planets_account import PlanetsAccount
-from app.services.intel_sharing import active_dashboard_peer_account_ids
 
 
 @dataclass(frozen=True)
@@ -18,59 +17,34 @@ class AccessibleIntelAccount:
 def accessible_intel_accounts(
     *,
     user_id: int,
+    game_id: int,
+    linked_account_id: int,
 ) -> list[AccessibleIntelAccount]:
-    """Return active linked accounts whose factual intel this user may combine.
+    """P0 deny-by-default: exactly one selected locally owned observer.
 
-    All active accounts owned by the local Intel Client user are included.
-    Accounts owned by other local users are included only when an active,
-    mutually-approved dashboard intel share connects them to at least one of
-    the current user's owned accounts.
+    A global dashboard pair, even one approved by both parties, must never
+    grant access to another observer's private game data. The game ID is
+    mandatory and callers must also constrain their data queries to it.
+    This restriction applies equally to public, private and team games.
     """
-
-    with SessionLocal() as session:
-        owned = list(
-            session.execute(
-                select(PlanetsAccount)
-                .where(
-                    PlanetsAccount.user_id == user_id,
-                    PlanetsAccount.is_active.is_(True),
-                )
-                .order_by(PlanetsAccount.id)
-            ).scalars().all()
-        )
-
-    owned_ids = {account.id for account in owned}
-    peer_ids: set[int] = set()
-
-    for account_id in owned_ids:
-        peer_ids.update(
-            active_dashboard_peer_account_ids(
-                linked_account_id=account_id,
-            )
-        )
-
-    all_ids = sorted(owned_ids | peer_ids)
-    if not all_ids:
+    if user_id <= 0 or game_id <= 0 or linked_account_id <= 0:
         return []
 
     with SessionLocal() as session:
-        accounts = list(
-            session.execute(
-                select(PlanetsAccount)
-                .where(
-                    PlanetsAccount.id.in_(all_ids),
-                    PlanetsAccount.is_active.is_(True),
-                )
-                .order_by(PlanetsAccount.id)
-            ).scalars().all()
-        )
+        account = session.execute(
+            select(PlanetsAccount).where(
+                PlanetsAccount.id == linked_account_id,
+                PlanetsAccount.user_id == user_id,
+                PlanetsAccount.is_active.is_(True),
+            )
+        ).scalar_one_or_none()
 
-    return [
-        AccessibleIntelAccount(
+        if account is None:
+            return []
+
+        return [AccessibleIntelAccount(
             id=account.id,
             planets_username=account.planets_username,
             planets_account_id=account.planets_account_id,
-            is_owned=account.id in owned_ids,
-        )
-        for account in accounts
-    ]
+            is_owned=True,
+        )]
