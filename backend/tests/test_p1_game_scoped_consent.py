@@ -101,6 +101,41 @@ class P1GameGrantTests(unittest.TestCase):
                     grantee_account_id=12, confirm_unrestricted=True,
                 )
 
+    def test_both_modes_accept_with_correct_confirmation_without_read_authority(self):
+        for mode, confirmation in (("native", False), ("unrestricted", True)):
+            with self.subTest(mode=mode):
+                now = datetime.now(timezone.utc)
+                grantee = SimpleNamespace(id=12)
+                row = SimpleNamespace(
+                    id=7, game_id=100, grantor_account_id=11,
+                    grantee_account_id=12, grantor_slot_id=3,
+                    grantee_slot_id=4, membership_verified_turn=20,
+                    requested_scopes=["owned_unit_locations"],
+                    sharing_mode=mode, expanded_disclosure_confirmed_at=None,
+                    status="pending", revoked_at=None, consented_at=None,
+                    created_at=now, updated_at=now,
+                )
+                context = fake_session(grantee, row)
+                context.__enter__.return_value.get.return_value = SimpleNamespace(
+                    id=11, is_active=True,
+                )
+                with (
+                    patch("app.services.game_intel_grants.SessionLocal", return_value=context),
+                    patch("app.services.game_intel_grants._roster", return_value=(3, 4, 21)),
+                ):
+                    record = consent_game_grant(
+                        user_id=3, game_id=100, grant_id=7,
+                        grantee_account_id=12, confirm_unrestricted=confirmation,
+                    )
+                self.assertEqual(record["sharing_mode"], mode)
+                self.assertEqual(record["status"], "consented_pending_policy")
+                self.assertIsNotNone(record["consented_at"])
+                self.assertFalse(record["authorizes_private_intel"])
+                self.assertEqual(
+                    record["expanded_disclosure_confirmed_at"] is not None,
+                    confirmation,
+                )
+
     def test_game_scoped_consent_never_authorizes_raw_peer_reads(self):
         for game_id in (100, 101):
             self.assertFalse(has_private_read_authority_from_grant(
