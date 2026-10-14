@@ -1,5 +1,7 @@
 # Planets Intel — Current Handoff
 
+**2026-10-14 update:** Read `docs/handoff/2026-10-14-p1-mainline-security-and-consolidation.md` first. P0 is deployed at `88a3282649c7b6b8ca42d4271d765855ffc7ace9`; P1 consent ledger at `14d82068bb741c36b2c67c5cc3fbf1ef1ce0a957` is not yet deployed. Cross-player private sharing remains blocked. Historical September runtime checkpoints below are preserved as history, not current production state.
+
 Updated: 2026-09-27
 
 GitHub is the source of truth. Active development remains on `feature/operational-ui`. A fresh chat must inspect the actual branch HEAD before making current-code claims or writes, then read this file together with `NEW_CHAT_START.md`, `PROJECT_STATE.md` and the newest dated handoff under `docs/handoff/`.

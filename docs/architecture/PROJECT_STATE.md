@@ -1,5 +1,7 @@
 # Planets Intel — Project State
 
+**2026-10-14 update:** Read `docs/handoff/2026-10-14-p1-mainline-security-and-consolidation.md` first. P0 is deployed at `88a3282649c7b6b8ca42d4271d765855ffc7ace9`; P1 consent ledger at `14d82068bb741c36b2c67c5cc3fbf1ef1ce0a957` is not yet deployed. Cross-player private sharing remains blocked. Historical September runtime checkpoints below are preserved as history, not current production state.
+
 This is the durable architectural state for `Numillyash/planets-intel`. Git history is the detailed implementation log. For the exact latest runtime/deploy checkpoint, also read `docs/architecture/CURRENT_HANDOFF.md` and the newest dated file under `docs/handoff/`.
 
 ## Active development
