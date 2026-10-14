@@ -26,7 +26,7 @@ class DashboardIntelShareAccount(BaseModel):
 
 class DashboardIntelShareResponse(BaseModel):
     id: int
-    status: Literal["pending", "active"]
+    status: Literal["pending", "active", "disabled"]
     account_a: DashboardIntelShareAccount
     account_b: DashboardIntelShareAccount
     created_at: datetime
