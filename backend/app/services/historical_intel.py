@@ -132,7 +132,7 @@ def get_combined_private_intel_turn(
     if primary is None:
         return None
 
-    accessible = accessible_intel_accounts(user_id=user_id)
+    accessible = accessible_intel_accounts(user_id=user_id, game_id=game_id, linked_account_id=linked_account_id)
     accessible_ids = {account.id for account in accessible}
     if linked_account_id not in accessible_ids:
         return None
@@ -236,7 +236,7 @@ def historical_intel_status(
     if primary is None:
         return None
 
-    accessible = accessible_intel_accounts(user_id=user_id)
+    accessible = accessible_intel_accounts(user_id=user_id, game_id=game_id, linked_account_id=linked_account_id)
     accessible_ids = [account.id for account in accessible]
 
     with SessionLocal() as session:
@@ -366,7 +366,7 @@ async def backfill_historical_turn(
             f"Historical turn must be between 1 and {game.current_turn}"
         )
 
-    accounts = accessible_intel_accounts(user_id=user_id)
+    accounts = accessible_intel_accounts(user_id=user_id, game_id=game_id, linked_account_id=linked_account_id)
     semaphore = asyncio.Semaphore(MAX_CONCURRENT_HISTORICAL_LOADS)
 
     async def load_one(account) -> dict[str, Any]:
