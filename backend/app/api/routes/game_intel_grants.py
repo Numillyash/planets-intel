@@ -1,5 +1,5 @@
 """Game-specific consent ledger; never a raw private-intel API."""
-from fastapi import APIRouter, Depends, HTTPException, Path, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from app.api.dependencies.auth import require_user
 from app.models.user import AppUser
 from app.schemas.game_intel_grants import (
@@ -10,6 +10,10 @@ from app.services.game_intel_grants import (
     GrantConflict, GrantForbidden, GrantNotFound,
     list_game_grants, request_game_grant, consent_game_grant, revoke_game_grant,
 )
+
+from app.services.game_intel_preview import preview_game_grant
+from app.services.game_intel_read import get_received_game_intel
+from fastapi import Response
 
 router = APIRouter()
 
@@ -38,6 +42,7 @@ def request_grant(
             grantor_account_id=payload.grantor_account_id,
             grantee_planets_username=payload.grantee_planets_username,
             requested_scopes=list(payload.requested_scopes),
+            sharing_mode=payload.sharing_mode,
         )
     except (GrantNotFound, GrantForbidden, GrantConflict) as exc:
         raise _http_error(exc) from exc
@@ -53,6 +58,7 @@ def consent_grant(
         record = consent_game_grant(
             user_id=user.id, game_id=game_id,
             grant_id=grant_id, grantee_account_id=payload.grantee_account_id,
+            confirm_unrestricted=payload.confirm_unrestricted,
         )
     except (GrantNotFound, GrantForbidden, GrantConflict) as exc:
         raise _http_error(exc) from exc
@@ -72,3 +78,58 @@ def revoke_grant(
     except (GrantNotFound, GrantForbidden, GrantConflict) as exc:
         raise _http_error(exc) from exc
     return GameGrantResponse(**record)
+
+
+@router.get("/intel/games/{game_id}/grants/{grant_id}/preview")
+def preview_grant(
+    game_id: int = Path(gt=0),
+    grant_id: int = Path(gt=0),
+    linked_account_id: int = Query(gt=0),
+    user: AppUser = Depends(require_user),
+) -> dict[str, object]:
+    """Owner-only preview. This never delegates a private read to the grantee."""
+    try:
+        return preview_game_grant(
+            user_id=user.id, game_id=game_id, grant_id=grant_id,
+            linked_account_id=linked_account_id,
+        )
+    except (GrantNotFound, GrantForbidden, GrantConflict) as exc:
+        raise _http_error(exc) from exc
+
+
+@router.get("/intel/games/{game_id}/received", response_model=None)
+def received_scoped_game_intel(
+    response: Response,
+    game_id: int = Path(gt=0),
+    linked_account_id: int = Query(gt=0),
+    user: AppUser = Depends(require_user),
+) -> dict[str, object]:
+    """Only explicit, current-turn, allowlisted peer projections.
+
+    This endpoint never delegates access to raw private turn payloads.
+    """
+    response.headers["Cache-Control"] = "no-store, private"
+    try:
+        return get_received_game_intel(
+            user_id=user.id, game_id=game_id, linked_account_id=linked_account_id,
+        )
+    except (GrantNotFound, GrantForbidden, GrantConflict) as exc:
+        raise _http_error(exc) from exc
+
+@router.get("/intel/games/{game_id}/received/history/{turn}", response_model=None)
+def received_historical_scoped_game_intel(
+    response: Response,
+    game_id: int = Path(gt=0),
+    turn: int = Path(gt=0),
+    linked_account_id: int = Query(gt=0),
+    user: AppUser = Depends(require_user),
+) -> dict[str, object]:
+    """History never includes observations from before explicit consent."""
+    response.headers["Cache-Control"] = "no-store, private"
+    try:
+        return get_received_game_intel(
+            user_id=user.id, game_id=game_id,
+            linked_account_id=linked_account_id, requested_turn=turn,
+        )
+    except (GrantNotFound, GrantForbidden, GrantConflict) as exc:
+        raise _http_error(exc) from exc

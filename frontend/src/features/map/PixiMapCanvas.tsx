@@ -124,14 +124,22 @@ async function warmHullTexture(url: string): Promise<void> {
 }
 
 
+export interface ScopedPartnerMapPoint {
+    x: number;
+    y: number;
+    sourceId: number;
+}
+
 export function PixiMapCanvas({
     intel,
+    partnerPoints,
     labelMode,
     selected,
     onSelect,
     fitViewRef,
 }: {
     intel: PrivateIntelMapResponse;
+    partnerPoints: ScopedPartnerMapPoint[];
     labelMode: PlanetLabelMode;
     selected: SelectedEntity | null;
     onSelect: (entity: SelectedEntity) => void;
@@ -760,6 +768,17 @@ export function PixiMapCanvas({
             });
         }
 
+        if (layerVisibility.entities) {
+            // Independently scoped peer positions only. Never mutate factual
+            // observer-owned entities or upgrade inferred data to facts.
+            for (const point of partnerPoints) {
+                const ring = new Graphics()
+                    .circle(point.x, renderY(point.y, bounds), 9)
+                    .stroke({ color: 0x4dd9e8, alpha: 0.85, width: 2 });
+                world.addChild(ring);
+            }
+        }
+
         if (layerVisibility.movementPredictions) {
             drawOrderVectors({
                 world,
@@ -846,6 +865,7 @@ export function PixiMapCanvas({
         links,
         onSelect,
         orderDrafts,
+        partnerPoints,
         selected,
         selectedCombatEvent,
         selectedHostEventKey,

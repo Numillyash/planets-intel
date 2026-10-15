@@ -33,6 +33,7 @@ import { AdvantagesPanel } from "./AdvantagesPanel";
 import { BattlePlannerDashboardPanel } from "./BattlePlannerDashboardPanel";
 import { CombatFighterEvidencePanel } from "./CombatFighterEvidencePanel";
 import { CommanderIntelligencePanel } from "./CommanderIntelligencePanel";
+import { GameIntelGrantsPanel } from "./GameIntelGrantsPanel";
 import { DiplomacyPanel } from "./DiplomacyPanel";
 import { MilitaryAttributionPanel } from "./MilitaryAttributionPanel";
 import { StarbaseListPanel } from "./StarbaseListPanel";
@@ -648,6 +649,10 @@ export function GameDashboard({
                                     ))}
                                 </div>
                             </section>
+                            <GameIntelGrantsPanel
+                                gameId={game.game.id}
+                                linkedAccountId={selectedAccount.id}
+                            />
                             <Placeholder title="Turn controls">
                                 Full order entry, local order drafts, validation,
                                 save/submit turn and upstream reconciliation belong

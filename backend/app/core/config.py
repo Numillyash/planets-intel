@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     session_cookie_name: str = "planets_intel_session"
     session_ttl_days: int = 30
 
+    # Safe release gate: enabling scoped peer reads requires a separate
+    # explicit operator decision after game-rule and runtime review.
+    intel_expanded_sharing_enabled: bool = False
+
     model_config = SettingsConfigDict(
         env_file=".env",
         extra="ignore",

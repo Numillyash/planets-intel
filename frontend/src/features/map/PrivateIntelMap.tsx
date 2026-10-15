@@ -30,6 +30,8 @@ import {
 } from "./mapModel";
 import { EntityDetails } from "./EntityDetails";
 import { PixiMapCanvas } from "./PixiMapCanvas";
+import { getReceivedGameIntel, type ScopedPartnerIntel } from "../../api/gameIntelGrants";
+import type { ScopedPartnerMapPoint } from "./PixiMapCanvas";
 import "./map.css";
 
 interface PrivateIntelMapProps {
@@ -200,6 +202,7 @@ export function PrivateIntelMap({
     const [autoRefreshing, setAutoRefreshing] = useState(false);
     const [autoRefreshError, setAutoRefreshError] = useState<string | null>(null);
     const [sharingRevision, setSharingRevision] = useState(0);
+    const [partnerIntel, setPartnerIntel] = useState<ScopedPartnerIntel | null>(null);
 
     const [historyStatus, setHistoryStatus] =
         useState<HistoricalIntelStatus | null>(null);
@@ -638,6 +641,64 @@ export function PrivateIntelMap({
         setSelected((current) => reconcileSelection(current, displayIntel));
     }, [revisionKey, viewMode]);
 
+    useEffect(() => {
+        let cancelled = false;
+        if (identity === null) {
+            setPartnerIntel(null);
+            return () => { cancelled = true; };
+        }
+        const { gameId, linkedAccountId } = identity;
+        async function reload() {
+            try {
+                const received = await getReceivedGameIntel(gameId, linkedAccountId, selectedTurn);
+                if (!cancelled) setPartnerIntel(received);
+            } catch {
+                // Permission denied, disabled server gate or revoked consent:
+                // do not retain previously displayed peer intelligence.
+                if (!cancelled) setPartnerIntel(null);
+            }
+        }
+        setPartnerIntel(null);
+        void reload();
+        const timer = window.setInterval(() => void reload(), 15000);
+        const onFocus = () => void reload();
+        window.addEventListener("focus", onFocus);
+        return () => {
+            cancelled = true;
+            window.clearInterval(timer);
+            window.removeEventListener("focus", onFocus);
+        };
+    }, [identity?.gameId, identity?.linkedAccountId, selectedTurn, sharingRevision]);
+
+    const displayedPartner =
+        partnerIntel?.turn === displayIntel?.turn &&
+        partnerIntel?.game_id === displayIntel?.game_id
+        ? partnerIntel : null;
+    const sharedMapPoints = useMemo((): ScopedPartnerMapPoint[] => {
+        const points: ScopedPartnerMapPoint[] = [];
+        for (const source of displayedPartner?.sources ?? []) {
+            for (const record of [...source.planets, ...source.ships]) {
+                const x = record.fields.x;
+                const y = record.fields.y;
+                if (
+                    typeof x === "number" && typeof y === "number" &&
+                    Number.isFinite(x) && Number.isFinite(y)
+                ) {
+                    points.push({ x, y, sourceId: source.grant_id });
+                }
+            }
+            for (const contact of source.third_party_contacts) {
+                if (contact.x !== null && contact.y !== null) {
+                    points.push({
+                        x: contact.x, y: contact.y, sourceId: source.grant_id,
+                    });
+                }
+            }
+        }
+            return points;
+    }, [displayedPartner]);
+
+
     if (effectiveLoading) {
         return (
             <section className="panel intel-map-panel">
@@ -850,10 +911,19 @@ export function PrivateIntelMap({
                     <PixiMapCanvas
                         fitViewRef={fitViewRef}
                         intel={displayIntel}
+                        partnerPoints={sharedMapPoints}
                         labelMode={labelMode}
                         onSelect={setSelected}
                         selected={selected}
                     />
+                    {displayedPartner !== null && displayedPartner.sources.length > 0 && (
+                        <div className="intel-map-help" role="status">
+                            Scoped partner intelligence: {displayedPartner.sources.length}
+                            {" "}source(s), {sharedMapPoints.length} map positions.
+                            Cyan rings indicate independently consented projections;
+                            they are not part of your native Host observations.
+                        </div>
+                    )}
                     <div className="intel-map-help">
                         Drag to pan · wheel to zoom · orbit ring means ships are present
                     </div>
@@ -882,6 +952,96 @@ export function PrivateIntelMap({
                 </div>
 
                 <aside className="intel-map-details">
+                    {displayedPartner !== null && displayedPartner.sources.length > 0 && (
+                        <section className="panel">
+                            <h3>Scoped partner intelligence · T{displayedPartner.turn}</h3>
+                            {displayedPartner.sources.map((source) => (
+                                <details key={source.grant_id} style={{ marginTop: 10 }}>
+                                    <summary>
+                                        Agreement #{source.grant_id} ·
+                                        {" "}{source.planets.length} planets,
+                                        {" "}{source.ships.length} ships,
+                                        {" "}{source.starbases.length} bases,
+                                        {" "}{source.messages.length} bilateral messages
+                                    </summary>
+                                    <p className="subtitle">
+                                        Factual source batch #{source.source_batch_id},
+                                        {" "}observer slot {source.source_player_slot_id}.
+                                        Shared fields are separated from your own Host turn.
+                                    </p>
+                                    {([
+                                        ["Planets", source.planets.map((p) => ({
+                                            key: "Planet #" + p.planet_id,
+                                            fields: p.fields,
+                                        }))],
+                                        ["Ships", source.ships.map((s) => ({
+                                            key: "Ship #" + s.ship_id,
+                                            fields: s.fields,
+                                        }))],
+                                        ["Starbases", source.starbases.map((b) => ({
+                                            key: "Starbase #" + b.starbase_id,
+                                            fields: b.fields,
+                                        }))],
+                                    ] as Array<[string, Array<{ key: string; fields: Record<string, unknown> }>]>)
+                                        .filter(([, items]) => items.length > 0)
+                                        .map(([label, items]) => (
+                                            <details key={label} style={{ marginLeft: 10, marginTop: 8 }}>
+                                                <summary>{label} ({items.length})</summary>
+                                                {items.map((item) => (
+                                                    <details key={item.key} style={{ marginLeft: 8 }}>
+                                                        <summary>{item.key}</summary>
+                                                        <dl>
+                                                            {Object.entries(item.fields).map(([key, value]) => (
+                                                                <div key={key}>
+                                                                    <dt>{key}</dt>
+                                                                    <dd>{value === null ? "Unknown" : String(value)}</dd>
+                                                                </div>
+                                                            ))}
+                                                        </dl>
+                                                    </details>
+                                                ))}
+                                            </details>
+                                        ))}
+                                    {source.messages.length > 0 && (
+                                        <details style={{ marginLeft: 10, marginTop: 8 }}>
+                                            <summary>Opt-in bilateral messages ({source.messages.length})</summary>
+                                            {source.messages.map((message, i) => (
+                                                <div key={i}>
+                                                    <strong>{String(message.headline ?? "Message")}</strong>
+                                                    <p style={{ whiteSpace: "pre-wrap" }}>
+                                                        {String(message.body ?? "")}
+                                                    </p>
+                                                </div>
+                                            ))}
+                                        </details>
+                                    )}
+                                    {source.combat_events.length > 0 && (
+                                        <details style={{ marginLeft: 10, marginTop: 8 }}>
+                                            <summary>Combat metadata ({source.combat_events.length})</summary>
+                                            {source.combat_events.map((event, i) => (
+                                                <div key={i}>
+                                                    Battle #{String(event.vcr_id)} at
+                                                    {" "}({String(event.x)}, {String(event.y)})
+                                                </div>
+                                            ))}
+                                        </details>
+                                    )}
+                                    {source.third_party_contacts.length > 0 && (
+                                        <details style={{ marginLeft: 10, marginTop: 8 }}>
+                                            <summary>Shared contact positions ({source.third_party_contacts.length})</summary>
+                                            {source.third_party_contacts.map((contact, i) => (
+                                                <div key={i}>
+                                                    {contact.kind} #{contact.id}:
+                                                    {" "}({contact.x ?? "?"}, {contact.y ?? "?"})
+                                                    {" "}last information T{contact.info_turn ?? "?"}
+                                                </div>
+                                            ))}
+                                        </details>
+                                    )}
+                                </details>
+                            ))}
+                        </section>
+                    )}
                     <div className="eyebrow">Selected factual observation</div>
                     <EntityDetails
                         intel={displayIntel}

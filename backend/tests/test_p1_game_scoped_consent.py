@@ -45,6 +45,7 @@ class P1GameGrantTests(unittest.TestCase):
             grantee_account_id=12, grantor_slot_id=3,
             grantee_slot_id=4, membership_verified_turn=21,
             requested_scopes=["owned_unit_locations"],
+            sharing_mode="unrestricted", expanded_disclosure_confirmed_at=now,
             status="consented_pending_policy", authorizes_private_intel=True,
             consented_at=now, revoked_at=None, created_at=now, updated_at=now,
         )
@@ -52,6 +53,111 @@ class P1GameGrantTests(unittest.TestCase):
             GameGrantResponse(**fields)
         fields["authorizes_private_intel"] = False
         self.assertFalse(GameGrantResponse(**fields).authorizes_private_intel)
+
+    def test_native_is_default_mode_for_new_requests(self):
+        request = GameGrantRequest(
+            grantor_account_id=11,
+            grantee_planets_username="fixture-other",
+            requested_scopes=["owned_unit_locations"],
+        )
+        self.assertEqual(request.sharing_mode, "native")
+
+    def test_invalid_sharing_mode_denied_at_schema(self):
+        with self.assertRaises(ValueError):
+            GameGrantRequest(
+                grantor_account_id=11,
+                grantee_planets_username="fixture-other",
+                requested_scopes=["owned_unit_locations"],
+                sharing_mode="entire_site",  # type: ignore[arg-type]
+            )
+
+    def test_unrestricted_consent_requires_explicit_acknowledgment(self):
+        from app.services.game_intel_grants import GrantConflict
+        from app.services.game_intel_grants import consent_game_grant
+        row = SimpleNamespace(
+            id=7, game_id=100, grantee_account_id=12,
+            status="pending", revoked_at=None, sharing_mode="unrestricted",
+        )
+        with patch("app.services.game_intel_grants.SessionLocal") as factory:
+            factory.return_value = fake_session(SimpleNamespace(id=12), row)
+            with self.assertRaisesRegex(GrantConflict, "explicit recipient confirmation"):
+                consent_game_grant(
+                    user_id=3, game_id=100, grant_id=7,
+                    grantee_account_id=12, confirm_unrestricted=False,
+                )
+
+    def test_confirmation_on_native_mode_is_not_repurposed(self):
+        from app.services.game_intel_grants import GrantConflict
+        from app.services.game_intel_grants import consent_game_grant
+        row = SimpleNamespace(
+            id=7, game_id=100, grantee_account_id=12,
+            status="pending", revoked_at=None, sharing_mode="native",
+        )
+        with patch("app.services.game_intel_grants.SessionLocal") as factory:
+            factory.return_value = fake_session(SimpleNamespace(id=12), row)
+            with self.assertRaisesRegex(GrantConflict, "Cannot confirm"):
+                consent_game_grant(
+                    user_id=3, game_id=100, grant_id=7,
+                    grantee_account_id=12, confirm_unrestricted=True,
+                )
+
+    def test_both_modes_accept_with_correct_confirmation_without_read_authority(self):
+        for mode, confirmation in (("native", False), ("unrestricted", True)):
+            with self.subTest(mode=mode):
+                now = datetime.now(timezone.utc)
+                grantee = SimpleNamespace(id=12)
+                row = SimpleNamespace(
+                    id=7, game_id=100, grantor_account_id=11,
+                    grantee_account_id=12, grantor_slot_id=3,
+                    grantee_slot_id=4, membership_verified_turn=20,
+                    requested_scopes=["owned_unit_locations"],
+                    sharing_mode=mode, expanded_disclosure_confirmed_at=None,
+                    status="pending", revoked_at=None, consented_at=None,
+                    created_at=now, updated_at=now,
+                )
+                context = fake_session(grantee, row)
+                context.__enter__.return_value.get.return_value = SimpleNamespace(
+                    id=11, is_active=True,
+                )
+                with (
+                    patch("app.services.game_intel_grants.SessionLocal", return_value=context),
+                    patch("app.services.game_intel_grants._roster", return_value=(3, 4, 21)),
+                ):
+                    record = consent_game_grant(
+                        user_id=3, game_id=100, grant_id=7,
+                        grantee_account_id=12, confirm_unrestricted=confirmation,
+                    )
+                self.assertEqual(record["sharing_mode"], mode)
+                self.assertEqual(record["status"], "consented_pending_policy")
+                self.assertIsNotNone(record["consented_at"])
+                self.assertFalse(record["authorizes_private_intel"])
+                self.assertEqual(
+                    record["expanded_disclosure_confirmed_at"] is not None,
+                    confirmation,
+                )
+
+    def test_extended_field_categories_are_strict_and_bounded(self):
+        all_scopes = [
+            "owned_unit_locations", "third_party_contacts", "combat_vcr_evidence",
+            "owned_planet_details", "owned_ship_details", "ship_friendly_codes",
+            "planet_friendly_codes", "ship_orders", "ship_transfers",
+            "starbase_orders_inventory", "planet_build_goals", "ship_history",
+            "wormhole_scans", "private_messages", "financial_and_cargo",
+        ]
+        request = GameGrantRequest(
+            grantor_account_id=11,
+            grantee_planets_username="fixture-other",
+            sharing_mode="unrestricted",
+            requested_scopes=all_scopes,
+        )
+        self.assertEqual(len(request.requested_scopes), 15)
+        with self.assertRaises(ValueError):
+            GameGrantRequest(
+                grantor_account_id=11,
+                grantee_planets_username="fixture-other",
+                sharing_mode="unrestricted",
+                requested_scopes=all_scopes + ["private_messages"],
+            )
 
     def test_game_scoped_consent_never_authorizes_raw_peer_reads(self):
         for game_id in (100, 101):
@@ -123,7 +229,8 @@ class P1GameGrantTests(unittest.TestCase):
         cols = GameIntelGrant.__table__.columns
         for name in ("game_id", "grantor_account_id", "grantee_account_id",
                      "grantor_slot_id", "grantee_slot_id", "requested_scopes",
-                     "consented_at", "revoked_at", "membership_verified_turn"):
+                     "consented_at", "revoked_at", "membership_verified_turn",
+                     "sharing_mode", "expanded_disclosure_confirmed_at"):
             self.assertIn(name, cols)
         idx = next(i for i in GameIntelGrant.__table__.indexes
                    if i.name == "uq_game_intel_grant_unrevoked")
