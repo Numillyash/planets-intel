@@ -63,7 +63,7 @@ FRIENDLY_CODES = frozenset({"friendlycode", "friendly_code", "fcode"})
 FIELD_SCOPE_MAP: dict[str, dict[str, frozenset[str]]] = {
     "planet": {
         "owned_unit_locations": COMMON_POSITION,
-        "owned_planet_details": PLANET_DETAILS,
+        "owned_planet_details": PLANET_DETAILS - CARGO_AND_FUNDS,
         "financial_and_cargo": CARGO_AND_FUNDS,
         "planet_build_goals": PLANET_BUILD_GOALS,
         "planet_friendly_codes": FRIENDLY_CODES,
