@@ -956,14 +956,89 @@ export function PrivateIntelMap({
                         <section className="panel">
                             <h3>Scoped partner intelligence · T{displayedPartner.turn}</h3>
                             {displayedPartner.sources.map((source) => (
-                                <div key={source.grant_id} className="subtitle">
-                                    Agreement #{source.grant_id}:
-                                    {" "}{source.planets.length} planets,
-                                    {" "}{source.ships.length} ships,
-                                    {" "}{source.starbases.length} bases,
-                                    {" "}{source.messages.length} bilateral messages.
-                                    Source snapshot #{source.source_batch_id}.
-                                </div>
+                                <details key={source.grant_id} style={{ marginTop: 10 }}>
+                                    <summary>
+                                        Agreement #{source.grant_id} ·
+                                        {" "}{source.planets.length} planets,
+                                        {" "}{source.ships.length} ships,
+                                        {" "}{source.starbases.length} bases,
+                                        {" "}{source.messages.length} bilateral messages
+                                    </summary>
+                                    <p className="subtitle">
+                                        Factual source batch #{source.source_batch_id},
+                                        {" "}observer slot {source.source_player_slot_id}.
+                                        Shared fields are separated from your own Host turn.
+                                    </p>
+                                    {([
+                                        ["Planets", source.planets.map((p) => ({
+                                            key: "Planet #" + p.planet_id,
+                                            fields: p.fields,
+                                        }))],
+                                        ["Ships", source.ships.map((s) => ({
+                                            key: "Ship #" + s.ship_id,
+                                            fields: s.fields,
+                                        }))],
+                                        ["Starbases", source.starbases.map((b) => ({
+                                            key: "Starbase #" + b.starbase_id,
+                                            fields: b.fields,
+                                        }))],
+                                    ] as Array<[string, Array<{ key: string; fields: Record<string, unknown> }>]>)
+                                        .filter(([, items]) => items.length > 0)
+                                        .map(([label, items]) => (
+                                            <details key={label} style={{ marginLeft: 10, marginTop: 8 }}>
+                                                <summary>{label} ({items.length})</summary>
+                                                {items.map((item) => (
+                                                    <details key={item.key} style={{ marginLeft: 8 }}>
+                                                        <summary>{item.key}</summary>
+                                                        <dl>
+                                                            {Object.entries(item.fields).map(([key, value]) => (
+                                                                <div key={key}>
+                                                                    <dt>{key}</dt>
+                                                                    <dd>{value === null ? "Unknown" : String(value)}</dd>
+                                                                </div>
+                                                            ))}
+                                                        </dl>
+                                                    </details>
+                                                ))}
+                                            </details>
+                                        ))}
+                                    {source.messages.length > 0 && (
+                                        <details style={{ marginLeft: 10, marginTop: 8 }}>
+                                            <summary>Opt-in bilateral messages ({source.messages.length})</summary>
+                                            {source.messages.map((message, i) => (
+                                                <div key={i}>
+                                                    <strong>{String(message.headline ?? "Message")}</strong>
+                                                    <p style={{ whiteSpace: "pre-wrap" }}>
+                                                        {String(message.body ?? "")}
+                                                    </p>
+                                                </div>
+                                            ))}
+                                        </details>
+                                    )}
+                                    {source.combat_events.length > 0 && (
+                                        <details style={{ marginLeft: 10, marginTop: 8 }}>
+                                            <summary>Combat metadata ({source.combat_events.length})</summary>
+                                            {source.combat_events.map((event, i) => (
+                                                <div key={i}>
+                                                    Battle #{String(event.vcr_id)} at
+                                                    {" "}({String(event.x)}, {String(event.y)})
+                                                </div>
+                                            ))}
+                                        </details>
+                                    )}
+                                    {source.third_party_contacts.length > 0 && (
+                                        <details style={{ marginLeft: 10, marginTop: 8 }}>
+                                            <summary>Shared contact positions ({source.third_party_contacts.length})</summary>
+                                            {source.third_party_contacts.map((contact, i) => (
+                                                <div key={i}>
+                                                    {contact.kind} #{contact.id}:
+                                                    {" "}({contact.x ?? "?"}, {contact.y ?? "?"})
+                                                    {" "}last information T{contact.info_turn ?? "?"}
+                                                </div>
+                                            ))}
+                                        </details>
+                                    )}
+                                </details>
                             ))}
                         </section>
                     )}
