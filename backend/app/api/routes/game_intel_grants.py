@@ -115,3 +115,21 @@ def received_scoped_game_intel(
         )
     except (GrantNotFound, GrantForbidden, GrantConflict) as exc:
         raise _http_error(exc) from exc
+
+@router.get("/intel/games/{game_id}/received/history/{turn}", response_model=None)
+def received_historical_scoped_game_intel(
+    response: Response,
+    game_id: int = Path(gt=0),
+    turn: int = Path(gt=0),
+    linked_account_id: int = Query(gt=0),
+    user: AppUser = Depends(require_user),
+) -> dict[str, object]:
+    """History never includes observations from before explicit consent."""
+    response.headers["Cache-Control"] = "no-store, private"
+    try:
+        return get_received_game_intel(
+            user_id=user.id, game_id=game_id,
+            linked_account_id=linked_account_id, requested_turn=turn,
+        )
+    except (GrantNotFound, GrantForbidden, GrantConflict) as exc:
+        raise _http_error(exc) from exc

@@ -643,14 +643,14 @@ export function PrivateIntelMap({
 
     useEffect(() => {
         let cancelled = false;
-        if (identity === null || selectedTurn !== null) {
+        if (identity === null) {
             setPartnerIntel(null);
             return () => { cancelled = true; };
         }
         const { gameId, linkedAccountId } = identity;
         async function reload() {
             try {
-                const received = await getReceivedGameIntel(gameId, linkedAccountId);
+                const received = await getReceivedGameIntel(gameId, linkedAccountId, selectedTurn);
                 if (!cancelled) setPartnerIntel(received);
             } catch {
                 // Permission denied, disabled server gate or revoked consent:
@@ -670,7 +670,7 @@ export function PrivateIntelMap({
         };
     }, [identity?.gameId, identity?.linkedAccountId, selectedTurn, sharingRevision]);
 
-    const displayedPartner = selectedTurn === null &&
+    const displayedPartner =
         partnerIntel?.turn === displayIntel?.turn &&
         partnerIntel?.game_id === displayIntel?.game_id
         ? partnerIntel : null;

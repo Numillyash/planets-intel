@@ -182,9 +182,12 @@ export interface ScopedPartnerIntel {
 export function getReceivedGameIntel(
     gameId: number,
     linkedAccountId: number,
+    historicalTurn: number | null = null,
 ): Promise<ScopedPartnerIntel> {
     return request<ScopedPartnerIntel>(
-        "/api/intel/games/" + gameId + "/received?linked_account_id=" + linkedAccountId,
+        "/api/intel/games/" + gameId + "/received" +
+        (historicalTurn === null ? "" : "/history/" + historicalTurn) +
+        "?linked_account_id=" + linkedAccountId,
     );
 }
 

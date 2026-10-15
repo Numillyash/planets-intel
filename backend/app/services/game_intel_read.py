@@ -22,11 +22,13 @@ from app.services.intel_grant_projection import project_current_grant_batch
 
 def get_received_game_intel(
     *, user_id: int, game_id: int, linked_account_id: int,
+    requested_turn: int | None = None,
 ) -> dict[str, Any]:
-    """One canonical current turn, one local recipient, direct bilateral grants.
+    """One selected turn, one local recipient and direct bilateral grants.
 
-    Pre-consent snapshots cannot be re-disclosed. A revoked or roster-stale
-    grant fails closed on every request, without mutable client authorization.
+    Pre-consent snapshots cannot be re-disclosed. Historical reads require
+    the explicit ship_history checkbox and cannot precede consent turn.
+    A revoked or roster-stale grant fails closed on every request.
     """
     if not get_settings().intel_expanded_sharing_enabled:
         raise GrantForbidden("Scoped cross-player intelligence is disabled on this server")
@@ -41,6 +43,9 @@ def get_received_game_intel(
         if game is None or game.status_id != 2 or game.current_turn <= 0:
             raise GrantConflict("Current running game cannot be verified")
         current_turn = int(game.current_turn)
+        target_turn = current_turn if requested_turn is None else requested_turn
+        if target_turn <= 0 or target_turn > current_turn:
+            raise GrantConflict("Requested turn is outside known game history")
 
         grants = session.execute(select(GameIntelGrant).where(
             GameIntelGrant.game_id == game_id,
@@ -61,6 +66,11 @@ def get_received_game_intel(
             ):
                 continue
             scopes = grant.requested_scopes
+            if requested_turn is not None and (
+                "ship_history" not in scopes
+                or target_turn < grant.membership_verified_turn
+            ):
+                continue
             if (
                 not isinstance(scopes, list) or not scopes
                 or not all(isinstance(scope, str) for scope in scopes)
@@ -85,7 +95,7 @@ def get_received_game_intel(
 
             batch = session.execute(select(PrivateObservationBatch).where(
                 PrivateObservationBatch.game_id == game_id,
-                PrivateObservationBatch.turn == current_turn,
+                PrivateObservationBatch.turn == target_turn,
                 PrivateObservationBatch.observer_planets_account_id == grantor.id,
                 PrivateObservationBatch.source_player_slot_id == grantor_slot,
                 PrivateObservationBatch.observed_at >= grant.consented_at,
@@ -118,7 +128,7 @@ def get_received_game_intel(
 
         return {
             "game_id": game_id,
-            "turn": current_turn,
+            "turn": target_turn,
             "primary_linked_account_id": recipient.id,
             "mode": "scoped_partner_intel",
             "aggregation_policy": "source_separated_allowlisted_current_turn",
