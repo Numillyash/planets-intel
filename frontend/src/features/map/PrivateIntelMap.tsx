@@ -30,6 +30,8 @@ import {
 } from "./mapModel";
 import { EntityDetails } from "./EntityDetails";
 import { PixiMapCanvas } from "./PixiMapCanvas";
+import { getReceivedGameIntel, type ScopedPartnerIntel } from "../../api/gameIntelGrants";
+import type { ScopedPartnerMapPoint } from "./PixiMapCanvas";
 import "./map.css";
 
 interface PrivateIntelMapProps {
@@ -200,6 +202,7 @@ export function PrivateIntelMap({
     const [autoRefreshing, setAutoRefreshing] = useState(false);
     const [autoRefreshError, setAutoRefreshError] = useState<string | null>(null);
     const [sharingRevision, setSharingRevision] = useState(0);
+    const [partnerIntel, setPartnerIntel] = useState<ScopedPartnerIntel | null>(null);
 
     const [historyStatus, setHistoryStatus] =
         useState<HistoricalIntelStatus | null>(null);
@@ -638,6 +641,60 @@ export function PrivateIntelMap({
         setSelected((current) => reconcileSelection(current, displayIntel));
     }, [revisionKey, viewMode]);
 
+    useEffect(() => {
+        let cancelled = false;
+        if (identity === null || selectedTurn !== null) {
+            setPartnerIntel(null);
+            return () => { cancelled = true; };
+        }
+        const { gameId, linkedAccountId } = identity;
+        async function reload() {
+            try {
+                const received = await getReceivedGameIntel(gameId, linkedAccountId);
+                if (!cancelled) setPartnerIntel(received);
+            } catch {
+                // Permission denied, disabled server gate or revoked consent:
+                // do not retain previously displayed peer intelligence.
+                if (!cancelled) setPartnerIntel(null);
+            }
+        }
+        setPartnerIntel(null);
+        void reload();
+        const timer = window.setInterval(() => void reload(), 15000);
+        const onFocus = () => void reload();
+        window.addEventListener("focus", onFocus);
+        return () => {
+            cancelled = true;
+            window.clearInterval(timer);
+            window.removeEventListener("focus", onFocus);
+        };
+    }, [identity?.gameId, identity?.linkedAccountId, selectedTurn, sharingRevision]);
+
+    const displayedPartner = selectedTurn === null &&
+        partnerIntel?.turn === displayIntel?.turn &&
+        partnerIntel?.game_id === displayIntel?.game_id
+        ? partnerIntel : null;
+    const sharedMapPoints: ScopedPartnerMapPoint[] = [];
+    for (const source of displayedPartner?.sources ?? []) {
+        for (const record of [...source.planets, ...source.ships]) {
+            const x = record.fields.x;
+            const y = record.fields.y;
+            if (
+                typeof x === "number" && typeof y === "number" &&
+                Number.isFinite(x) && Number.isFinite(y)
+            ) {
+                sharedMapPoints.push({ x, y, sourceId: source.grant_id });
+            }
+        }
+        for (const contact of source.third_party_contacts) {
+            if (contact.x !== null && contact.y !== null) {
+                sharedMapPoints.push({
+                    x: contact.x, y: contact.y, sourceId: source.grant_id,
+                });
+            }
+        }
+    }
+
     if (effectiveLoading) {
         return (
             <section className="panel intel-map-panel">
@@ -850,10 +907,19 @@ export function PrivateIntelMap({
                     <PixiMapCanvas
                         fitViewRef={fitViewRef}
                         intel={displayIntel}
+                        partnerPoints={sharedMapPoints}
                         labelMode={labelMode}
                         onSelect={setSelected}
                         selected={selected}
                     />
+                    {displayedPartner !== null && displayedPartner.sources.length > 0 && (
+                        <div className="intel-map-help" role="status">
+                            Scoped partner intelligence: {displayedPartner.sources.length}
+                            {" "}source(s), {sharedMapPoints.length} map positions.
+                            Cyan rings indicate independently consented projections;
+                            they are not part of your native Host observations.
+                        </div>
+                    )}
                     <div className="intel-map-help">
                         Drag to pan · wheel to zoom · orbit ring means ships are present
                     </div>
@@ -882,6 +948,21 @@ export function PrivateIntelMap({
                 </div>
 
                 <aside className="intel-map-details">
+                    {displayedPartner !== null && displayedPartner.sources.length > 0 && (
+                        <section className="panel">
+                            <h3>Scoped partner intelligence · T{displayedPartner.turn}</h3>
+                            {displayedPartner.sources.map((source) => (
+                                <div key={source.grant_id} className="subtitle">
+                                    Agreement #{source.grant_id}:
+                                    {" "}{source.planets.length} planets,
+                                    {" "}{source.ships.length} ships,
+                                    {" "}{source.starbases.length} bases,
+                                    {" "}{source.messages.length} bilateral messages.
+                                    Source snapshot #{source.source_batch_id}.
+                                </div>
+                            ))}
+                        </section>
+                    )}
                     <div className="eyebrow">Selected factual observation</div>
                     <EntityDetails
                         intel={displayIntel}
