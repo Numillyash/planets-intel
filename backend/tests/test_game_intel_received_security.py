@@ -36,6 +36,7 @@ def grant(**changes):
     fields = dict(
         id=71, game_id=17, grantor_account_id=33, grantee_account_id=22,
         grantor_slot_id=3, grantee_slot_id=4,
+        membership_verified_turn=43,
         status="consented_pending_policy", sharing_mode="unrestricted",
         requested_scopes=["owned_planet_details", "ship_friendly_codes"],
         consented_at=NOW, expanded_disclosure_confirmed_at=NOW,
