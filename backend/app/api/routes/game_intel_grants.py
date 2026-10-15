@@ -12,6 +12,8 @@ from app.services.game_intel_grants import (
 )
 
 from app.services.game_intel_preview import preview_game_grant
+from app.services.game_intel_read import get_received_game_intel
+from fastapi import Response
 
 router = APIRouter()
 
@@ -90,6 +92,27 @@ def preview_grant(
         return preview_game_grant(
             user_id=user.id, game_id=game_id, grant_id=grant_id,
             linked_account_id=linked_account_id,
+        )
+    except (GrantNotFound, GrantForbidden, GrantConflict) as exc:
+        raise _http_error(exc) from exc
+
+
+@router.get("/intel/games/{game_id}/received", response_model=None)
+def received_scoped_game_intel(
+    game_id: int = Path(gt=0),
+    linked_account_id: int = Query(gt=0),
+    user: AppUser = Depends(require_user),
+    response: Response = None,
+) -> dict[str, object]:
+    """Only explicit, current-turn, allowlisted peer projections.
+
+    This endpoint never delegates access to raw private turn payloads.
+    """
+    if response is not None:
+        response.headers["Cache-Control"] = "no-store, private"
+    try:
+        return get_received_game_intel(
+            user_id=user.id, game_id=game_id, linked_account_id=linked_account_id,
         )
     except (GrantNotFound, GrantForbidden, GrantConflict) as exc:
         raise _http_error(exc) from exc
