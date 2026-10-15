@@ -1,4 +1,4 @@
-# Planets Intel: Two Sharing Modes (Design + Consent Contract)
+# Planets Intel: Two Sharing Modes (Consent, Scoped Read, Feature Gate)
 
 **2026-10-14 — Draft, NOT deployed.** This document describes two distinct
 visibility modes rather than relabelling the old global Combined union.
@@ -34,8 +34,9 @@ in-game messages. `private_messages` can encompass correspondence with
 non-consenting third parties; it requires a separate explicit checkbox and
 must never imply those correspondents agreed to redistribution. A P1 record remains in
 `consented_pending_policy`; response contains `authorizes_private_intel=false`.
-The P0 selected-owned-observer access boundary is unchanged. No code reads
-unrestricted data from other observers yet.
+The P0 selected-owned-observer boundary remains unchanged. A separate
+recipient-facing, opt-in field-level read service is now implemented behind
+a default-disabled server switch; it never provides raw private turns.
 
 Before enabling positive disclosure, explicitly define which factual domains
 are in scope (ships, planets, starbases, derived/VCR/historical content),
@@ -87,9 +88,10 @@ The preliminary projection is fail-closed. Unknown keys, credentials,
 foreign objects' private attributes and undeclared scope families are
 omitted. Current object fields, selected message content, basic VCR
 metadata and third-party contact positions have independently classified
-paths. Full historical archives, full VCR replay payloads, detailed
-wormhole scans and game-wide shared map overlays require additional
-provenance/scope work before enabling live disclosure. Do not interpret
+paths. Historical turn-indexed scoped reads after consent and independently marked
+map positions are implemented. Complete historical archives before consent,
+full raw VCR replay payloads, detailed wormhole scans and injecting peer
+fields into the recipient's unrelated analysis engines remain unavailable. Do not interpret
 checkbox consent as proof those domains are already available.
 
 

@@ -165,7 +165,7 @@ class ScopedRecipientReadTests(unittest.TestCase):
     def test_current_turn_history_is_available_with_explicit_opt_in(self):
         cm, s, _ = context(
             [grant(requested_scopes=["ship_history", "owned_planet_details"])],
-            batch=SimpleNamespace(id=101, turn=43),
+            batch=SimpleNamespace(id=101, turn=43, observed_at=NOW + timedelta(minutes=1)),
         )
         with (
             patch("app.services.game_intel_read.get_settings",
