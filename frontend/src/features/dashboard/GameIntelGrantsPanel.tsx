@@ -15,6 +15,7 @@ const OPTIONAL_SCOPES: Array<{
     id: GameIntelScope;
     title: string;
     description: string;
+    available?: boolean;
 }> = [
     { id: "owned_unit_locations", title: "Owned object locations", description: "Positions not already visible in your Host turn" },
     { id: "third_party_contacts", title: "Third-party contacts", description: "Additional sightings of other empires" },
@@ -29,8 +30,8 @@ const OPTIONAL_SCOPES: Array<{
     { id: "starbase_orders_inventory", title: "Starbase orders and inventory", description: "Construction, stored hulls, parts and torpedoes" },
     { id: "planet_build_goals", title: "Planet plans", description: "Build goals and happiness-related plans" },
     { id: "ship_history", title: "Ship history", description: "Earlier movement and known past observations" },
-    { id: "wormhole_scans", title: "Wormhole scans", description: "Additional scans not exposed by native diplomacy" },
-    { id: "private_messages", title: "Private in-game messages", description: "May contain correspondence from third players" },
+    { id: "wormhole_scans", title: "Wormhole scans", description: "Not yet available: scan fields need audited normalization", available: false },
+    { id: "private_messages", title: "Private in-game messages", description: "Only messages you authored to this recipient; other correspondents excluded" },
 ];
 
 const BASELINE = [
@@ -85,9 +86,9 @@ export function GameIntelGrantsPanel({
         }
         if (selected.includes("private_messages")) {
             const acknowledged = window.confirm(
-                "Private in-game messages may include text from players who did not " +
-                "agree to redistribution. Record an explicit request to disclose " +
-                "these messages for this game? This does NOT activate sharing yet.",
+                "Only messages you authored directly to this recipient may be shared. " +
+                "Correspondence involving third parties stays excluded. Request " +
+                "this scoped permission for the game?",
             );
             if (!acknowledged) return;
         }
@@ -130,7 +131,7 @@ export function GameIntelGrantsPanel({
                 "Consent to the specifically listed categories for this game? " +
                 "This only records consent and does not activate sharing. " +
                 (grant.requested_scopes.includes("private_messages")
-                    ? "The request includes private messages from third parties. "
+                    ? "Third-party correspondence remains excluded. "
                     : ""),
             )
             : window.confirm("Revoke this game-scoped agreement?");
@@ -216,6 +217,7 @@ export function GameIntelGrantsPanel({
                                 <label key={scope.id} style={checkStyle}>
                                     <input
                                         checked={selected.includes(scope.id)}
+                                        disabled={scope.available === false}
                                         onChange={(event) =>
                                             toggleScope(scope.id, event.target.checked)
                                         }
@@ -244,7 +246,7 @@ export function GameIntelGrantsPanel({
             <p className="subtitle" style={{ marginTop: 12 }}>
                 Security hold: accepting an agreement does not yet permit reading
                 another player's stored private turn. Full cross-player data
-                projections are not active. Credentials are never shareable.
+                projections require explicit server activation. Credentials are never shareable.
             </p>
 
             <h3>Requests in this game</h3>
@@ -279,7 +281,7 @@ export function GameIntelGrantsPanel({
                                     {grant.requested_scopes.join(", ")}
                                 </div>
                                 <small className="subtitle">
-                                    Private data access: blocked pending separate policy.
+                                    Raw private turn access: blocked. Scoped field projection requires server activation.
                                 </small>
                                 <div style={{ display: "flex", gap: 8 }}>
                                     {canPreview && (

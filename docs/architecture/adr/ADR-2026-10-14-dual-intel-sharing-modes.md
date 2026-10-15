@@ -91,3 +91,34 @@ paths. Full historical archives, full VCR replay payloads, detailed
 wormhole scans and game-wide shared map overlays require additional
 provenance/scope work before enabling live disclosure. Do not interpret
 checkbox consent as proof those domains are already available.
+
+
+## Recipient-scoped read implementation — 2026-10-15
+
+The P0 selected-owned-observer boundary is unchanged. Separate endpoints
+\`GET /api/intel/games/{game_id}/received\` and
+\`GET /api/intel/games/{game_id}/received/history/{turn}\`
+return field-allowlisted source data only to an authenticated, selected
+recipient who is an explicit participant in a game-scoped unrestricted grant.
+They do not return raw \`loadturn\` or expand the old global Combined union.
+
+The read validates game, source/recipient and currently active roster slots,
+status, consent timestamps, requested scopes, non-revocation and selected
+post-consent source batch on every call. The history endpoint requires
+\`ship_history\` and never releases a turn before consent. Grant SELECT FOR
+SHARE serializes revocations. Private HTTP responses use no-store.
+
+Source fields are displayed separately from the observer's own facts, with
+separate cyan rings for approved positions on the PixiJS live/historical map.
+The general threat, orders, military inference and historical APIs do not
+inherit newly granted fields by accident.
+
+Only direct messages authored by grantor and addressed to grantee are
+projected when \`private_messages\` is selected. Third-party correspondence,
+arbitrary nested payloads, unclassified values and credentials are excluded.
+VCR summaries expose approved metadata, not complete raw replay payloads.
+Wormhole scan checkbox is disabled until the private scan schema is reviewed.
+
+Server flag \`INTEL_EXPANDED_SHARING_ENABLED\` defaults to false. Positive
+disclosure is gated until the game's external policy/rules are reviewed.
+No public-game enabling is implied by passing CI or bilateral user consent.

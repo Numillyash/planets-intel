@@ -141,6 +141,8 @@ def request_game_grant(
     if sharing_mode not in ("native", "unrestricted"):
         raise GrantConflict("Unknown game intelligence sharing mode")
     scopes = sorted(set(requested_scopes))
+    if "wormhole_scans" in scopes:
+        raise GrantConflict("Wormhole scan projection is not implemented")
     if not scopes or len(scopes) != len(requested_scopes) or not set(scopes) <= ALLOWED_SCOPES:
         raise GrantConflict("Invalid or duplicate requested disclosure scopes")
 
