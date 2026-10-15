@@ -133,3 +133,58 @@ export function getGameIntelGrantPreview(
         "/preview?linked_account_id=" + grantorAccountId,
     );
 }
+export interface ScopedPartnerIntelSource {
+    grant_id: number;
+    source_linked_account_id: number;
+    source_player_slot_id: number;
+    source_batch_id: number;
+    source_observed_at: string;
+    requested_scopes: GameIntelScope[];
+    planets: Array<{
+        planet_id: number;
+        owner_id: number;
+        info_turn: number | null;
+        fields: Record<string, unknown>;
+    }>;
+    ships: Array<{
+        ship_id: number;
+        owner_id: number;
+        info_turn: number | null;
+        fields: Record<string, unknown>;
+    }>;
+    starbases: Array<{
+        starbase_id: number;
+        planet_id: number | null;
+        info_turn: number | null;
+        fields: Record<string, unknown>;
+    }>;
+    third_party_contacts: Array<{
+        kind: "planet" | "ship";
+        id: number;
+        owner_id: number | null;
+        info_turn: number | null;
+        x: number | null;
+        y: number | null;
+    }>;
+    messages: Array<Record<string, unknown>>;
+    combat_events: Array<Record<string, unknown>>;
+}
+
+export interface ScopedPartnerIntel {
+    game_id: number;
+    turn: number;
+    primary_linked_account_id: number;
+    mode: "scoped_partner_intel";
+    aggregation_policy: "source_separated_allowlisted_current_turn";
+    sources: ScopedPartnerIntelSource[];
+}
+
+export function getReceivedGameIntel(
+    gameId: number,
+    linkedAccountId: number,
+): Promise<ScopedPartnerIntel> {
+    return request<ScopedPartnerIntel>(
+        "/api/intel/games/" + gameId + "/received?linked_account_id=" + linkedAccountId,
+    );
+}
+

@@ -99,17 +99,16 @@ def preview_grant(
 
 @router.get("/intel/games/{game_id}/received", response_model=None)
 def received_scoped_game_intel(
+    response: Response,
     game_id: int = Path(gt=0),
     linked_account_id: int = Query(gt=0),
     user: AppUser = Depends(require_user),
-    response: Response = None,
 ) -> dict[str, object]:
     """Only explicit, current-turn, allowlisted peer projections.
 
     This endpoint never delegates access to raw private turn payloads.
     """
-    if response is not None:
-        response.headers["Cache-Control"] = "no-store, private"
+    response.headers["Cache-Control"] = "no-store, private"
     try:
         return get_received_game_intel(
             user_id=user.id, game_id=game_id, linked_account_id=linked_account_id,
