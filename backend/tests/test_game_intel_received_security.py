@@ -110,6 +110,84 @@ class ScopedRecipientReadTests(unittest.TestCase):
         self.assertIn("private_observation_batches.turn", query)
         self.assertIn("private_observation_batches.observed_at >=", query)
 
+    def test_sql_filters_revoked_unconsented_and_wrong_game_grants(self):
+        cm, s, _ = context()
+        output, projection = self._run(cm)
+        self.assertEqual(output["sources"], [])
+        projection.assert_not_called()
+        sql = str(s.execute.call_args.args[0])
+        for predicate in (
+            "game_intel_grants.game_id",
+            "game_intel_grants.grantee_account_id",
+            "game_intel_grants.revoked_at IS NULL",
+            "game_intel_grants.consented_at IS NOT NULL",
+            "game_intel_grants.expanded_disclosure_confirmed_at IS NOT NULL",
+        ):
+            self.assertIn(predicate, sql)
+
+    def test_history_without_ship_history_opt_in_is_denied(self):
+        cm, _, _ = context([grant()], batch=SimpleNamespace(id=101))
+        with (
+            patch("app.services.game_intel_read.get_settings",
+                  return_value=SimpleNamespace(intel_expanded_sharing_enabled=True)),
+            patch("app.services.game_intel_read.SessionLocal", return_value=cm),
+            patch("app.services.game_intel_read._owned",
+                  return_value=SimpleNamespace(id=22, user_id=9)),
+            patch("app.services.game_intel_read.project_current_grant_batch") as project,
+        ):
+            answer = get_received_game_intel(
+                user_id=9, game_id=17, linked_account_id=22,
+                requested_turn=42,
+            )
+        self.assertEqual(answer["sources"], [])
+        project.assert_not_called()
+
+    def test_history_before_consent_turn_remains_denied(self):
+        cm, _, _ = context([grant(requested_scopes=["ship_history", "ship_orders"],
+                                     membership_verified_turn=43)],
+                           batch=SimpleNamespace(id=101))
+        with (
+            patch("app.services.game_intel_read.get_settings",
+                  return_value=SimpleNamespace(intel_expanded_sharing_enabled=True)),
+            patch("app.services.game_intel_read.SessionLocal", return_value=cm),
+            patch("app.services.game_intel_read._owned",
+                  return_value=SimpleNamespace(id=22, user_id=9)),
+            patch("app.services.game_intel_read.project_current_grant_batch") as project,
+        ):
+            answer = get_received_game_intel(
+                user_id=9, game_id=17, linked_account_id=22,
+                requested_turn=42,
+            )
+        self.assertEqual(answer["sources"], [])
+        project.assert_not_called()
+
+    def test_current_turn_history_is_available_with_explicit_opt_in(self):
+        cm, s, _ = context(
+            [grant(requested_scopes=["ship_history", "owned_planet_details"])],
+            batch=SimpleNamespace(id=101, turn=43),
+        )
+        with (
+            patch("app.services.game_intel_read.get_settings",
+                  return_value=SimpleNamespace(intel_expanded_sharing_enabled=True)),
+            patch("app.services.game_intel_read.SessionLocal", return_value=cm),
+            patch("app.services.game_intel_read._owned",
+                  return_value=SimpleNamespace(id=22, user_id=9)),
+            patch("app.services.game_intel_read._roster", return_value=(3, 4, 43)),
+            patch("app.services.game_intel_read.project_current_grant_batch",
+                  return_value={"planets": [], "ships": [], "starbases": [],
+                                "messages": [], "combat_events": [],
+                                "third_party_contacts": []}) as project,
+        ):
+            answer = get_received_game_intel(
+                user_id=9, game_id=17, linked_account_id=22,
+                requested_turn=43,
+            )
+        self.assertEqual(len(answer["sources"]), 1)
+        self.assertEqual(answer["turn"], 43)
+        project.assert_called_once()
+        self.assertIn("private_observation_batches.turn",
+                      str(s.execute.call_args.args[0]))
+
     def test_inactive_source_is_denied(self):
         cm, _, source = context([grant()], batch=SimpleNamespace(id=101))
         source.is_active = False
