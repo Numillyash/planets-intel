@@ -50,7 +50,7 @@ def get_received_game_intel(
             GameIntelGrant.consented_at.is_not(None),
             GameIntelGrant.expanded_disclosure_confirmed_at.is_not(None),
             GameIntelGrant.revoked_at.is_(None),
-        ).order_by(GameIntelGrant.id)).scalars().all()
+        ).order_by(GameIntelGrant.id).with_for_update(read=True)).scalars().all()
 
         sources: list[dict[str, Any]] = []
         for grant in grants:
@@ -63,6 +63,7 @@ def get_received_game_intel(
             scopes = grant.requested_scopes
             if (
                 not isinstance(scopes, list) or not scopes
+                or not all(isinstance(scope, str) for scope in scopes)
                 or len(scopes) != len(set(scopes))
                 or not set(scopes).issubset(ALLOWED_SCOPES)
             ):

@@ -674,26 +674,30 @@ export function PrivateIntelMap({
         partnerIntel?.turn === displayIntel?.turn &&
         partnerIntel?.game_id === displayIntel?.game_id
         ? partnerIntel : null;
-    const sharedMapPoints: ScopedPartnerMapPoint[] = [];
-    for (const source of displayedPartner?.sources ?? []) {
-        for (const record of [...source.planets, ...source.ships]) {
-            const x = record.fields.x;
-            const y = record.fields.y;
-            if (
-                typeof x === "number" && typeof y === "number" &&
-                Number.isFinite(x) && Number.isFinite(y)
-            ) {
-                sharedMapPoints.push({ x, y, sourceId: source.grant_id });
+    const sharedMapPoints = useMemo((): ScopedPartnerMapPoint[] => {
+        const points: ScopedPartnerMapPoint[] = [];
+        for (const source of displayedPartner?.sources ?? []) {
+            for (const record of [...source.planets, ...source.ships]) {
+                const x = record.fields.x;
+                const y = record.fields.y;
+                if (
+                    typeof x === "number" && typeof y === "number" &&
+                    Number.isFinite(x) && Number.isFinite(y)
+                ) {
+                    points.push({ x, y, sourceId: source.grant_id });
+                }
+            }
+            for (const contact of source.third_party_contacts) {
+                if (contact.x !== null && contact.y !== null) {
+                    points.push({
+                        x: contact.x, y: contact.y, sourceId: source.grant_id,
+                    });
+                }
             }
         }
-        for (const contact of source.third_party_contacts) {
-            if (contact.x !== null && contact.y !== null) {
-                sharedMapPoints.push({
-                    x: contact.x, y: contact.y, sourceId: source.grant_id,
-                });
-            }
-        }
-    }
+            return points;
+    }, [displayedPartner]);
+
 
     if (effectiveLoading) {
         return (
