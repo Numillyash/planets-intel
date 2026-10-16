@@ -8,6 +8,24 @@ The architectural invariant remains unchanged: factual observations, determinist
 
 Production provides public/private game loading, historical observations and provenance, **selected-owned-observer** intelligence, PixiJS map, structured host-event evidence, factual VCR equipment, deterministic NuHost Classic VCR replay, combat-confirmed contacts, threat analysis, and early loadout/military inference. Global cross-player aggregation was disabled in P0; the P1 game-scoped consent ledger never widens private read permissions. Historical analyst-confirmed combat state is temporarily quarantined for missing observer provenance. The original future phases below are goals, not an implementation checklist of already active features.
 
+## Near-term — Surveyed planets and public-sector explorer (2026-10-17)
+
+- Distinguish surveyed planets with unknown/unowned attributed owner from
+  position-only planets on the private map. A null `owner_id` is not positive
+  proof of an empty colony; display observation age separately.
+- Read-only **public-sector explorer**, accessible by entering any public game
+  ID without being its participant, beginning with the player-affinity matrix
+  and exact/partial turn-overlap evidence using existing public API caches.
+- Follow-up: public settings, roster history (including departed and replaced
+  commanders), public scores and historical trends, and publicly available
+  map geometry where the upstream API permits it.
+- Independent public mode MUST NOT access private `loadturn`, orders,
+  private game grants, messages or internal canonical snapshots for unrelated
+  sectors. Require explicit public-source roster evidence.
+- Explicit completeness/uncertainty for ambiguous identities, inaccessible
+  histories, unknown overlap and stale caches; bound live upstream request
+  budgets and reuse existing caches.
+
 ## MVP 0.7 — Combat intelligence completion
 
 Goal: finish the current combat/intelligence data model before the large UI rewrite.
