@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { getCommanderIntelligence } from "../../api/commanderIntelligence";
+import { CommanderAffinityMatrix } from "./CommanderAffinityMatrix";
 import { raceName } from "../../lib/races";
 import type {
     CommanderDossier,
@@ -57,7 +58,11 @@ function PairDetails({
                 <details className="commander-game-evidence" key={game.game_id}>
                     <summary>
                         <span>
-                            <strong>{game.name}</strong>
+                            <strong><a
+                                href={`https://planets.nu/#/sector/${game.game_id}`}
+                                target="_blank"
+                                rel="noreferrer noopener"
+                            >{game.name}</a></strong>
                             <small>#{game.game_id} · {game.status_name || "status " + game.status_id}</small>
                         </span>
                         <span className="commander-overlap-chip">
@@ -231,6 +236,12 @@ export function CommanderIntelligencePanel({
 
     return (
         <div className="game-dashboard-stack">
+            <CommanderAffinityMatrix
+                gameId={gameId}
+                commanders={data.commanders}
+                pairwise={data.pairwise}
+                renderEvidence={(pair) => <PairDetails pair={pair} />}
+            />
             <section className="panel commander-intel-panel">
                 <div className="panel-header commander-header">
                     <div>
