@@ -159,6 +159,8 @@ def _matching_roster_row(
         for row in rows:
             if _int(row.get("id"), positive=True) == slot_id:
                 return row
+        # An explicit event slot must never inherit another slot's roster.
+        return None
     if len(rows) == 1:
         return rows[0]
     return None
@@ -827,6 +829,23 @@ def public_events_from_loadinfo(
     }
 
 
+def public_game_source_verified(payload: Any, game_id: int) -> bool:
+    """An archival loadinfo payload must identify the requested public game.
+
+    Player-history intersection proves only that two history lists mention an ID;
+    it cannot grant trust to an unrelated or private game/loadinfo response.
+    """
+    if not isinstance(payload, dict):
+        return False
+    game = payload.get("game")
+    return (
+        isinstance(game, dict)
+        and _int(game.get("id"), positive=True) == game_id
+        and game.get("isprivate") is False
+        and isinstance(payload.get("players"), list)
+    )
+
+
 def public_roster_from_loadinfo(
     payload: dict[str, Any],
     game_id: int,
@@ -1134,8 +1153,12 @@ async def get_commander_intelligence(
                 ),
             )
 
-            if payload is None:
+            if payload is None or not public_game_source_verified(payload, shared_id):
                 reconstruction_complete = False
+                # The history-list intersection is preserved as an observed
+                # shared game ID, but an unverified loadinfo body cannot prove
+                # participation intervals or exact simultaneous turns.
+                verified = payload is not None
                 game_rows.append(
                     {
                         **history_game,
@@ -1143,11 +1166,22 @@ async def get_commander_intelligence(
                         "player_b_intervals": [],
                         "overlap_intervals": [],
                         "overlapping_turn_count": None,
-                        "overlap_status": "source_unavailable",
-                        "provenance": provenance,
+                        "overlap_status": (
+                            "source_unverified" if verified else "source_unavailable"
+                        ),
+                        "provenance": {
+                            **provenance,
+                            **({
+                                "warning": (
+                                    "Historical loadinfo does not confirm the "
+                                    "requested public game identity and roster."
+                                )
+                            } if verified else {}),
+                        },
                     }
                 )
                 continue
+
 
             left_intervals = reconstruct_participation_intervals(
                 payload,
