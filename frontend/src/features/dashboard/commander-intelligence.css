@@ -569,3 +569,42 @@
         justify-content: flex-start;
     }
 }
+
+.commander-public-timeline {
+    min-width: 0;
+}
+.commander-timeline-note {
+    margin: 12px 22px;
+    overflow-wrap: anywhere;
+}
+.commander-timeline-list {
+    display: grid;
+    gap: 10px;
+    margin: 12px 22px 20px;
+    padding: 0;
+    list-style: none;
+    max-height: 480px;
+    overflow-y: auto;
+}
+.commander-timeline-list li {
+    display: grid;
+    gap: 4px;
+    min-width: 0;
+    border-bottom: 1px solid rgba(160, 185, 215, .18);
+    padding: 8px 0;
+}
+.commander-timeline-meta {
+    color: #a5bdd5;
+    font-size: 12px;
+}
+.commander-timeline-description {
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+}
+@media (max-width: 760px) {
+    .commander-timeline-list,
+    .commander-timeline-note {
+        margin-left: 12px;
+        margin-right: 12px;
+    }
+}
