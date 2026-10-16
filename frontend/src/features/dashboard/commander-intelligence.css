@@ -458,3 +458,114 @@
         flex-direction: column;
     }
 }
+
+
+/* Affinity panel spacing: keep content inset consistently with panel-header. */
+.commander-affinity-panel > :not(.panel-header) {
+    margin-left: 22px;
+    margin-right: 22px;
+}
+.commander-affinity-panel > .commander-affinity-stats {
+    margin-top: 16px;
+}
+.commander-affinity-panel > .commander-affinity-scroll {
+    width: calc(100% - 44px);
+    max-width: calc(100% - 44px);
+}
+.commander-affinity-panel > .commander-provenance {
+    margin-bottom: 20px;
+}
+.commander-affinity-table th,
+.commander-affinity-table td {
+    min-width: 76px;
+}
+.commander-affinity-table .commander-affinity-row-name {
+    min-width: 142px;
+    width: 142px;
+    overflow-wrap: anywhere;
+}
+.commander-affinity-evidence-title,
+.commander-game-evidence > summary {
+    min-width: 0;
+}
+.commander-affinity-evidence-title h3 {
+    overflow-wrap: anywhere;
+}
+.commander-game-title {
+    min-width: 0;
+    flex: 1 1 190px;
+    overflow-wrap: anywhere;
+}
+.commander-game-summary-actions {
+    display: flex;
+    align-items: center;
+    flex: 0 1 auto;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 7px;
+}
+.commander-game-open-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 30px;
+    border: 1px solid rgba(119, 192, 237, .55);
+    border-radius: 6px;
+    padding: 4px 10px;
+    text-decoration: none;
+    font-size: 11px;
+    font-weight: 650;
+    color: #c8efff;
+    background: rgba(33, 102, 140, .32);
+    white-space: nowrap;
+}
+.commander-game-open-link.is-external {
+    border-color: rgba(145, 172, 213, .44);
+    color: #dae9ff;
+    background: rgba(35, 50, 80, .6);
+}
+.commander-game-open-link:hover,
+.commander-game-open-link:focus-visible {
+    border-color: #c7edff;
+    background: rgba(42, 131, 175, .55);
+    color: white;
+    outline-offset: 2px;
+}
+.commander-game-group {
+    display: grid;
+    min-width: 0;
+    gap: 8px;
+}
+.commander-game-group h4 {
+    color: #a5bdd5;
+    font-size: 12px;
+    margin: 4px 2px 1px;
+    font-weight: 650;
+}
+.commander-affinity-evidence .commander-pair-games {
+    padding: 0 0 12px;
+}
+.commander-intel-panel > .commander-summary-grid,
+.game-dashboard-stack > .panel > .commander-peer-list,
+.game-dashboard-stack > .panel > .commander-race-list {
+    margin: 16px 22px 22px;
+}
+.game-dashboard-stack > .panel > details {
+    margin: 16px 22px 22px;
+}
+@media (max-width: 760px) {
+    .commander-affinity-panel > :not(.panel-header) {
+        margin-left: 12px;
+        margin-right: 12px;
+    }
+    .commander-affinity-panel > .commander-affinity-scroll {
+        width: calc(100% - 24px);
+        max-width: calc(100% - 24px);
+    }
+    .commander-game-evidence > summary {
+        align-items: stretch;
+    }
+    .commander-game-summary-actions {
+        justify-content: flex-start;
+    }
+}

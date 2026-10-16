@@ -5,6 +5,7 @@ import { CommanderAffinityMatrix } from "./CommanderAffinityMatrix";
 import { raceName } from "../../lib/races";
 import type {
     CommanderDossier,
+    CommanderPairGame,
     CommanderPairSummary,
     CommanderParticipationInterval,
     CommanderRaceHistoryItem,
@@ -34,100 +35,131 @@ function raceLabel(item: CommanderRaceHistoryItem): string {
 }
 
 
-function PairDetails({
+function PairGameEvidence({
+    game,
     pair,
+    isSource = false,
 }: {
+    game: CommanderPairGame;
     pair: CommanderPairSummary;
+    isSource?: boolean;
 }) {
-    if (pair.shared_games === null) {
-        return (
-            <p className="muted">
-                Public history is unavailable for one or both commanders; no
-                zero-association claim is made.
-            </p>
-        );
-    }
-
-    if (pair.games.length === 0) {
-        return <p className="muted">No previous shared running/finished games.</p>;
-    }
-
     return (
-        <div className="commander-pair-games">
-            {pair.games.map((game) => (
-                <details className="commander-game-evidence" key={game.game_id}>
-                    <summary>
-                        <span>
-                            <strong><a
-                                href={`https://planets.nu/#/sector/${game.game_id}`}
-                                target="_blank"
-                                rel="noreferrer noopener"
-                            >{game.name}</a></strong>
-                            <small>#{game.game_id} · {game.status_name || "status " + game.status_id}</small>
-                        </span>
-                        <span className="commander-overlap-chip">
+        <details className="commander-game-evidence" key={game.game_id}>
+            <summary>
+                <span className="commander-game-title">
+                    <strong>{game.name}</strong>
+                    <small>#{game.game_id} · {game.status_name || "status " + game.status_id}
+                        {isSource ? " · selected source sector" : ""}
+                    </small>
+                </span>
+                <span className="commander-game-summary-actions">
+                    <span className="commander-overlap-chip">
+                        {game.overlap_status === "complete"
+                            ? String(game.overlapping_turn_count ?? 0) + " overlapping turns"
+                            : game.overlap_intervals.length > 0
+                                ? "≥ " + game.overlap_intervals.reduce((sum, item) => sum + item.turn_count, 0) + " known turns"
+                                : "overlap unknown"}
+                    </span>
+                    <a
+                        className="commander-game-open-link"
+                        href={`/intelboard/public/${game.game_id}`}
+                        onClick={(event) => event.stopPropagation()}
+                        title="Open this public sector in IntelBoard"
+                    >
+                        Open here <span aria-hidden="true">↗</span>
+                    </a>
+                    <a
+                        className="commander-game-open-link is-external"
+                        href={`https://planets.nu/#/sector/${game.game_id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={(event) => event.stopPropagation()}
+                        title="Open this game on Planets.nu in a new tab"
+                    >
+                        Planets.nu <span aria-hidden="true">↗</span>
+                    </a>
+                </span>
+            </summary>
+            <div className="commander-evidence-grid">
+                <div>
+                    <strong>{pair.player_a}</strong>
+                    {game.player_a_intervals.length === 0 ? (
+                        <small>No attributable interval</small>
+                    ) : game.player_a_intervals.map((interval, index) => (
+                        <small key={"a-" + index}>
+                            {turnRange(interval)}
+                            {interval.slot_id === null ? "" : " · slot " + interval.slot_id}
+                            {" · " + interval.reconstruction_quality}
+                        </small>
+                    ))}
+                </div>
+                <div>
+                    <strong>{pair.player_b}</strong>
+                    {game.player_b_intervals.length === 0 ? (
+                        <small>No attributable interval</small>
+                    ) : game.player_b_intervals.map((interval, index) => (
+                        <small key={"b-" + index}>
+                            {turnRange(interval)}
+                            {interval.slot_id === null ? "" : " · slot " + interval.slot_id}
+                            {" · " + interval.reconstruction_quality}
+                        </small>
+                    ))}
+                </div>
+                <div>
+                    <strong>Exact intersection</strong>
+                    {game.overlap_intervals.length === 0 ? (
+                        <small>
                             {game.overlap_status === "complete"
-                                ? String(game.overlapping_turn_count ?? 0) + " overlapping turns"
-                                : game.overlap_intervals.length > 0
-                                    ? "≥ " + game.overlap_intervals.reduce((sum, item) => sum + item.turn_count, 0) + " known"
-                                    : "overlap unknown"}
-                        </span>
-                    </summary>
-
-                    <div className="commander-evidence-grid">
-                        <div>
-                            <strong>{pair.player_a}</strong>
-                            {game.player_a_intervals.length === 0 ? (
-                                <small>No attributable interval</small>
-                            ) : game.player_a_intervals.map((interval, index) => (
-                                <small key={"a-" + index}>
-                                    {turnRange(interval)}
-                                    {interval.slot_id === null ? "" : " · slot " + interval.slot_id}
-                                    {" · " + interval.reconstruction_quality}
-                                </small>
-                            ))}
-                        </div>
-                        <div>
-                            <strong>{pair.player_b}</strong>
-                            {game.player_b_intervals.length === 0 ? (
-                                <small>No attributable interval</small>
-                            ) : game.player_b_intervals.map((interval, index) => (
-                                <small key={"b-" + index}>
-                                    {turnRange(interval)}
-                                    {interval.slot_id === null ? "" : " · slot " + interval.slot_id}
-                                    {" · " + interval.reconstruction_quality}
-                                </small>
-                            ))}
-                        </div>
-                        <div>
-                            <strong>Exact intersection</strong>
-                            {game.overlap_intervals.length === 0 ? (
-                                <small>
-                                    {game.overlap_status === "complete"
-                                        ? "No overlapping bounded turns"
-                                        : "UNKNOWN — interval bounds incomplete"}
-                                </small>
-                            ) : game.overlap_intervals.map((interval, index) => (
-                                <small key={"o-" + index}>
-                                    T{interval.turn_from}–{interval.turn_to}
-                                    {" · " + interval.turn_count + " turns"}
-                                </small>
-                            ))}
-                        </div>
-                    </div>
-
-                    <p className="commander-provenance">
-                        {game.provenance.source} · {game.provenance.cache_state}
-                        {game.provenance.fetched_at === null
-                            ? ""
-                            : " · fetched " + game.provenance.fetched_at}
-                    </p>
-                </details>
-            ))}
-        </div>
+                                ? "No overlapping bounded turns"
+                                : "UNKNOWN — interval bounds incomplete"}
+                        </small>
+                    ) : game.overlap_intervals.map((interval, index) => (
+                        <small key={"o-" + index}>
+                            T{interval.turn_from}–{interval.turn_to}
+                            {" · " + interval.turn_count + " turns"}
+                        </small>
+                    ))}
+                </div>
+            </div>
+            <p className="commander-provenance">
+                {game.provenance.source} · {game.provenance.cache_state}
+                {game.provenance.fetched_at === null
+                    ? ""
+                    : " · fetched " + game.provenance.fetched_at}
+            </p>
+        </details>
     );
 }
 
+function PairDetails({ pair }: { pair: CommanderPairSummary }) {
+    const sourceGame = pair.source_game ?? null;
+    return (
+        <div className="commander-pair-games">
+            {sourceGame !== null && (
+                <section className="commander-game-group">
+                    <h4>Selected source sector · counted separately from previous games</h4>
+                    <PairGameEvidence game={sourceGame} pair={pair} isSource />
+                </section>
+            )}
+            {pair.shared_games === null ? (
+                <p className="muted">
+                    Previous public history unavailable for one or both players;
+                    no zero-encounter claim is made.
+                </p>
+            ) : pair.games.length === 0 ? (
+                <p className="muted">No previous shared running/finished games in available history.</p>
+            ) : (
+                <section className="commander-game-group">
+                    <h4>Other shared sectors · {pair.shared_games} recorded</h4>
+                    {pair.games.map((game) => (
+                        <PairGameEvidence key={game.game_id} game={game} pair={pair} />
+                    ))}
+                </section>
+            )}
+        </div>
+    );
+}
 
 export function CommanderIntelligencePanel({
     gameId,
@@ -303,7 +335,7 @@ export function CommanderIntelligencePanel({
                 <div className="panel-header">
                     <div>
                         <h2>Shared history with current-game peers</h2>
-                        <p>Shared games and exact turn overlap are separate measurements.</p>
+                        <p>Previous shared games exclude the selected sector. Expand a pair for source-game participation and links.</p>
                     </div>
                 </div>
                 <div className="commander-peer-list">

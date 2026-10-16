@@ -16,8 +16,11 @@ Production provides public/private game loading, historical observations and pro
 - Read-only **public-sector explorer**, accessible by entering any public game
   ID without being its participant, beginning with the player-affinity matrix
   and exact/partial turn-overlap evidence using existing public API caches.
-- Follow-up: public settings, roster history (including departed and replaced
-  commanders), public scores and historical trends, and publicly available
+- Public player-affinity history now includes attributable departed/replaced
+  participants from join/drop events. Other event categories and richer
+  source-sector timelines remain future work.
+- Follow-up: public settings, comprehensive event timelines, public scores and
+  historical trends, and publicly available
   map geometry where the upstream API permits it.
 - Independent public mode MUST NOT access private `loadturn`, orders,
   private game grants, messages or internal canonical snapshots for unrelated

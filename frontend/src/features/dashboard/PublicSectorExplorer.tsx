@@ -13,10 +13,10 @@ export function PublicSectorExplorer({ gameId }: { gameId: number }) {
                     <div className="eyebrow">PUBLIC-ONLY HISTORICAL ANALYSIS</div>
                     <h1>Explore sector #{gameId}</h1>
                     <p>
-                        Public games only. This initial release shows prior
-                        encounters for attributable current participants.
-                        No private observations, orders or linked observer are used.
-                        Former/replaced participants require a later roster-history expansion.
+                        Public games only. Player identities are reconstructed
+                        from the public roster and attributable join/drop events,
+                        including former and replaced participants when documented.
+                        Private observations, orders and linked observers are not used.
                     </p>
                     <p><a href="/intelboard">← Back to my games</a></p>
                 </div>
