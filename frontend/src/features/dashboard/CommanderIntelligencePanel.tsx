@@ -127,6 +127,7 @@ function PairGameEvidence({
                 {game.provenance.fetched_at === null
                     ? ""
                     : " · fetched " + game.provenance.fetched_at}
+                {game.provenance.warning ? " · " + game.provenance.warning : ""}
             </p>
         </details>
     );
