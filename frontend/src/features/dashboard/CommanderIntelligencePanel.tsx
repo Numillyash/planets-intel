@@ -9,6 +9,7 @@ import type {
     CommanderPairSummary,
     CommanderParticipationInterval,
     CommanderRaceHistoryItem,
+    PublicSectorTimeline,
 } from "../../types/commanderIntelligence";
 import "./commander-intelligence.css";
 
@@ -34,6 +35,48 @@ function raceLabel(item: CommanderRaceHistoryItem): string {
     return "Unknown race";
 }
 
+
+function PublicEventTimeline({ timeline }: { timeline: PublicSectorTimeline }) {
+    return (
+        <section className="panel commander-public-timeline">
+            <div className="panel-header">
+                <div>
+                    <div className="eyebrow">Public loadinfo · original event descriptions</div>
+                    <h2>Sector event timeline</h2>
+                    <p>Observed events only. Descriptions are source text, not verified claims of intent or diplomacy.</p>
+                </div>
+            </div>
+            {timeline.status === "unavailable" ? (
+                <p className="muted commander-timeline-note">Public event collection unavailable — not evidence that no events occurred.</p>
+            ) : (
+                <>
+                    <p className="muted commander-timeline-note">
+                        {timeline.eligible_event_count} attributable source rows
+                        {timeline.truncated ? " · showing the newest " + timeline.events.length : ""}
+                        {timeline.skipped_event_rows ? " · " + timeline.skipped_event_rows + " invalid/incomplete rows omitted" : ""}
+                        {!timeline.truncated && timeline.events.length === 0 ? " · no eligible events in the returned collection" : ""}
+                    </p>
+                    <ol className="commander-timeline-list">
+                        {timeline.events.map((item, index) => (
+                            <li key={String(item.event_id ?? "unknown") + "-" + index}>
+                                <span className="commander-timeline-meta">
+                                    {item.turn === null ? "Turn unknown" : "T" + item.turn}
+                                    {" · type " + item.event_type}
+                                    {item.slot_id === null ? "" : " · slot " + item.slot_id}
+                                </span>
+                                <span className="commander-timeline-description">{item.description}</span>
+                            </li>
+                        ))}
+                    </ol>
+                </>
+            )}
+            <p className="commander-provenance commander-timeline-note">
+                {timeline.provenance.source} · {timeline.provenance.cache_state}
+                {timeline.provenance.fetched_at === null ? "" : " · fetched " + timeline.provenance.fetched_at}
+            </p>
+        </section>
+    );
+}
 
 function PairGameEvidence({
     game,
@@ -270,6 +313,9 @@ export function CommanderIntelligencePanel({
 
     return (
         <div className="game-dashboard-stack">
+            {publicMode && data.public_timeline && (
+                <PublicEventTimeline timeline={data.public_timeline} />
+            )}
             <CommanderAffinityMatrix
                 gameId={gameId}
                 commanders={data.commanders}
