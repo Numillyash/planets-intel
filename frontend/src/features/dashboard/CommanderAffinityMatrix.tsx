@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import type {
     CommanderDossier,
@@ -88,7 +88,7 @@ export function CommanderAffinityMatrix({
     gameId: number;
     commanders: CommanderDossier[];
     pairwise: CommanderPairSummary[];
-    renderEvidence: (pair: CommanderPairSummary) => React.ReactNode;
+    renderEvidence: (pair: CommanderPairSummary) => ReactNode;
 }) {
     const [metric, setMetric] = useState<AffinityMetric>("games");
     const [selectedKey, setSelectedKey] = useState<string | null>(null);
