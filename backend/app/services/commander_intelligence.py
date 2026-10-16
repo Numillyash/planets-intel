@@ -755,32 +755,105 @@ def _interval_race_records(
     return result
 
 
+def public_roster_from_loadinfo(
+    payload: dict[str, Any],
+    game_id: int,
+) -> tuple[dict[str, Any], list[dict[str, Any]]] | None:
+    """Public current-player roster without canonical or private-game access.
+
+    Former/replaced players not in the active public roster require separate
+    source-event reconstruction; this first slice makes no claim to include them.
+    """
+    raw_game = payload.get("game")
+    raw_players = payload.get("players")
+    if (
+        not isinstance(raw_game, dict)
+        or raw_game.get("isprivate") is not False
+        or _int(raw_game.get("id"), positive=True) != game_id
+        or not isinstance(raw_players, list)
+    ):
+        return None
+
+    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for raw in raw_players:
+        if not isinstance(raw, dict):
+            continue
+        username = raw.get("username")
+        slot = _int(raw.get("id"), positive=True)
+        race = _int(raw.get("raceid"))
+        status = _int(raw.get("status"))
+        if (
+            not _usable_username(username)
+            or slot is None
+            or race is None or race < 1 or race >= 100
+            or status != 1
+        ):
+            continue
+        normalized = canonical_username(username)
+        grouped[normalized].append({
+            "username": username.strip(),
+            "username_normalized": normalized,
+            "slot_id": slot,
+            "account_id": _int(raw.get("accountid"), positive=True),
+            "race_id": race,
+            "status": status,
+            "source": GAME_INFO_SOURCE,
+            "source_game_id": game_id,
+            "source_turn": _int(raw_game.get("turn")) or 0,
+        })
+
+    commanders = [
+        candidates[0] for candidates in grouped.values()
+        if len(candidates) == 1
+    ]
+    game_record = {
+        "game_id": game_id,
+        "game_name": str(raw_game.get("name") or f"Game {game_id}"),
+        "turn": _int(raw_game.get("turn")) or 0,
+        "status_id": _int(raw_game.get("status")) or 0,
+        "status_name": str(raw_game.get("statusname") or ""),
+    }
+    return game_record, sorted(commanders, key=lambda item: item["slot_id"])
+
+
 async def get_commander_intelligence(
     *,
     game_id: int,
+    public_roster: bool = False,
 ) -> dict[str, Any] | None:
-    with SessionLocal() as session:
-        game = session.get(Game, game_id)
-        if game is None:
-            return None
-        slots = list(
-            session.execute(
-                select(GamePlayerSlot)
-                .where(GamePlayerSlot.game_id == game_id)
-                .order_by(GamePlayerSlot.slot_id)
-            ).scalars().all()
-        )
-        # Copy scalar game state before the session closes.
-        game_record = {
-            "game_id": int(game.id),
-            "game_name": game.name,
-            "turn": int(game.current_turn),
-            "status_id": int(game.status_id),
-            "status_name": game.status_name,
-        }
-        commanders = _current_commanders(game, slots)
-
     client = PlanetsNuClient()
+    if public_roster:
+        # The public viewer never consults local membership or private intel.
+        source, _ = await _game_info(client, game_id, asyncio.Semaphore(1))
+        if source is None:
+            return None
+        extracted = public_roster_from_loadinfo(source, game_id)
+        if extracted is None:
+            return None
+        game_record, commanders = extracted
+        roster_source = GAME_INFO_SOURCE
+    else:
+        with SessionLocal() as session:
+            game = session.get(Game, game_id)
+            if game is None:
+                return None
+            slots = list(
+                session.execute(
+                    select(GamePlayerSlot)
+                    .where(GamePlayerSlot.game_id == game_id)
+                    .order_by(GamePlayerSlot.slot_id)
+                ).scalars().all()
+            )
+            game_record = {
+                "game_id": int(game.id),
+                "game_name": game.name,
+                "turn": int(game.current_turn),
+                "status_id": int(game.status_id),
+                "status_name": game.status_name,
+            }
+            commanders = _current_commanders(game, slots)
+        roster_source = "canonical game_player_slots"
+
     histories_raw = await asyncio.gather(
         *(_player_history(client, item["username"]) for item in commanders),
         return_exceptions=True,
@@ -1101,7 +1174,7 @@ async def get_commander_intelligence(
             ),
         ),
         "provenance": {
-            "current_roster_source": "canonical game_player_slots",
+            "current_roster_source": roster_source,
             "player_history_source": PLAYER_HISTORY_SOURCE,
             "participation_source": GAME_INFO_SOURCE,
             "public_history_status_filter": [2, 3],
