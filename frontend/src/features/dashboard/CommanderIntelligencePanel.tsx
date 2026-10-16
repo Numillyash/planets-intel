@@ -303,11 +303,27 @@ export function CommanderIntelligencePanel({
         );
     }
 
-    if (data === null || dossier === null) {
+    if (data === null) {
         return (
             <section className="panel">
-                <p className="muted">No attributable active human commanders.</p>
+                <p className="muted">No commander intelligence data available.</p>
             </section>
+        );
+    }
+
+    if (dossier === null) {
+        return (
+            <div className="game-dashboard-stack">
+                {publicMode && data.public_timeline && (
+                    <PublicEventTimeline timeline={data.public_timeline} />
+                )}
+                <section className="panel">
+                    <p className="muted commander-timeline-note">
+                        No attributable human commanders in the public source;
+                        the observed event timeline is independent of roster completeness.
+                    </p>
+                </section>
+            </div>
         );
     }
 
