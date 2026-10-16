@@ -13,6 +13,7 @@ import {
 import { DualClock } from "./components/DualClock";
 import { DashboardApp } from "./features/dashboard/DashboardApp";
 import { IntelboardGamePicker } from "./features/dashboard/IntelboardGamePicker";
+import { PublicSectorExplorer } from "./features/dashboard/PublicSectorExplorer";
 import type { CurrentUserResponse } from "./types/api";
 import "./styles.css";
 
@@ -190,6 +191,19 @@ function App() {
     // canonicalized there. /intelboard/<observer>/<game> remains the
     // observer-aware operational game route because private-intel provenance
     // can differ between linked observers.
+    const publicSectorMatch = window.location.pathname.match(
+        /^\\/intelboard\\/public\\/(\\d+)\\/?$/i,
+    );
+    const publicSectorId = publicSectorMatch === null
+        ? null : Number(publicSectorMatch[1]);
+    if (publicSectorId !== null && Number.isSafeInteger(publicSectorId) && publicSectorId > 0) {
+        return (
+            <AuthenticatedSurface>
+                <PublicSectorExplorer gameId={publicSectorId} />
+            </AuthenticatedSurface>
+        );
+    }
+
     const gamePickerRoute = /^\/intelboard(?:\/[^/]+)?\/?$/i.test(
         window.location.pathname,
     );

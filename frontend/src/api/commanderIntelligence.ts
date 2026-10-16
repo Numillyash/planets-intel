@@ -33,3 +33,21 @@ export async function getCommanderIntelligence(
 
     return response.json() as Promise<CommanderIntelligenceResponse>;
 }
+
+
+/** Public Planets.nu sector history, independent of linked observer membership. */
+export async function getPublicCommanderIntelligence(
+    gameId: number,
+): Promise<CommanderIntelligenceResponse> {
+    const response = await fetch(
+        `/api/games/${gameId}/public-commander-intelligence`,
+        { credentials: "same-origin", headers: { Accept: "application/json" } },
+    );
+
+    if (!response.ok) {
+        throw new Error(
+            `Public sector analysis failed: ${await parseErrorMessage(response)}`,
+        );
+    }
+    return response.json() as Promise<CommanderIntelligenceResponse>;
+}
