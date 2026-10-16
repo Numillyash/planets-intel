@@ -109,6 +109,23 @@ export interface CommanderPairSummary {
     source_game?: CommanderPairGame | null;
 }
 
+export interface PublicSectorEvent {
+    event_id: number | null;
+    turn: number | null;
+    event_type: number;
+    slot_id: number | null;
+    description: string;
+}
+
+export interface PublicSectorTimeline {
+    status: "available" | "unavailable";
+    events: PublicSectorEvent[];
+    eligible_event_count: number | null;
+    skipped_event_rows: number | null;
+    truncated: boolean;
+    provenance: CommanderSourceProvenance;
+}
+
 export interface CommanderIntelligenceResponse {
     game_id: number;
     game_name: string;
@@ -128,4 +145,5 @@ export interface CommanderIntelligenceResponse {
         facts_unchanged: boolean;
     };
     warnings: string[];
+    public_timeline?: PublicSectorTimeline | null;
 }
