@@ -192,7 +192,7 @@ function App() {
     // observer-aware operational game route because private-intel provenance
     // can differ between linked observers.
     const publicSectorMatch = window.location.pathname.match(
-        /^\\/intelboard\\/public\\/(\\d+)\\/?$/i,
+        /^\/intelboard\/public\/(\d+)\/?$/i,
     );
     const publicSectorId = publicSectorMatch === null
         ? null : Number(publicSectorMatch[1]);
