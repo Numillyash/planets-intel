@@ -123,6 +123,12 @@
     background: #60a5fa;
 }
 
+.legend-surveyed {
+    border: 2px solid #62d9de;
+    border-radius: 50%;
+    background: #7b8798;
+}
+
 .legend-starbase {
     border: 2px solid #f3c969;
     background: #60a5fa;

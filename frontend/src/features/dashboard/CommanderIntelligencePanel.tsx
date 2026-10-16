@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { getCommanderIntelligence } from "../../api/commanderIntelligence";
+import { getCommanderIntelligence, getPublicCommanderIntelligence } from "../../api/commanderIntelligence";
 import { CommanderAffinityMatrix } from "./CommanderAffinityMatrix";
 import { raceName } from "../../lib/races";
 import type {
@@ -131,8 +131,10 @@ function PairDetails({
 
 export function CommanderIntelligencePanel({
     gameId,
+    publicMode = false,
 }: {
     gameId: number;
+    publicMode?: boolean;
 }) {
     const [data, setData] = useState<Awaited<ReturnType<typeof getCommanderIntelligence>> | null>(null);
     const [selected, setSelected] = useState<string | null>(null);
@@ -145,7 +147,7 @@ export function CommanderIntelligencePanel({
         setError(null);
         setData(null);
 
-        void getCommanderIntelligence(gameId)
+        void (publicMode ? getPublicCommanderIntelligence(gameId) : getCommanderIntelligence(gameId))
             .then((result) => {
                 if (cancelled) return;
                 setData(result);
@@ -172,7 +174,7 @@ export function CommanderIntelligencePanel({
         return () => {
             cancelled = true;
         };
-    }, [gameId]);
+    }, [gameId, publicMode]);
 
     const dossier: CommanderDossier | null = useMemo(
         () => data?.commanders.find((item) => item.username === selected) ?? null,
@@ -247,6 +249,7 @@ export function CommanderIntelligencePanel({
                     <div>
                         <div className="eyebrow">Derived historical summary · {data.method_version}</div>
                         <h2>Commander / Player Dossier</h2>
+                        {publicMode && <p>Public sector #{gameId} · no linked observer or private intel</p>}
                         <p>
                             Public game history with replacement-aware participation.
                             Co-presence is not interpreted as alliance, rivalry or coordination.

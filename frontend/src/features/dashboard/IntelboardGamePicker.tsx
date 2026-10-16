@@ -613,6 +613,7 @@ function GameCard({
 export function IntelboardGamePicker({ user, onLogout }: IntelboardGamePickerProps) {
     const [accounts, setAccounts] = useState<PlanetsAccountResponse[]>([]);
     const [accountsRevision, setAccountsRevision] = useState(0);
+    const [publicSectorId, setPublicSectorId] = useState("");
     const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null);
     const [gamesByAccountId, setGamesByAccountId] = useState<Record<number, AccountGameSummary[]>>({});
     const [errorsByAccountId, setErrorsByAccountId] = useState<Record<number, string | null>>({});
@@ -852,6 +853,42 @@ export function IntelboardGamePicker({ user, onLogout }: IntelboardGamePickerPro
                     </button>
                 </div>
             </header>
+
+            <section className="intelboard-public-sector-entry" aria-label="Explore other public sectors">
+                <div>
+                    <div className="eyebrow">PUBLIC PLAYER HISTORY</div>
+                    <h2>Explore another sector</h2>
+                    <p>Enter any public Game ID to inspect previous encounters
+                        between its current commanders, even if you never joined the sector.</p>
+                </div>
+                <form onSubmit={(event) => {
+                    event.preventDefault();
+                    const id = Number(publicSectorId.trim());
+                    if (Number.isSafeInteger(id) && id > 0) {
+                        window.location.assign(`/intelboard/public/${id}`);
+                    }
+                }}>
+                    <label htmlFor="public-sector-id">Game ID</label>
+                    <input
+                        id="public-sector-id"
+                        type="number"
+                        min={1}
+                        step={1}
+                        required
+                        value={publicSectorId}
+                        onChange={(event) => setPublicSectorId(event.target.value)}
+                        placeholder="633855"
+                    />
+                    <button
+                        className="primary-button"
+                        type="submit"
+                        disabled={!Number.isSafeInteger(Number(publicSectorId.trim()))
+                            || Number(publicSectorId.trim()) <= 0}
+                    >
+                        Analyze
+                    </button>
+                </form>
+            </section>
 
             <div className="intelboard-account-settings-wrap">
                 <AccountSettings

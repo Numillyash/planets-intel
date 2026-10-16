@@ -4,6 +4,7 @@ from app.services.commander_intelligence import (
     canonical_username,
     exact_overlap_intervals,
     reconstruct_participation_intervals,
+    public_roster_from_loadinfo,
 )
 
 
@@ -182,3 +183,56 @@ class CommanderParticipationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PublicSectorRosterTests(unittest.TestCase):
+    def test_current_public_participants_without_linked_game(self) -> None:
+        payload = {
+            "game": {
+                "id": 99911, "name": "Another Sector", "turn": 42,
+                "status": 2, "statusname": "Running", "isprivate": False,
+            },
+            "players": [
+                {"id": 1, "username": "Alpha", "raceid": 1, "status": 1,
+                 "accountid": 515},
+                {"id": 2, "username": "Beta", "raceid": 5, "status": 1},
+                {"id": 3, "username": "dead", "raceid": 6, "status": 2},
+                {"id": 4, "username": "computer", "raceid": 100, "status": 1},
+            ],
+        }
+        result = public_roster_from_loadinfo(payload, 99911)
+        self.assertIsNotNone(result)
+        game, players = result
+        self.assertEqual(game["game_name"], "Another Sector")
+        self.assertEqual(game["turn"], 42)
+        self.assertEqual([p["username"] for p in players], ["Alpha", "Beta"])
+        self.assertEqual(players[0]["account_id"], 515)
+        self.assertEqual(players[0]["source"], "planets.nu/game/loadinfo")
+
+    def test_private_unknown_and_wrong_id_fail_closed(self) -> None:
+        game = {"id": 99911, "turn": 4, "isprivate": False}
+        payload = {"game": game, "players": []}
+        self.assertIsNone(
+            public_roster_from_loadinfo(
+                {"game": {**game, "isprivate": True}, "players": []}, 99911
+            )
+        )
+        self.assertIsNone(
+            public_roster_from_loadinfo(
+                {"game": {"id": 99911}, "players": []}, 99911
+            )
+        )
+        self.assertIsNone(public_roster_from_loadinfo(payload, 99912))
+
+    def test_ambiguous_duplicate_identity_excluded(self) -> None:
+        payload = {
+            "game": {"id": 99911, "turn": 4, "isprivate": False},
+            "players": [
+                {"id": 1, "username": "ALPHA", "raceid": 2, "status": 1},
+                {"id": 2, "username": " alpha ", "raceid": 5, "status": 1},
+                {"id": 3, "username": "Beta", "raceid": 4, "status": 1},
+            ],
+        }
+        result = public_roster_from_loadinfo(payload, 99911)
+        self.assertIsNotNone(result)
+        self.assertEqual([p["username"] for p in result[1]], ["Beta"])
