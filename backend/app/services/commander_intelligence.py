@@ -759,10 +759,11 @@ def public_roster_from_loadinfo(
     payload: dict[str, Any],
     game_id: int,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]] | None:
-    """Public current-player roster without canonical or private-game access.
+    """Public participants from both roster and attributable join/drop events.
 
-    Former/replaced players not in the active public roster require separate
-    source-event reconstruction; this first slice makes no claim to include them.
+    The latest roster may replace departed usernames with "dead" or a
+    successor. Reconstruct historical identities only from explicit public
+    source events, never by guessing the previous slot owner.
     """
     raw_game = payload.get("game")
     raw_players = payload.get("players")
@@ -774,37 +775,77 @@ def public_roster_from_loadinfo(
     ):
         return None
 
+    slots: dict[int, dict[str, Any]] = {}
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for raw in raw_players:
         if not isinstance(raw, dict):
             continue
-        username = raw.get("username")
         slot = _int(raw.get("id"), positive=True)
         race = _int(raw.get("raceid"))
-        status = _int(raw.get("status"))
-        if (
-            not _usable_username(username)
-            or slot is None
-            or race is None or race < 1 or race >= 100
-            or status != 1
-        ):
+        if slot is None or race is None or race < 1 or race >= 100:
             continue
-        normalized = canonical_username(username)
-        grouped[normalized].append({
+        slots[slot] = raw
+        username = raw.get("username")
+        if not _usable_username(username):
+            continue
+        status = _int(raw.get("status"))
+        if status is None:
+            continue
+        grouped[canonical_username(username)].append({
             "username": username.strip(),
-            "username_normalized": normalized,
+            "username_normalized": canonical_username(username),
             "slot_id": slot,
             "account_id": _int(raw.get("accountid"), positive=True),
             "race_id": race,
             "status": status,
-            "source": GAME_INFO_SOURCE,
+            "source": GAME_INFO_SOURCE + "/roster",
             "source_game_id": game_id,
             "source_turn": _int(raw_game.get("turn")) or 0,
         })
 
+    events = payload.get("events")
+    if isinstance(events, list):
+        for event in sorted(
+            (e for e in events if isinstance(e, dict)),
+            key=_event_sort_key,
+        ):
+            if _int(event.get("eventtype")) not in {3, 10}:
+                continue
+            identity = _event_identity(event)
+            slot_id = _int(event.get("playerid"), positive=True)
+            if identity is None or slot_id is None:
+                continue
+            username, _action, _race_name = identity
+            slot = slots.get(slot_id)
+            if slot is None:
+                # An event without a real public slot/race attribution is
+                # insufficient evidence for a human commander record.
+                continue
+            race = _int(slot.get("raceid"))
+            if race is None or not (1 <= race < 100):
+                continue
+            key = canonical_username(username)
+            if any(row["slot_id"] == slot_id for row in grouped[key]):
+                continue
+            grouped[key].append({
+                "username": username.strip(),
+                "username_normalized": key,
+                "slot_id": slot_id,
+                # Do not inherit a later occupant's identity/account ID.
+                "account_id": None,
+                "race_id": race,
+                "status": 2,
+                "source": GAME_INFO_SOURCE + "/events",
+                "source_game_id": game_id,
+                "source_turn": _int(raw_game.get("turn")) or 0,
+            })
+
+    # The same canonical username in multiple independent slots is an
+    # ambiguous identity mapping, not evidence for multiple accounts.
     commanders = [
-        candidates[0] for candidates in grouped.values()
-        if len(candidates) == 1
+        candidates[0]
+        for candidates in grouped.values()
+        if len({row["slot_id"] for row in candidates}) == 1
     ]
     game_record = {
         "game_id": game_id,
@@ -813,7 +854,48 @@ def public_roster_from_loadinfo(
         "status_id": _int(raw_game.get("status")) or 0,
         "status_name": str(raw_game.get("statusname") or ""),
     }
-    return game_record, sorted(commanders, key=lambda item: item["slot_id"])
+    return game_record, sorted(
+        commanders,
+        key=lambda item: (item["slot_id"], item["username_normalized"]),
+    )
+
+
+def source_pair_game(
+    payload: dict[str, Any],
+    game_record: dict[str, Any],
+    left: dict[str, Any],
+    right: dict[str, Any],
+    provenance: dict[str, Any],
+) -> dict[str, Any]:
+    """Source-sector co-participation, separate from earlier shared games."""
+    a = reconstruct_participation_intervals(payload, left["username"])
+    b = reconstruct_participation_intervals(payload, right["username"])
+    overlap = exact_overlap_intervals(a, b)
+    complete = (
+        bool(a) and bool(b)
+        and all(interval["bounds_known"] for interval in [*a, *b])
+    )
+    raw_game = payload["game"]
+    return {
+        "game_id": game_record["game_id"],
+        "name": game_record["game_name"],
+        "status_id": game_record["status_id"],
+        "status_name": game_record["status_name"],
+        "turn": game_record["turn"],
+        "date_created": raw_game.get("datecreated")
+            if isinstance(raw_game.get("datecreated"), str) else None,
+        "date_ended": raw_game.get("dateended")
+            if isinstance(raw_game.get("dateended"), str) else None,
+        "player_a_intervals": a,
+        "player_b_intervals": b,
+        "overlap_intervals": overlap,
+        "overlapping_turn_count": (
+            sum(interval["turn_count"] for interval in overlap)
+            if complete else None
+        ),
+        "overlap_status": "complete" if complete else "interval_bounds_incomplete",
+        "provenance": provenance,
+    }
 
 
 async def get_commander_intelligence(
@@ -824,7 +906,7 @@ async def get_commander_intelligence(
     client = PlanetsNuClient()
     if public_roster:
         # The public viewer never consults local membership or private intel.
-        source, _ = await _game_info(client, game_id, asyncio.Semaphore(1))
+        source, source_provenance = await _game_info(client, game_id, asyncio.Semaphore(1))
         if source is None:
             return None
         extracted = public_roster_from_loadinfo(source, game_id)
@@ -854,8 +936,14 @@ async def get_commander_intelligence(
             commanders = _current_commanders(game, slots)
         roster_source = "canonical game_player_slots"
 
+    history_limit = asyncio.Semaphore(FETCH_CONCURRENCY)
+
+    async def fetch_history(username: str) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        async with history_limit:
+            return await _player_history(client, username)
+
     histories_raw = await asyncio.gather(
-        *(_player_history(client, item["username"]) for item in commanders),
+        *(fetch_history(item["username"]) for item in commanders),
         return_exceptions=True,
     )
 
@@ -921,6 +1009,10 @@ async def get_commander_intelligence(
     race_records_by_user: dict[str, list[dict[str, Any]]] = defaultdict(list)
 
     for left, right in combinations(commanders, 2):
+        source_game = (
+            source_pair_game(source, game_record, left, right, source_provenance)
+            if public_roster else None
+        )
         left_key = left["username_normalized"]
         right_key = right["username_normalized"]
         left_history = histories.get(left_key)
@@ -939,6 +1031,7 @@ async def get_commander_intelligence(
                 "last_shared_occurrence": None,
                 "games": [],
                 "status": "history_unavailable",
+                "source_game": source_game,
             }
             pairwise.append(pair)
             continue
@@ -1055,6 +1148,7 @@ async def get_commander_intelligence(
             "last_shared_occurrence": last_shared,
             "games": game_rows,
             "status": "complete" if reconstruction_complete else "partial",
+            "source_game": source_game,
         }
         pairwise.append(pair)
 
@@ -1090,8 +1184,11 @@ async def get_commander_intelligence(
             "game_name": game_record["game_name"],
             "race_id": commander["race_id"],
             "race_name": None,
-            "reconstruction_quality": "current_canonical_slot",
-            "source": "canonical game_player_slots",
+            "reconstruction_quality": (
+                "public_source_roster_or_events" if public_roster
+                else "current_canonical_slot"
+            ),
+            "source": roster_source,
         }
         race_rows = [current_race, *race_rows]
         race_dedupe: dict[tuple[int, int | None, str | None], dict[str, Any]] = {}
