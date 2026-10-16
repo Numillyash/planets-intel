@@ -7,6 +7,7 @@ from app.services.commander_intelligence import (
     exact_overlap_intervals,
     reconstruct_participation_intervals,
     public_roster_from_loadinfo,
+    public_events_from_loadinfo,
     source_pair_game,
     public_game_source_verified,
     get_commander_intelligence,
@@ -301,6 +302,65 @@ class PublicSourceEventParticipationTests(unittest.TestCase):
         }
         _, players = public_roster_from_loadinfo(payload, 90020)
         self.assertFalse(any(p["username_normalized"] == "alpha" for p in players))
+
+
+class PublicSectorTimelineTests(unittest.TestCase):
+    def test_missing_events_is_unknown_not_zero(self) -> None:
+        payload = {"game": {"id": 12345, "isprivate": False}}
+        result = public_events_from_loadinfo(payload, 12345)
+        self.assertEqual(result["status"], "unavailable")
+        self.assertIsNone(result["eligible_event_count"])
+        self.assertEqual(result["events"], [])
+
+    def test_rejects_nonpublic_or_mismatched_game(self) -> None:
+        events = [event(event_id=1, event_type=3, turn=2, player_id=1,
+                        description="Pilot has joined")]
+        for game in (
+            {"id": 12345, "isprivate": True},
+            {"id": 12345},
+            {"id": 12346, "isprivate": False},
+        ):
+            self.assertIsNone(public_events_from_loadinfo(
+                {"game": game, "events": events}, 12345,
+            ))
+
+    def test_source_order_ties_and_bounded_newest_event_preview(self) -> None:
+        payload = {
+            "game": {"id": 12345, "isprivate": False},
+            "events": [
+                event(event_id=1, event_type=3, turn=4, player_id=1,
+                      description="earlier"),
+                event(event_id=2, event_type=10, turn=9, player_id=1,
+                      description="later A"),
+                event(event_id=3, event_type=10, turn=9, player_id=2,
+                      description="later B"),
+                {"id": 4, "eventtype": 10, "turn": 8, "description": "  valid  "},
+                {"turn": 7, "description": "missing type"},
+            ],
+        }
+        preview = public_events_from_loadinfo(payload, 12345, limit=2)
+        self.assertEqual(preview["status"], "available")
+        self.assertEqual(preview["eligible_event_count"], 4)
+        self.assertEqual(preview["skipped_event_rows"], 1)
+        self.assertTrue(preview["truncated"])
+        self.assertEqual(
+            [row["description"] for row in preview["events"]],
+            ["later B", "later A"],
+        )
+        self.assertEqual(preview["events"][0]["turn"], 9)
+        all_rows = public_events_from_loadinfo(payload, 12345)
+        self.assertFalse(all_rows["truncated"])
+        self.assertEqual(all_rows["events"][2]["description"], "valid")
+
+    def test_explicit_empty_event_collection_is_known_empty(self) -> None:
+        result = public_events_from_loadinfo(
+            {"game": {"id": 12345, "isprivate": False}, "events": []},
+            12345,
+        )
+        self.assertEqual(result["status"], "available")
+        self.assertEqual(result["eligible_event_count"], 0)
+        self.assertEqual(result["skipped_event_rows"], 0)
+        self.assertFalse(result["truncated"])
 
 
 class HistoricalPublicIdentityBoundaryTests(unittest.TestCase):

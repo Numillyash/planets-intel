@@ -132,6 +132,23 @@ class CommanderIntelligenceProvenance(BaseModel):
     facts_unchanged: bool
 
 
+class PublicSectorEvent(BaseModel):
+    event_id: int | None
+    turn: int | None
+    event_type: int
+    slot_id: int | None
+    description: str
+
+
+class PublicSectorTimeline(BaseModel):
+    status: Literal["available", "unavailable"]
+    events: list[PublicSectorEvent]
+    eligible_event_count: int | None
+    skipped_event_rows: int | None
+    truncated: bool
+    provenance: CommanderSourceProvenance
+
+
 class CommanderIntelligenceResponse(BaseModel):
     game_id: int
     game_name: str
@@ -147,3 +164,4 @@ class CommanderIntelligenceResponse(BaseModel):
     pairwise: list[CommanderPairSummary]
     provenance: CommanderIntelligenceProvenance
     warnings: list[str]
+    public_timeline: PublicSectorTimeline | None = None

@@ -757,6 +757,78 @@ def _interval_race_records(
     return result
 
 
+PUBLIC_EVENT_PREVIEW_LIMIT = 200
+
+
+def public_events_from_loadinfo(
+    payload: dict[str, Any],
+    game_id: int,
+    *,
+    limit: int = PUBLIC_EVENT_PREVIEW_LIMIT,
+) -> dict[str, Any] | None:
+    """Preview factual events from the explicitly public, identified sector.
+
+    Unknown/missing event collections are NOT equivalent to an observed empty
+    collection. Descriptions are source text, not interpreted player actions.
+    No canonical observations or private turns are consulted.
+    """
+    game = payload.get("game")
+    if (
+        not isinstance(game, dict)
+        or game.get("isprivate") is not False
+        or _int(game.get("id"), positive=True) != game_id
+    ):
+        return None
+
+    raw_events = payload.get("events")
+    if not isinstance(raw_events, list):
+        return {
+            "status": "unavailable",
+            "events": [],
+            "eligible_event_count": None,
+            "skipped_event_rows": None,
+            "truncated": False,
+        }
+
+    parsed: list[tuple[int, dict[str, Any]]] = []
+    for index, raw in enumerate(raw_events):
+        if not isinstance(raw, dict):
+            continue
+        event_type = _int(raw.get("eventtype"))
+        description = raw.get("description")
+        if event_type is None or not isinstance(description, str) or not description.strip():
+            continue
+        parsed.append((
+            index,
+            {
+                "event_id": _source_event_id(raw),
+                "turn": _int(raw.get("turn"), positive=True),
+                "event_type": event_type,
+                "slot_id": _int(raw.get("playerid"), positive=True),
+                "description": description.strip(),
+            },
+        ))
+
+    # Newest observed turn first; an unknown turn sorts last. Original source
+    # order resolves ties so that no event ordering is invented.
+    parsed.sort(
+        key=lambda item: (
+            item[1]["turn"] is not None,
+            item[1]["turn"] or 0,
+            item[0],
+        ),
+        reverse=True,
+    )
+    safe_limit = max(0, min(limit, PUBLIC_EVENT_PREVIEW_LIMIT))
+    return {
+        "status": "available",
+        "events": [event for _, event in parsed[:safe_limit]],
+        "eligible_event_count": len(parsed),
+        "skipped_event_rows": len(raw_events) - len(parsed),
+        "truncated": len(parsed) > safe_limit,
+    }
+
+
 def public_game_source_verified(payload: Any, game_id: int) -> bool:
     """An archival loadinfo payload must identify the requested public game.
 
@@ -932,8 +1004,12 @@ async def get_commander_intelligence(
         if extracted is None:
             return None
         game_record, commanders = extracted
+        public_timeline = public_events_from_loadinfo(source, game_id)
+        if public_timeline is not None:
+            public_timeline["provenance"] = source_provenance
         roster_source = GAME_INFO_SOURCE
     else:
+        public_timeline = None
         with SessionLocal() as session:
             game = session.get(Game, game_id)
             if game is None:
@@ -1105,6 +1181,7 @@ async def get_commander_intelligence(
                     }
                 )
                 continue
+
 
             left_intervals = reconstruct_participation_intervals(
                 payload,
@@ -1311,4 +1388,5 @@ async def get_commander_intelligence(
             "facts_unchanged": True,
         },
         "warnings": warnings,
+        "public_timeline": public_timeline,
     }
