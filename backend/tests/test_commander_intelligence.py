@@ -1,4 +1,6 @@
+import asyncio
 import unittest
+from unittest.mock import AsyncMock, patch
 
 from app.services.commander_intelligence import (
     canonical_username,
@@ -6,6 +8,8 @@ from app.services.commander_intelligence import (
     reconstruct_participation_intervals,
     public_roster_from_loadinfo,
     source_pair_game,
+    public_game_source_verified,
+    get_commander_intelligence,
 )
 
 
@@ -297,3 +301,107 @@ class PublicSourceEventParticipationTests(unittest.TestCase):
         }
         _, players = public_roster_from_loadinfo(payload, 90020)
         self.assertFalse(any(p["username_normalized"] == "alpha" for p in players))
+
+
+class HistoricalPublicIdentityBoundaryTests(unittest.TestCase):
+    def test_historical_loadinfo_must_identify_exact_public_game(self) -> None:
+        good = {
+            "game": {"id": 720001, "isprivate": False},
+            "players": [],
+        }
+        self.assertTrue(public_game_source_verified(good, 720001))
+        for bad in (
+            None,
+            {},
+            {"game": {"id": 720001, "isprivate": True}, "players": []},
+            {"game": {"id": 720001}, "players": []},
+            {"game": {"id": 720002, "isprivate": False}, "players": []},
+            {"game": {"id": 720001, "isprivate": False}},
+        ):
+            self.assertFalse(public_game_source_verified(bad, 720001))
+
+    def test_explicit_event_slot_does_not_inherit_wrong_roster_slot(self) -> None:
+        payload = {
+            "game": {"id": 720001, "turn": 30},
+            "players": [{
+                "id": 4, "username": "Pilot", "raceid": 6,
+                "status": 1, "turnjoined": 10,
+            }],
+            "events": [
+                event(event_id=15, event_type=3, turn=7, player_id=5,
+                      description="Pilot has joined the game as Federation"),
+            ],
+        }
+        intervals = reconstruct_participation_intervals(payload, "Pilot")
+        from_event = next(i for i in intervals if i["slot_id"] == 5)
+        self.assertEqual(from_event["turn_from"], 7)
+        self.assertIsNone(from_event["turn_to"])
+        self.assertIsNone(from_event["race_id"])
+        self.assertFalse(from_event["bounds_known"])
+
+    def test_wrong_or_private_historical_loadinfo_yields_unknown_turn_overlap(self) -> None:
+        source = {
+            "game": {
+                "id": 720001, "name": "Public source", "turn": 30,
+                "status": 2, "isprivate": False,
+            },
+            "players": [
+                {"id": 1, "username": "Pilot A", "raceid": 1,
+                 "status": 1, "turnjoined": 1},
+                {"id": 2, "username": "Pilot B", "raceid": 2,
+                 "status": 1, "turnjoined": 1},
+            ],
+            "events": [],
+        }
+        history_game = {
+            "game_id": 720002, "name": "Historical reference",
+            "status_id": 3, "status_name": "Finished",
+            "turn": 50, "date_created": None, "date_ended": None,
+        }
+        source_meta = {
+            "source": "planets.nu/game/loadinfo", "cache_state": "fresh",
+            "fetched_at": None,
+        }
+        histories = {
+            "Pilot A": ([history_game], {
+                "source": "planets.nu/games/list",
+                "cache_state": "fresh", "fetched_at": None,
+                "status_filter": [2, 3],
+            }),
+            "Pilot B": ([history_game], {
+                "source": "planets.nu/games/list",
+                "cache_state": "fresh", "fetched_at": None,
+                "status_filter": [2, 3],
+            }),
+        }
+
+        async def fake_info(_client, game_id, _limit):
+            if game_id == 720001:
+                return source, source_meta
+            return {
+                "game": {"id": 720999, "isprivate": False, "turn": 50},
+                "players": [],
+            }, source_meta
+
+        async def fake_history(_client, username):
+            return histories[username]
+
+        with patch(
+            "app.services.commander_intelligence.PlanetsNuClient"
+        ), patch(
+            "app.services.commander_intelligence._game_info",
+            new=AsyncMock(side_effect=fake_info),
+        ), patch(
+            "app.services.commander_intelligence._player_history",
+            new=AsyncMock(side_effect=fake_history),
+        ):
+            result = asyncio.run(get_commander_intelligence(
+                game_id=720001, public_roster=True,
+            ))
+        pair = result["pairwise"][0]
+        self.assertEqual(pair["shared_games"], 1)
+        self.assertEqual(pair["games"][0]["overlap_status"], "source_unverified")
+        self.assertEqual(pair["games"][0]["overlap_intervals"], [])
+        self.assertIsNone(pair["overlapping_turn_count"])
+        self.assertFalse(pair["overlap_reconstruction_complete"])
+        self.assertIn("warning", pair["games"][0]["provenance"])
