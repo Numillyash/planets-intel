@@ -121,6 +121,7 @@ class CommanderPairSummary(BaseModel):
     last_shared_occurrence: CommanderHistoryGame | None
     games: list[CommanderPairGame]
     status: str
+    source_game: CommanderPairGame | None = None
 
 
 class CommanderIntelligenceProvenance(BaseModel):

@@ -106,6 +106,7 @@ export interface CommanderPairSummary {
     last_shared_occurrence: CommanderHistoryGame | null;
     games: CommanderPairGame[];
     status: string;
+    source_game?: CommanderPairGame | null;
 }
 
 export interface CommanderIntelligenceResponse {

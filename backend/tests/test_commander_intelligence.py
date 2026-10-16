@@ -5,6 +5,7 @@ from app.services.commander_intelligence import (
     exact_overlap_intervals,
     reconstruct_participation_intervals,
     public_roster_from_loadinfo,
+    source_pair_game,
 )
 
 
@@ -236,3 +237,63 @@ class PublicSectorRosterTests(unittest.TestCase):
         result = public_roster_from_loadinfo(payload, 99911)
         self.assertIsNotNone(result)
         self.assertEqual([p["username"] for p in result[1]], ["Beta"])
+
+
+class PublicSourceEventParticipationTests(unittest.TestCase):
+    def test_departed_and_replaced_players_from_public_join_drop_events(self) -> None:
+        payload = {
+            "game": {
+                "id": 90020, "turn": 40, "isprivate": False,
+                "name": "Replacement Sector", "status": 2,
+            },
+            "players": [
+                {"id": 1, "username": "replacement", "raceid": 3,
+                 "status": 1, "accountid": 811},
+                {"id": 2, "username": "dead", "raceid": 4,
+                 "status": 2},
+            ],
+            "events": [
+                event(event_id=1, event_type=3, turn=2, player_id=1,
+                      description="former pilot has joined the game in slot 1 as Bird Men"),
+                event(event_id=2, event_type=10, turn=9, player_id=1,
+                      description="former pilot has been dropped from the game"),
+                event(event_id=3, event_type=3, turn=10, player_id=1,
+                      description="replacement has joined the game in slot 1 as Bird Men"),
+                event(event_id=4, event_type=3, turn=1, player_id=2,
+                      description="lost captain has joined the game in slot 2 as Fury"),
+                event(event_id=5, event_type=10, turn=15, player_id=2,
+                      description="lost captain has been dropped from the game"),
+            ],
+        }
+        record, players = public_roster_from_loadinfo(payload, 90020)
+        self.assertEqual(record["turn"], 40)
+        by_name = {player["username"]: player for player in players}
+        self.assertEqual(set(by_name), {"replacement", "former pilot", "lost captain"})
+        self.assertEqual(by_name["former pilot"]["account_id"], None)
+        self.assertEqual(by_name["former pilot"]["status"], 2)
+        self.assertEqual(by_name["former pilot"]["slot_id"], 1)
+        self.assertEqual(by_name["replacement"]["account_id"], 811)
+        previous = source_pair_game(
+            payload, record, by_name["former pilot"], by_name["replacement"],
+            {"source": "test", "cache_state": "fresh", "fetched_at": None},
+        )
+        self.assertEqual(previous["game_id"], 90020)
+        self.assertEqual(previous["overlapping_turn_count"], 0)
+        self.assertEqual(previous["player_a_intervals"][0]["turn_from"], 2)
+        self.assertEqual(previous["player_a_intervals"][0]["turn_to"], 9)
+        self.assertEqual(previous["player_b_intervals"][0]["turn_from"], 10)
+
+    def test_duplicate_username_source_is_not_assigned_two_distinct_slots(self) -> None:
+        payload = {
+            "game": {"id": 90020, "turn": 11, "isprivate": False},
+            "players": [
+                {"id": 1, "username": "Alpha", "raceid": 1, "status": 1},
+                {"id": 2, "username": "dead", "raceid": 2, "status": 2},
+            ],
+            "events": [
+                event(event_id=10, event_type=3, turn=2, player_id=2,
+                      description="alpha has joined the game in slot 2 as Lizard"),
+            ],
+        }
+        _, players = public_roster_from_loadinfo(payload, 90020)
+        self.assertFalse(any(p["username_normalized"] == "alpha" for p in players))

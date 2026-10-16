@@ -25,55 +25,80 @@ function cell(
     pair: CommanderPairSummary | undefined,
     metric: AffinityMetric,
 ): { label: string; meaning: string; grade: string; partial: boolean } {
-    if (pair === undefined || pair.shared_games === null) {
+    const source = pair?.source_game ?? null;
+    const sourceCount = source === null ? 0 : 1;
+    if (metric === "games") {
+        if (pair === undefined || pair.shared_games === null) {
+            return {
+                label: sourceCount ? "≥1" : "?",
+                meaning: sourceCount
+                    ? "Source sector confirmed; previous public history unavailable"
+                    : "Public history unavailable — not zero games",
+                grade: sourceCount ? "one" : "unknown",
+                partial: sourceCount > 0,
+            };
+        }
+        const total = pair.shared_games + sourceCount;
+        return {
+            label: String(total),
+            meaning: source === null
+                ? pair.shared_games + " previous shared games"
+                : total + " recorded shared sectors = " +
+                    pair.shared_games + " previous + 1 selected source sector",
+            grade: grade(total),
+            partial: false,
+        };
+    }
+
+    if (pair === undefined) {
         return {
             label: "?",
-            meaning: "Public history unavailable — not zero games",
+            meaning: "Pair evidence unavailable",
             grade: "unknown",
             partial: false,
         };
     }
+    const sourceKnown = source?.overlap_intervals.reduce(
+        (sum, interval) => sum + interval.turn_count, 0,
+    ) ?? 0;
+    const known = pair.known_overlapping_turn_count + sourceKnown;
+    const complete = pair.shared_games !== null
+        && pair.overlap_reconstruction_complete
+        && (source === null || source.overlap_status === "complete");
 
-    if (metric === "games") {
+    if (complete) {
+        const exact = (pair.overlapping_turn_count ?? 0) + sourceKnown;
         return {
-            label: String(pair.shared_games),
-            meaning: pair.shared_games + " other games in both public histories",
-            grade: grade(pair.shared_games),
+            label: String(exact),
+            meaning: exact + " exact overlapping turns" +
+                (source === null ? " in prior sectors" : " including source sector"),
+            grade: grade(exact),
             partial: false,
         };
     }
 
-    if (pair.overlap_reconstruction_complete && pair.overlapping_turn_count !== null) {
+    if (known > 0) {
         return {
-            label: String(pair.overlapping_turn_count),
-            meaning: pair.overlapping_turn_count + " reconstructed overlapping turns",
-            grade: grade(pair.overlapping_turn_count),
-            partial: false,
+            label: "≥" + known,
+            meaning: "At least " + known +
+                " bounded overlapping turns; some participation evidence incomplete",
+            grade: grade(known),
+            partial: true,
         };
     }
 
-    if (pair.shared_games === 0) {
+    if (pair.shared_games === 0 && source === null) {
         return {
             label: "0",
-            meaning: "No other shared games in available public histories",
+            meaning: "No previous shared games in available public histories",
             grade: "none",
             partial: false,
         };
     }
 
-    if (pair.known_overlapping_turn_count > 0) {
-        return {
-            label: "≥" + pair.known_overlapping_turn_count,
-            meaning: "At least " + pair.known_overlapping_turn_count +
-                " bounded overlapping turns; other intervals incomplete",
-            grade: grade(pair.known_overlapping_turn_count),
-            partial: true,
-        };
-    }
-
     return {
         label: "?",
-        meaning: "Games shared, but actual overlapping turns unconfirmed",
+        meaning: "Shared sector(s) found but simultaneous turns unconfirmed",
         grade: "unknown",
         partial: false,
     };
@@ -129,7 +154,8 @@ export function CommanderAffinityMatrix({
     const connectedPairs = knownPairs.filter((pair) => (pair.shared_games ?? 0) > 0);
     const incompletePairs = pairwise.length - knownPairs.length;
     const confirmedOverlaps = pairwise.filter(
-        (pair) => pair.known_overlapping_turn_count > 0,
+        (pair) => pair.known_overlapping_turn_count > 0
+            || (pair.source_game?.overlap_intervals.length ?? 0) > 0,
     ).length;
 
     return (
@@ -139,8 +165,9 @@ export function CommanderAffinityMatrix({
                     <div className="eyebrow">Public-history evidence · source game #{gameId}</div>
                     <h2>Player Affinity / Previous Encounters</h2>
                     <p>
-                        Pairwise history of commanders in this sector, excluding the
-                        current game. A past shared game is not evidence of an alliance.
+                        Counts include the selected sector when its public roster is
+                        available; prior games are counted separately. A shared
+                        sector does not establish a friendship or alliance.
                     </p>
                 </div>
                 <div className="commander-affinity-modes" role="group" aria-label="Matrix statistic">
@@ -165,7 +192,7 @@ export function CommanderAffinityMatrix({
 
             <div className="commander-affinity-stats">
                 <div><strong>{ordered.length}</strong><span>Commanders</span></div>
-                <div><strong>{connectedPairs.length}</strong><span>Pairs with shared games</span></div>
+                <div><strong>{connectedPairs.length}</strong><span>Pairs with previous shared games</span></div>
                 <div><strong>{confirmedOverlaps}</strong><span>Pairs with confirmed overlapping turns</span></div>
                 <div><strong>{incompletePairs}</strong><span>Pairs with unavailable public history</span></div>
             </div>
@@ -195,8 +222,8 @@ export function CommanderAffinityMatrix({
                     <table className="commander-affinity-table">
                         <caption>
                             {metric === "games"
-                                ? "Number of other games recorded in both players' public histories."
-                                : "Turns both players were present together, when participation intervals are reconstructable."}
+                                ? "Total shared sectors: previous history plus the selected source sector when publicly verifiable."
+                                : "Reconstructed overlapping turns, including source sector when publicly verifiable."}
                             {" "}Choose a cell to inspect source games and participation evidence.
                         </caption>
                         <thead>
@@ -208,7 +235,7 @@ export function CommanderAffinityMatrix({
                                         key={commander.username_normalized}
                                         title={commander.username}
                                     >
-                                        <span>{commander.username}</span>
+                                        <span>{commander.username}{commander.status !== 1 ? " †" : ""}</span>
                                         <small>#{commander.slot_id}</small>
                                     </th>
                                 ))}
@@ -222,7 +249,7 @@ export function CommanderAffinityMatrix({
                                         title={rowPlayer.username}
                                         className="commander-affinity-row-name"
                                     >
-                                        <strong>{rowPlayer.username}</strong>
+                                        <strong>{rowPlayer.username}{rowPlayer.status !== 1 ? " †" : ""}</strong>
                                         <small>slot {rowPlayer.slot_id}</small>
                                     </th>
                                     {visible.map((columnPlayer) => {
@@ -276,7 +303,7 @@ export function CommanderAffinityMatrix({
                 <span><i className="commander-affinity-medium" />3–4</span>
                 <span><i className="commander-affinity-high" />5+</span>
                 <span><i className="commander-affinity-unknown" />unknown</span>
-                <span>≥ indicates a proven lower bound, not an exact total</span>
+                <span>† = departed/inactive · ≥ = proven lower bound, not an exact total</span>
             </div>
 
             <div className="commander-affinity-evidence" aria-live="polite">
@@ -294,8 +321,9 @@ export function CommanderAffinityMatrix({
                                 <p className="muted">
                                     {selectedPair.shared_games === null
                                         ? "History unavailable — no conclusion about past encounters."
-                                        : selectedPair.shared_games + " shared games; " +
-                                        cell(selectedPair, "overlap").meaning}
+                                        : selectedPair.shared_games + " previous shared games" +
+                                        (selectedPair.source_game ? " + selected source sector" : "") +
+                                        "; " + cell(selectedPair, "overlap").meaning}
                                 </p>
                             </div>
                             <button
@@ -311,10 +339,10 @@ export function CommanderAffinityMatrix({
                 )}
             </div>
             <p className="commander-provenance">
-                Method: exact player-history intersection, excluding this sector.
-                Different usernames are treated as distinct accounts.
-                Unknown participation intervals remain unknown; no behavioral
-                conclusion or probability of alliance is inferred.
+                Method: previous player-history intersection, plus independently
+                attributable source-sector participation from public join/drop
+                events and roster. No temporal overlap is assumed for replacements.
+                Unknown periods remain unknown; no behavioral or alliance inference.
             </p>
         </section>
     );
