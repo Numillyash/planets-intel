@@ -51,7 +51,7 @@ function PublicEventTimeline({ timeline }: { timeline: PublicSectorTimeline }) {
             ) : (
                 <>
                     <p className="muted commander-timeline-note">
-                        {timeline.eligible_event_count} attributable source rows
+                        {timeline.eligible_event_count} eligible source events
                         {timeline.truncated ? " · showing the newest " + timeline.events.length : ""}
                         {timeline.skipped_event_rows ? " · " + timeline.skipped_event_rows + " invalid/incomplete rows omitted" : ""}
                         {!timeline.truncated && timeline.events.length === 0 ? " · no eligible events in the returned collection" : ""}
