@@ -798,7 +798,7 @@ def public_roster_from_loadinfo(
             "account_id": _int(raw.get("accountid"), positive=True),
             "race_id": race,
             "status": status,
-            "source": GAME_INFO_SOURCE + "/roster",
+            "source": GAME_INFO_SOURCE,
             "source_game_id": game_id,
             "source_turn": _int(raw_game.get("turn")) or 0,
         })
