@@ -58,9 +58,15 @@ export function PublicSectorExplorer({ gameId }: { gameId: number }) {
                     if (requestRevision.current !== revision) return;
                     if (result.game_id !== details.game.id
                         || result.turn !== candidate || result.player_slot_id !== slot) {
-                        throw new Error("Returned historical RST identity does not match the requested game, slot and turn.");
+                        setArchiveError("Returned historical RST identity does not match the requested game, slot and turn.");
+                        return; // A source-identity failure is never retried as a missing turn.
                     }
                     setArchive(result);
+                    try {
+                        window.localStorage.setItem(`intelboard-public-slot:${details.game.id}`, String(slot));
+                    } catch {
+                        // Storage is optional. Source identity is still server-verified.
+                    }
                     // Deep links and reloads must preserve the verified perspective,
                     // never the requested-but-unavailable fallback candidate.
                     const url = new URL(window.location.href);
@@ -129,7 +135,18 @@ export function PublicSectorExplorer({ gameId }: { gameId: number }) {
                         && candidateSlots.some((player) => player.slot_id === requestedSlot);
                     const hasValidTurn = query.has("turn") && Number.isSafeInteger(requestedTurn)
                         && requestedTurn > 0 && requestedTurn <= details.game.turn;
-                    const slot = hasValidSlot ? requestedSlot : candidateSlots[0]?.slot_id;
+                    let rememberedSlot: number | null = null;
+                    try {
+                        const saved = window.localStorage.getItem(`intelboard-public-slot:${gameId}`);
+                        if (saved !== null) rememberedSlot = Number(saved);
+                    } catch {
+                        // Private browsing may disable storage.
+                    }
+                    const rememberedEligible = rememberedSlot !== null && candidateSlots.some(
+                        (player) => player.slot_id === rememberedSlot,
+                    );
+                    const slot = hasValidSlot ? requestedSlot
+                        : rememberedEligible ? rememberedSlot! : candidateSlots[0]?.slot_id;
                     const turn = hasValidTurn ? requestedTurn : details.game.turn;
                     if (slot !== undefined) {
                         await openTurn(details, slot, turn, !hasValidTurn);
