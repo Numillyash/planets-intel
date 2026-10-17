@@ -3,8 +3,9 @@ import { useEffect, useState } from "react";
 import type { PlayerInfo } from "../../types/api";
 import {
     isCombinedPrivateIntel,
+    isPublicArchiveIntel,
     type MapShipObservation,
-    type PrivateIntelMapResponse,
+    type GameMapIntelSource,
 } from "../../types/intel";
 import { SHIP_ROLE_LABEL, shipRole, type SelectedEntity } from "./mapModel";
 import {
@@ -55,7 +56,7 @@ export function ShipDetails({
     onSelect,
 }: {
     ship: MapShipObservation;
-    intel: PrivateIntelMapResponse;
+    intel: GameMapIntelSource;
     players: PlayerInfo[];
     onSelect: (entity: SelectedEntity) => void;
 }) {
@@ -115,13 +116,16 @@ export function ShipDetails({
         ionHazard.stormClass >= 4 &&
         (shipMass === null || shipMass <= 4000)
     );
-    const linkedAccountId = isCombinedPrivateIntel(intel)
-        ? intel.primary_observer.linked_account_id
-        : intel.observer.linked_account_id;
-    const primarySlotId = isCombinedPrivateIntel(intel)
-        ? intel.primary_observer.player_slot_id
-        : intel.observer.player_slot_id;
-    const isOwnShip = ship.owner_id === primarySlotId;
+    const readOnly = isPublicArchiveIntel(intel);
+    const linkedAccountId = readOnly ? null
+        : isCombinedPrivateIntel(intel)
+            ? intel.primary_observer.linked_account_id
+            : intel.observer.linked_account_id;
+    const primarySlotId = readOnly ? intel.player_slot_id
+        : isCombinedPrivateIntel(intel)
+            ? intel.primary_observer.player_slot_id
+            : intel.observer.player_slot_id;
+    const isOwnShip = !readOnly && ship.owner_id === primarySlotId;
     const selectedEntity: Extract<SelectedEntity, { kind: "ship" }> = {
         kind: "ship",
         value: ship,
@@ -190,7 +194,9 @@ export function ShipDetails({
                 className="operational-entity-tabs"
                 aria-label="Ship interface tabs"
             >
-                {SHIP_TABS.map((tab) => (
+                {SHIP_TABS.filter((tab) => !readOnly || (
+                    tab.id !== "orders" && tab.id !== "combat" && tab.id !== "intel"
+                )).map((tab) => (
                     <button
                         className={
                             "operational-entity-tab"
@@ -326,7 +332,7 @@ export function ShipDetails({
                     </div>
                 )}
 
-                {activeTab === "intel" && (
+                {activeTab === "intel" && !readOnly && linkedAccountId !== null && (
                     <div className="operational-tab-section">
                         {ship.owner_id !== primarySlotId ? (
                             <LoadoutInference
@@ -355,7 +361,7 @@ export function ShipDetails({
                     </div>
                 )}
 
-                {activeTab === "combat" && (
+                {activeTab === "combat" && !readOnly && linkedAccountId !== null && (
                     <div className="operational-tab-section">
                         <ThreatAnalysis
                             gameId={intel.game_id}
@@ -372,7 +378,7 @@ export function ShipDetails({
                     </div>
                 )}
 
-                {activeTab === "orders" && (
+                {activeTab === "orders" && !readOnly && linkedAccountId !== null && (
                     <div className="operational-tab-section">
                         {isOwnShip ? (
                             <ShipOrderDraftPanel
