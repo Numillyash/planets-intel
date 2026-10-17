@@ -418,7 +418,7 @@ export function GameDashboard({
                     )}
                     {publicTab === "starmap" && (
                         publicArchive !== null ? (
-                            <PublicArchiveMap archive={publicArchive} />
+                            <PublicArchiveMap archive={publicArchive} players={game.players} />
                         ) : (
                             <section className="panel game-dashboard-placeholder">
                                 <h2>Starmap unavailable</h2>
