@@ -294,12 +294,20 @@ export function GameDashboard({
             "dashboard", "commander-intel", "planets", "starships",
             "starbases", "scoreboard", "time-machine", "settings",
         ].includes(tab.id));
+        const publicTab = readOnlyTabs.some((tab) => tab.id === activeTab)
+            ? activeTab : "dashboard";
+        const publicScores = new Map<number, ScoreHistoryItem>();
+        for (const item of history?.items ?? []) {
+            if (item.turn === (publicArchive?.turn ?? game.game.turn)) {
+                publicScores.set(item.slot_id, item);
+            }
+        }
         return (
             <section className="game-dashboard-shell">
                 <nav className="game-dashboard-tabs" aria-label="Game dashboard sections">
                     {readOnlyTabs.map((tab) => (
                         <button
-                            className={activeTab === tab.id ? "is-active" : ""}
+                            className={publicTab === tab.id ? "is-active" : ""}
                             key={tab.id}
                             onClick={() => selectTab(tab.id)}
                             type="button"
@@ -309,7 +317,7 @@ export function GameDashboard({
                     ))}
                 </nav>
                 <div className="game-dashboard-content">
-                    {activeTab === "dashboard" && (
+                    {publicTab === "dashboard" && (
                         <div className="game-dashboard-stack">
                             <section className="summary-grid game-dashboard-summary">
                                 <div className="summary-card">
@@ -344,10 +352,10 @@ export function GameDashboard({
                             )}
                         </div>
                     )}
-                    {activeTab === "commander-intel" && (
+                    {publicTab === "commander-intel" && (
                         <CommanderIntelligencePanel gameId={game.game.id} publicMode />
                     )}
-                    {activeTab === "planets" && (
+                    {publicTab === "planets" && (
                         <section className="panel">
                             <div className="panel-header"><div>
                                 <h2>Planet List · {publicArchive === null ? "unavailable" : `T${publicArchive.turn}`}</h2>
@@ -367,7 +375,7 @@ export function GameDashboard({
                             </table></div>
                         </section>
                     )}
-                    {activeTab === "starships" && (
+                    {publicTab === "starships" && (
                         <section className="panel">
                             <div className="panel-header"><div>
                                 <h2>Starships · {publicArchive === null ? "unavailable" : `T${publicArchive.turn}`}</h2>
@@ -385,7 +393,7 @@ export function GameDashboard({
                             </table></div>
                         </section>
                     )}
-                    {activeTab === "starbases" && (
+                    {publicTab === "starbases" && (
                         <section className="panel">
                             <div className="panel-header"><div>
                                 <h2>Starbases · {publicArchive === null ? "unavailable" : `T${publicArchive.turn}`}</h2>
@@ -402,22 +410,22 @@ export function GameDashboard({
                             </table></div>
                         </section>
                     )}
-                    {activeTab === "scoreboard" && (
+                    {publicTab === "scoreboard" && (
                         <div className="game-dashboard-stack">
-                            <PlayersTable latestScores={latestScores} players={game.players} />
+                            <PlayersTable latestScores={publicScores} players={game.players} snapshotTurn={publicArchive?.turn ?? null} />
                             {history !== null && <MilitaryScoreChart history={history.items} players={game.players} />}
                             {history === null && <section className="panel"><p className="muted">
                                 No local score history for this game yet; public score backfill is a separate source.
                             </p></section>}
                         </div>
                     )}
-                    {activeTab === "time-machine" && (
+                    {publicTab === "time-machine" && (
                         <section className="panel game-dashboard-placeholder">
                             <h2>Time machine</h2>
                             <p>Choose the historical player slot and turn using the public archive selector above. Each RST is loaded on demand.</p>
                         </section>
                     )}
-                    {activeTab === "settings" && (
+                    {publicTab === "settings" && (
                         <section className="panel">
                             <div className="panel-header"><div>
                                 <h2>Public game settings</h2>
