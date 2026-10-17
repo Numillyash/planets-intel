@@ -79,18 +79,18 @@ try{
   await load("/intelboard/public/683230?slot=4&turn=54&view=dashboard&tab=dashboard");
   await visible(".game-dashboard-shell");
   await visible(".global-page-nav-slot > .public-game-navigation");
-  assert.equal(await page.locator(".game-dashboard-tabs button").count(),16,
+  assert.equal(await page.locator(".game-dashboard-tabs button").count(),17,
     "Public dashboard must share the native game section strip");
   assert.equal(await page.locator(".game-dashboard-summary .summary-card").count(),6,
     "Public dashboard must share the six-card native overview");
-  assert.equal(await page.locator(".game-dashboard-launch-grid button").count(),15,
+  assert.equal(await page.locator(".game-dashboard-launch-grid button").count(),16,
     "Public dashboard must share the native section launcher");
   assert.equal(await page.locator(".public-archive-observer-selectors .summary-card").count(),2,
     "The public header must use native Observer and Game selectors");
   assert.equal(await page.locator(".app-shell > .public-game-navigation").count(),0,
     "Do not duplicate the global game navigation above the tab strip");
   await page.screenshot({path:"/tmp/public-surface-smoke/dashboard.png"}).catch(()=>{});
-  console.log("PASS: native dashboard layout parity - 16 tabs, six summary cards, 15 launch tiles");
+  console.log("PASS: native dashboard layout parity - 17 tabs, six summary cards, 16 launch tiles");
   assert.equal(await page.locator(".intel-map-panel").count(),0,"Map must not mount inside Dashboard");
   await page.locator(".global-page-nav-slot > .public-game-navigation")
     .getByRole("button",{name:"Starmap"}).click();
