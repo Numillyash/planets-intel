@@ -2,8 +2,9 @@ import { useEffect, useState } from "react";
 
 import {
     isCombinedPrivateIntel,
+    isPublicArchiveIntel,
     type MapStarbaseObservation,
-    type PrivateIntelMapResponse,
+    type GameMapIntelSource,
 } from "../../types/intel";
 import type { SelectedEntity } from "./mapModel";
 import {
@@ -38,7 +39,7 @@ export function StarbaseDetails({
     onSelect,
 }: {
     starbase: MapStarbaseObservation;
-    intel: PrivateIntelMapResponse;
+    intel: GameMapIntelSource;
     onSelect: (entity: SelectedEntity) => void;
 }) {
     const [activeTab, setActiveTab] = useState<StarbaseTab>("status");
@@ -46,13 +47,16 @@ export function StarbaseDetails({
     const planet = intel.planets.find(
         (item) => item.planet_id === starbase.planet_id,
     ) ?? null;
-    const linkedAccountId = isCombinedPrivateIntel(intel)
-        ? intel.primary_observer.linked_account_id
-        : intel.observer.linked_account_id;
-    const primarySlotId = isCombinedPrivateIntel(intel)
-        ? intel.primary_observer.player_slot_id
-        : intel.observer.player_slot_id;
-    const ownBase = planet !== null && planet.owner_id === primarySlotId;
+    const readOnly = isPublicArchiveIntel(intel);
+    const linkedAccountId = readOnly ? null
+        : isCombinedPrivateIntel(intel)
+            ? intel.primary_observer.linked_account_id
+            : intel.observer.linked_account_id;
+    const primarySlotId = readOnly ? intel.player_slot_id
+        : isCombinedPrivateIntel(intel)
+            ? intel.primary_observer.player_slot_id
+            : intel.observer.player_slot_id;
+    const ownBase = !readOnly && planet !== null && planet.owner_id === primarySlotId;
     const upstreamPrimaryOrder = payloadText(
         starbase.payload,
         "missionname",
@@ -106,13 +110,13 @@ export function StarbaseDetails({
                 >
                     Status
                 </button>
-                <button
+                {!readOnly && <button
                     className={`operational-entity-tab${activeTab === "orders" ? " is-active" : ""}`}
                     onClick={() => setActiveTab("orders")}
                     type="button"
                 >
                     Orders
-                </button>
+                </button>}
             </nav>
 
             <div className="operational-entity-content">
@@ -144,7 +148,7 @@ export function StarbaseDetails({
                 )}
 
                 {activeTab === "orders" && (
-                    ownBase && planet !== null ? (
+                    ownBase && planet !== null && linkedAccountId !== null ? (
                         <StarbaseOrderDraftPanel
                             gameId={intel.game_id}
                             linkedAccountId={linkedAccountId}
