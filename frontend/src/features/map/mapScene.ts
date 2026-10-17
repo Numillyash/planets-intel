@@ -9,7 +9,6 @@ import type { PlanetObservationResponse } from "../../types/api";
 import type {
     MapStarbaseObservation,
     MapStellarCartographyObservation,
-    PrivateIntelMapResponse,
 } from "../../types/intel";
 import { privateHullAssetUrl } from "../../lib/privateAssets";
 import { raceVisual } from "../../lib/races";
