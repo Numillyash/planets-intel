@@ -133,7 +133,7 @@ export function PublicSectorExplorer({ gameId }: { gameId: number }) {
                                 onSubmit={(event) => { event.preventDefault(); void loadArchive(); }}
                             >
                                 <label>Player slot
-                                    <select value={slot} onChange={(event) => setSlot(event.target.value)}>
+                                    <select value={slot} onChange={(event) => { setSlot(event.target.value); setArchive(null); }}>
                                         {game.players.filter((p) => p.slot_id > 0 && p.race_id < 100)
                                             .map((p) => (
                                                 <option key={p.slot_id} value={p.slot_id}>
@@ -144,7 +144,7 @@ export function PublicSectorExplorer({ gameId }: { gameId: number }) {
                                 </label>
                                 <label>Turn
                                     <input type="number" min={1} max={game.game.turn}
-                                        value={turn} onChange={(event) => setTurn(event.target.value)} />
+                                        value={turn} onChange={(event) => { setTurn(event.target.value); setArchive(null); }} />
                                 </label>
                                 <button className="primary-button" type="submit"
                                     disabled={archiveLoading || !Number.isSafeInteger(Number(turn))
