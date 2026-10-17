@@ -115,6 +115,8 @@ export interface PublicSectorEvent {
     event_type: number;
     slot_id: number | null;
     description: string;
+    /** Source-local Planets.nu dateadded string; no timezone supplied. */
+    date_added: string | null;
 }
 
 export interface PublicSectorTimeline {
