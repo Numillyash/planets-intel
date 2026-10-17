@@ -234,7 +234,10 @@ export function PublicSectorExplorer({
                                     archive?.turn ?? game.game.turn);
                             }
                         }}>
-                        {archive === null && <option value="">Loading perspective…</option>}
+                        {archive === null && <option value="">
+                            {game !== null && game.game.status_id !== 3
+                                ? "Public metadata only" : "Loading perspective…"}
+                        </option>}
                         {game?.players.filter((p) => p.slot_id > 0 && p.slot_id <= 35
                             && p.race_id < 100).map((p) => (
                             <option key={p.slot_id} value={p.slot_id}>
@@ -243,30 +246,41 @@ export function PublicSectorExplorer({
                         ))}
                     </select>
                 </label>
-                <form className="summary-card public-archive-inline-game"
-                    onSubmit={(event) => {
-                        event.preventDefault();
-                        const id = Number(gameInput);
-                        if (Number.isSafeInteger(id) && id > 0) {
-                            window.location.assign(`/intelboard/public/${id}`);
-                        }
-                    }}>
-                    <label htmlFor="public-archive-game-id">Game</label>
-                    <div className="public-archive-game-input-row">
-                        <input id="public-archive-game-id" className="secondary-button"
-                            type="number" min="1" value={gameInput}
-                            aria-label="Open a public game by ID"
-                            onChange={(event) => setGameInput(event.target.value)}/>
-                        <button className="secondary-button" type="submit">Open</button>
-                    </div>
-                </form>
+                <div className="summary-card public-archive-inline-game">
+                    <label htmlFor="public-archive-game-picker">Game</label>
+                    <select id="public-archive-game-picker" className="secondary-button"
+                        value={game?.game.id ?? ""} disabled={game === null}
+                        onChange={() => {}}>
+                        {game === null
+                            ? <option value="">Loading game…</option>
+                            : <option value={game.game.id}>
+                                {game.game.name} · Turn {game.game.turn} · {game.game.status_name}
+                            </option>}
+                    </select>
+                    <details className="public-archive-other-game">
+                        <summary>Open a different public sector</summary>
+                        <form onSubmit={(event) => {
+                            event.preventDefault();
+                            const id = Number(gameInput);
+                            if (Number.isSafeInteger(id) && id > 0) {
+                                window.location.assign(`/intelboard/public/${id}`);
+                            }
+                        }}>
+                            <input id="public-archive-game-id" className="secondary-button"
+                                type="number" min="1" value={gameInput}
+                                aria-label="Another public game ID"
+                                onChange={(event) => setGameInput(event.target.value)} />
+                            <button className="secondary-button" type="submit">Open</button>
+                        </form>
+                    </details>
+                </div>
             </section>
 
             {gameLoading && game === null && <section className="panel public-archive-state">Loading public sector…</section>}
             {error !== null && <section className="panel public-archive-state" role="alert">{error}</section>}
             {game !== null && (
                 <>
-                    {createPortal(
+                    {!mapOpen && createPortal(
                         <PublicGameNavigation
                             mapOpen={false}
                             archiveAvailable={archive !== null}
