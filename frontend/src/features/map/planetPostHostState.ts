@@ -4,7 +4,8 @@ import { getHistoricalCombatEvents } from "../../api/history";
 import type { CombatEventResultStatus } from "../../types/history";
 import {
     isCombinedPrivateIntel,
-    type PrivateIntelMapResponse,
+    isPublicArchiveIntel,
+    type GameMapIntelSource,
 } from "../../types/intel";
 
 export interface PlanetPostHostState {
@@ -16,17 +17,19 @@ export interface PlanetPostHostState {
 }
 
 export function usePlanetPostHostState(
-    intel: PrivateIntelMapResponse,
+    intel: GameMapIntelSource,
     planetId: number,
 ): PlanetPostHostState | null {
     const [state, setState] = useState<PlanetPostHostState | null>(null);
-    const linkedAccountId = isCombinedPrivateIntel(intel)
-        ? intel.primary_observer.linked_account_id
-        : intel.observer.linked_account_id;
+    const linkedAccountId = isPublicArchiveIntel(intel) ? null
+        : isCombinedPrivateIntel(intel)
+            ? intel.primary_observer.linked_account_id
+            : intel.observer.linked_account_id;
 
     useEffect(() => {
         let active = true;
         setState(null);
+        if (linkedAccountId === null) return () => { active = false; };
 
         void getHistoricalCombatEvents(
             intel.game_id,

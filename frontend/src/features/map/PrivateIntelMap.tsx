@@ -24,12 +24,12 @@ import {
     type PrivateIntelMapResponse,
 } from "../../types/intel";
 import {
-    PLANET_LINK_RANGE,
     type PlanetLabelMode,
     type SelectedEntity,
 } from "./mapModel";
 import { EntityDetails } from "./EntityDetails";
 import { PixiMapCanvas } from "./PixiMapCanvas";
+import { IntelMapWorkspace, IntelMapStage, IntelMapDetails, IntelMapHelp, IntelMapLegend } from "./IntelMapWorkspace";
 import { getReceivedGameIntel, type ScopedPartnerIntel } from "../../api/gameIntelGrants";
 import type { ScopedPartnerMapPoint } from "./PixiMapCanvas";
 import "./map.css";
@@ -906,8 +906,8 @@ export function PrivateIntelMap({
                 </div>
             </div>
 
-            <div className="intel-map-layout">
-                <div className="intel-map-stage-wrap">
+            <IntelMapWorkspace>
+                <IntelMapStage>
                     <PixiMapCanvas
                         fitViewRef={fitViewRef}
                         intel={displayIntel}
@@ -924,35 +924,11 @@ export function PrivateIntelMap({
                             they are not part of your native Host observations.
                         </div>
                     )}
-                    <div className="intel-map-help">
-                        Drag to pan · wheel to zoom · orbit ring means ships are present
-                    </div>
-                    <div className="intel-map-legend">
-                        <span><i className="legend-link" />≤ {PLANET_LINK_RANGE} ly</span>
-                        <span><i className="legend-planet" />Planet</span>
-                        <span><i className="legend-surveyed" />Surveyed · owner unknown</span>
-                        <span><i className="legend-starbase" />Planet + base</span>
-                        <span><i className="legend-orbit" />Ships in orbit</span>
-                        <span>
-                            <i style={{ border: "1px solid #5c9cca", borderRadius: "50%", background: "rgba(63,127,174,.35)" }} />
-                            Nebula
-                        </span>
-                        <span>
-                            <i style={{ border: "1px solid #d7e4f5", borderRadius: "50%", background: "rgba(215,228,245,.35)" }} />
-                            Star cluster
-                        </span>
-                        <span>
-                            <i style={{ border: "1px solid #e8c95d", borderRadius: "50%", background: "rgba(231,189,61,.35)" }} />
-                            Ion storm
-                        </span>
-                        <span><i className="legend-freighter" />Freighter</span>
-                        <span><i className="legend-torpedo" />Torpedo</span>
-                        <span><i className="legend-carrier" />Carrier</span>
-                        <span><i className="legend-warship" />Combat</span>
-                    </div>
-                </div>
+                    <IntelMapHelp />
+                    <IntelMapLegend />
+                </IntelMapStage>
 
-                <aside className="intel-map-details">
+                <IntelMapDetails>
                     {displayedPartner !== null && displayedPartner.sources.length > 0 && (
                         <section className="panel">
                             <h3>Scoped partner intelligence · T{displayedPartner.turn}</h3>
@@ -1077,8 +1053,8 @@ export function PrivateIntelMap({
                             </span>
                         </div>
                     )}
-                </aside>
-            </div>
+                </IntelMapDetails>
+            </IntelMapWorkspace>
         </section>
     );
 }

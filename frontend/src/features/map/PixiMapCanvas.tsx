@@ -22,7 +22,9 @@ import type {
 } from "../../types/history";
 import {
     isCombinedPrivateIntel,
+    isPublicArchiveIntel,
     type PrivateIntelMapResponse,
+    type GameMapIntelSource,
 } from "../../types/intel";
 import {
     observedBounds,
@@ -138,7 +140,7 @@ export function PixiMapCanvas({
     onSelect,
     fitViewRef,
 }: {
-    intel: PrivateIntelMapResponse;
+    intel: GameMapIntelSource;
     partnerPoints: ScopedPartnerMapPoint[];
     labelMode: PlanetLabelMode;
     selected: SelectedEntity | null;
@@ -200,9 +202,11 @@ export function PixiMapCanvas({
         [intel.starbases],
     );
 
-    const linkedAccountId = isCombinedPrivateIntel(intel)
-        ? intel.primary_observer.linked_account_id
-        : intel.observer.linked_account_id;
+    const isArchive = isPublicArchiveIntel(intel);
+    const linkedAccountId = isArchive ? null
+        : isCombinedPrivateIntel(intel)
+            ? intel.primary_observer.linked_account_id
+            : intel.observer.linked_account_id;
     const orderDrafts = useMapOrderDrafts(intel, linkedAccountId);
 
     intelRef.current = intel;
@@ -210,6 +214,7 @@ export function PixiMapCanvas({
     layerVisibilityRef.current = layerVisibility;
 
     useEffect(() => {
+        if (isArchive) return;
         const startPicking = (event: Event) => {
             const detail = (event as CustomEvent<{ shipId?: number }>).detail;
             if (typeof detail?.shipId !== "number") return;
@@ -245,7 +250,7 @@ export function PixiMapCanvas({
             window.removeEventListener("intel-waypoint-pick-start", startPicking);
             window.removeEventListener("intel-waypoint-pick-cancel", cancelPicking);
         };
-    }, []);
+    }, [isArchive]);
 
     useEffect(() => {
         let cancelled = false;
@@ -293,6 +298,7 @@ export function PixiMapCanvas({
         let cancelled = false;
 
         async function loadTracks() {
+            if (linkedAccountId === null) return;
             try {
                 const response = await getHistoricalShipTracks(
                     intel.game_id,
@@ -319,6 +325,7 @@ export function PixiMapCanvas({
         let cancelled = false;
 
         async function loadHostEventMarkers() {
+            if (linkedAccountId === null) return;
             try {
                 const response = await getHostEvents(
                     intel.game_id,
@@ -345,6 +352,7 @@ export function PixiMapCanvas({
         let cancelled = false;
 
         async function loadSpatialMessages() {
+            if (linkedAccountId === null) return;
             try {
                 const response = await getSpatialMessages(
                     intel.game_id,
@@ -779,10 +787,10 @@ export function PixiMapCanvas({
             }
         }
 
-        if (layerVisibility.movementPredictions) {
+        if (!isArchive && layerVisibility.movementPredictions) {
             drawOrderVectors({
                 world,
-                intel,
+                intel: intel as PrivateIntelMapResponse,
                 bounds,
                 selected,
                 drafts: orderDrafts,
@@ -910,7 +918,7 @@ export function PixiMapCanvas({
         <>
             <div className="intel-map-canvas-host" ref={hostRef} />
 
-            {waypointPickShipId !== null && (
+            {!isArchive && waypointPickShipId !== null && (
                 <div
                     style={{
                         position: "absolute",
@@ -935,9 +943,10 @@ export function PixiMapCanvas({
             <MapLayerControls
                 onChange={setLayerVisibility}
                 visibility={layerVisibility}
+                available={isArchive ? ["entities", "minefields"] : undefined}
             />
 
-            {layerVisibility.historicalTracks && (
+            {!isArchive && layerVisibility.historicalTracks && (
                 <TrackControls
                     fadePercent={trackFadePercent}
                     lookbackTurns={trackLookbackTurns}
@@ -948,12 +957,12 @@ export function PixiMapCanvas({
                 />
             )}
 
-            <CombatEventPanel
+            {linkedAccountId !== null && <CombatEventPanel
                 gameId={intel.game_id}
                 linkedAccountId={linkedAccountId}
                 onFocus={focusCombatEvent}
                 turn={intel.turn}
-            />
+            />}
 
             {layerVisibility.spatialMessages && selectedSpatialMessage !== null && (
                 <div

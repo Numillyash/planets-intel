@@ -28,6 +28,7 @@ import type {
 } from "../../types/api";
 import { PrivateIntelMap } from "../map/PrivateIntelMap";
 import { GameDashboard } from "./GameDashboard";
+import { GamePageHeader } from "./GamePageHeader";
 
 interface IntelboardRoute {
     observer: string | null;
@@ -489,41 +490,18 @@ export function DashboardApp({
 
     return (
         <main className="app-shell">
-            <header className="topbar">
-                <div>
-                    <div className="eyebrow">Planets.nu Intel</div>
-                    <h1>{game?.game.name ?? selectedGame?.name ?? "Game dashboard"}</h1>
-                    <p className="subtitle">
-                        {game?.game.short_description
-                            ?? selectedGame?.short_description
-                            ?? "Select an observer and game."}
-                    </p>
-                </div>
-
-                <div className="topbar-actions">
-                    {game && (
-                        <div className="game-status">
-                            <span className="status-badge">{game.game.status_name}</span>
-                            <strong>Turn {game.game.turn}</strong>
-                            <span>{game.game.slots} slots</span>
-                        </div>
-                    )}
-                    <div className="user-menu">
-                        <div>
-                            <span className="user-label">Signed in as</span>
-                            <strong>{user.display_name}</strong>
-                        </div>
-                        <button
-                            className="secondary-button"
-                            disabled={loggingOut}
-                            onClick={() => void handleLogout()}
-                            type="button"
-                        >
-                            {loggingOut ? "Signing out…" : "Sign out"}
-                        </button>
-                    </div>
-                </div>
-            </header>
+            <GamePageHeader
+                title={game?.game.name ?? selectedGame?.name ?? "Game dashboard"}
+                subtitle={game?.game.short_description
+                    ?? selectedGame?.short_description
+                    ?? "Select an observer and game."}
+                status={game?.game.status_name ?? null}
+                turn={game?.game.turn ?? null}
+                slots={game?.game.slots ?? null}
+                user={user}
+                loggingOut={loggingOut}
+                onLogout={() => void handleLogout()}
+            />
 
             <section className="summary-grid">
                 <label className="summary-card">

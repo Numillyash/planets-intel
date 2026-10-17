@@ -4,7 +4,7 @@ import type { PlayerInfo } from "../../types/api";
 import type {
     IntelEntityProvenance,
     MapStellarCartographyObservation,
-    PrivateIntelMapResponse,
+    GameMapIntelSource,
 } from "../../types/intel";
 import type { SelectedEntity } from "./mapModel";
 import {
@@ -85,7 +85,7 @@ function ProvenancePanel({
     intel,
 }: {
     feature: MapStellarCartographyObservation;
-    intel: PrivateIntelMapResponse;
+    intel: GameMapIntelSource;
 }) {
     const provenance: IntelEntityProvenance[] = feature.provenance ?? [];
     const fieldCounts = new Map<number, number>();
@@ -150,7 +150,7 @@ export function StellarFeatureDetails({
     onSelect,
 }: {
     feature: MapStellarCartographyObservation;
-    intel: PrivateIntelMapResponse;
+    intel: GameMapIntelSource;
     players: PlayerInfo[];
     onSelect: (entity: SelectedEntity) => void;
 }) {

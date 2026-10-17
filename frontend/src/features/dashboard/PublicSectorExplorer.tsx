@@ -2,17 +2,25 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { getGame, getScoreHistory } from "../../api/client";
 import { getPublicArchiveTurn } from "../../api/publicArchive";
-import type { GameDetailsResponse, ScoreHistoryResponse } from "../../types/api";
+import type { CurrentUserResponse, GameDetailsResponse, ScoreHistoryResponse } from "../../types/api";
 import type { PublicArchiveTurn } from "../../types/publicArchive";
 import { GameDashboard } from "./GameDashboard";
+import { GamePageHeader } from "./GamePageHeader";
 import "./intelboard-game-picker.css";
 
 /**
  * Public sector entry is a data-source controller, not a second dashboard.
  * Every RST is explicitly read-only and never mapped onto a linked observer.
  */
-export function PublicSectorExplorer({ gameId }: { gameId: number }) {
+export function PublicSectorExplorer({
+    gameId, user, onLogout,
+}: {
+    gameId: number;
+    user: CurrentUserResponse;
+    onLogout: () => Promise<void>;
+}) {
     const [gameInput, setGameInput] = useState(String(gameId));
+    const [loggingOut, setLoggingOut] = useState(false);
     const requestRevision = useRef(0);
     const [game, setGame] = useState<GameDetailsResponse | null>(null);
     const [history, setHistory] = useState<ScoreHistoryResponse | null>(null);
@@ -184,19 +192,37 @@ export function PublicSectorExplorer({ gameId }: { gameId: number }) {
     }
 
     return (
-        <main className="intelboard-public-sector-view public-archive-page">
-            <header className="public-archive-header">
-                <div>
-                    <a href="/intelboard">← My games</a>
-                    <div className="eyebrow">PUBLIC SECTOR · READ-ONLY</div>
-                    <h1>{game?.game.name ?? `Sector #${gameId}`}</h1>
-                    <p>
-                        Sector #{gameId}
-                        {game !== null ? ` · ${game.game.status_name} · latest sector T${game.game.turn}` : ""}
-                        {archive !== null ? ` · viewing T${archive.turn} from slot #${archive.player_slot_id}` : ""}
-                    </p>
+        <main className="app-shell public-archive-operational-shell">
+            <GamePageHeader
+                title={game?.game.name ?? `Sector #${gameId}`}
+                subtitle={game?.game.short_description
+                    ?? "Public completed-game archive · observer-independent, read-only"}
+                status={game?.game.status_name ?? null}
+                turn={game?.game.turn ?? null}
+                slots={game?.game.slots ?? null}
+                user={user}
+                loggingOut={loggingOut}
+                onLogout={() => {
+                    setLoggingOut(true);
+                    void onLogout().finally(() => setLoggingOut(false));
+                }}
+                extra={<a className="public-archive-back-link" href="/intelboard">← My games</a>}
+            />
+            <section className="summary-grid public-archive-scope">
+                <div className="summary-card">
+                    <span>Observation source</span>
+                    <strong>Public archival RST</strong>
+                    <small>Read-only · not a linked observer</small>
                 </div>
-                <details className="public-archive-game-switch">
+                <div className="summary-card">
+                    <span>Perspective</span>
+                    <strong>{archive !== null
+                        ? `Slot #${archive.player_slot_id} · T${archive.turn}`
+                        : game !== null && game.game.status_id !== 3
+                            ? "Public metadata" : "Loading archive"}</strong>
+                    <small>Change in Time machine</small>
+                </div>
+                <details className="summary-card public-archive-game-switch">
                     <summary>Open another sector</summary>
                     <form onSubmit={(event) => {
                         event.preventDefault();
@@ -211,7 +237,7 @@ export function PublicSectorExplorer({ gameId }: { gameId: number }) {
                         <button type="submit" className="primary-button">Open</button>
                     </form>
                 </details>
-            </header>
+            </section>
 
             {gameLoading && game === null && <section className="panel public-archive-state">Loading public sector…</section>}
             {error !== null && <section className="panel public-archive-state" role="alert">{error}</section>}

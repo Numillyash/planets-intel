@@ -3,8 +3,9 @@ import { useEffect, useState } from "react";
 import type { PlayerInfo } from "../../types/api";
 import {
     isCombinedPrivateIntel,
+    isPublicArchiveIntel,
     type IntelEntityProvenance,
-    type PrivateIntelMapResponse,
+    type GameMapIntelSource,
 } from "../../types/intel";
 import { DetailSection, playerName } from "./DetailPrimitives";
 import { EntityIcon } from "./EntityIcon";
@@ -26,7 +27,7 @@ function EntityProvenance({
     intel,
 }: {
     selected: SelectedEntity;
-    intel: PrivateIntelMapResponse;
+    intel: GameMapIntelSource;
 }) {
     const provenance: IntelEntityProvenance[] | undefined = selected.value.provenance;
     if (!provenance || provenance.length === 0) return null;
@@ -92,7 +93,7 @@ function PlanetOperationalDetails({
     onSelect,
 }: {
     selected: Extract<SelectedEntity, { kind: "planet" }>;
-    intel: PrivateIntelMapResponse;
+    intel: GameMapIntelSource;
     players: PlayerInfo[];
     onSelect: (entity: SelectedEntity | null) => void;
 }) {
@@ -100,13 +101,16 @@ function PlanetOperationalDetails({
     const planet = selected.value;
     const postHostState = usePlanetPostHostState(intel, planet.planet_id);
     const effectiveOwnerId = postHostState?.ownerId ?? planet.owner_id;
-    const primarySlotId = isCombinedPrivateIntel(intel)
-        ? intel.primary_observer.player_slot_id
-        : intel.observer.player_slot_id;
-    const linkedAccountId = isCombinedPrivateIntel(intel)
-        ? intel.primary_observer.linked_account_id
-        : intel.observer.linked_account_id;
-    const ownPlanet = planet.owner_id === primarySlotId;
+    const readOnly = isPublicArchiveIntel(intel);
+    const primarySlotId = readOnly ? intel.player_slot_id
+        : isCombinedPrivateIntel(intel)
+            ? intel.primary_observer.player_slot_id
+            : intel.observer.player_slot_id;
+    const linkedAccountId = readOnly ? null
+        : isCombinedPrivateIntel(intel)
+            ? intel.primary_observer.linked_account_id
+            : intel.observer.linked_account_id;
+    const ownPlanet = !readOnly && planet.owner_id === primarySlotId;
     const facts = planetFacts(planet);
 
     useEffect(() => {
@@ -141,7 +145,7 @@ function PlanetOperationalDetails({
             </header>
 
             <nav className="operational-entity-tabs" aria-label="Planet interface tabs">
-                {PLANET_TABS.map((tab) => (
+                {PLANET_TABS.filter((tab) => !readOnly || tab.id !== "orders").map((tab) => (
                     <button
                         className={`operational-entity-tab${activeTab === tab.id ? " is-active" : ""}`}
                         key={tab.id}
@@ -166,7 +170,7 @@ function PlanetOperationalDetails({
                 )}
 
                 {activeTab === "orders" && (
-                    ownPlanet ? (
+                    ownPlanet && linkedAccountId !== null ? (
                         <PlanetOrderDraftPanel
                             gameId={intel.game_id}
                             linkedAccountId={linkedAccountId}
@@ -194,7 +198,7 @@ export function EntityDetails({
     onSelect,
 }: {
     selected: SelectedEntity | null;
-    intel: PrivateIntelMapResponse;
+    intel: GameMapIntelSource;
     players: PlayerInfo[];
     onSelect: (entity: SelectedEntity | null) => void;
 }) {

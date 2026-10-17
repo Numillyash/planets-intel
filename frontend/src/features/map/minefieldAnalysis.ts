@@ -1,4 +1,5 @@
-import type { MapPlanetObservation, MapStellarCartographyObservation, PrivateIntelMapResponse } from "../../types/intel";
+import type { MapPlanetObservation, MapStellarCartographyObservation } from "../../types/intel";
+import type { MapObservationSet } from "./mapModel";
 import { factNumber, factString, planetFacts } from "./observationView";
 
 export function minefieldOwnerId(
@@ -26,7 +27,7 @@ export interface MinefieldPlanetTarget {
 }
 
 export function minefieldSourcePlanet(
-    intel: PrivateIntelMapResponse,
+    intel: MapObservationSet,
     feature: MapStellarCartographyObservation,
 ): MinefieldPlanetTarget | null {
     if (feature.x === null || feature.y === null) return null;
@@ -58,7 +59,7 @@ export function minefieldSourcePlanet(
 }
 
 export function universalMinefieldCodePlanet(
-    intel: PrivateIntelMapResponse,
+    intel: MapObservationSet,
     feature: MapStellarCartographyObservation,
 ): MapPlanetObservation | null {
     const ownerId = minefieldOwnerId(feature);

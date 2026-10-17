@@ -8,8 +8,9 @@ import type {
 } from "../../types/history";
 import {
     isCombinedPrivateIntel,
+    isPublicArchiveIntel,
     type MapPlanetObservation,
-    type PrivateIntelMapResponse,
+    type GameMapIntelSource,
 } from "../../types/intel";
 import { DetailSection, FactRow, MineralRow, playerName } from "./DetailPrimitives";
 import type { SelectedEntity } from "./mapModel";
@@ -82,7 +83,7 @@ export function OperationalPlanetPanel({
 }: {
     tab: PlanetOperationalTab;
     planet: MapPlanetObservation;
-    intel: PrivateIntelMapResponse;
+    intel: GameMapIntelSource;
     players: PlayerInfo[];
     postHostState: PlanetPostHostState | null;
     onSelect: (entity: SelectedEntity) => void;
@@ -92,9 +93,10 @@ export function OperationalPlanetPanel({
         (item) => item.planet_id === planet.planet_id,
     ) ?? null;
     const orbitShips = shipsAtPlanet(intel.ships, planet);
-    const linkedAccountId = isCombinedPrivateIntel(intel)
-        ? intel.primary_observer.linked_account_id
-        : intel.observer.linked_account_id;
+    const linkedAccountId = isPublicArchiveIntel(intel) ? null
+        : isCombinedPrivateIntel(intel)
+            ? intel.primary_observer.linked_account_id
+            : intel.observer.linked_account_id;
     const effectiveOwnerId = postHostState?.ownerId ?? planet.owner_id;
     const ownerChanged =
         postHostState !== null &&
@@ -114,6 +116,11 @@ export function OperationalPlanetPanel({
 
     useEffect(() => {
         let active = true;
+        if (linkedAccountId === null) {
+            setCombatOrbitContacts([]);
+            setTracksLoading(false);
+            return () => { active = false; };
+        }
         setTracksLoading(true);
 
         void getHistoricalShipTracks(
@@ -494,7 +501,7 @@ export function OperationalPlanetPanel({
                 <div className="operational-timeline">
                     <div className="operational-timeline-item is-current">
                         <span>T{intel.turn}</span>
-                        <strong>Current dashboard snapshot</strong>
+                        <strong>Current source snapshot</strong>
                         <small>
                             Planet factual info turn: {planet.info_turn ?? "unknown"}
                         </small>
