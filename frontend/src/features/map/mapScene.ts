@@ -9,7 +9,6 @@ import type { PlanetObservationResponse } from "../../types/api";
 import type {
     MapStarbaseObservation,
     MapStellarCartographyObservation,
-    PrivateIntelMapResponse,
 } from "../../types/intel";
 import { privateHullAssetUrl } from "../../lib/privateAssets";
 import { raceVisual } from "../../lib/races";
@@ -21,6 +20,7 @@ import {
     shipRole,
     shipsAtPlanet,
     type MapBounds,
+    type MapObservationSet,
     type PlanetLabelMode,
     type PlanetLink,
     type SelectedEntity,
@@ -320,7 +320,7 @@ function drawIonStorm(
 
 function drawStellarCartography(
     world: Container,
-    intel: PrivateIntelMapResponse,
+    intel: MapObservationSet,
     bounds: MapBounds,
     selected: SelectedEntity | null,
     onSelect: (entity: SelectedEntity) => void,
@@ -476,7 +476,7 @@ function drawRouteLine(
 
 function drawSelectedShipTrajectory(
     world: Container,
-    intel: PrivateIntelMapResponse,
+    intel: MapObservationSet,
     bounds: MapBounds,
     selected: SelectedEntity | null,
 ) {
@@ -558,7 +558,7 @@ export function drawMapScene({
     loadedHullAssetUrls,
 }: {
     world: Container;
-    intel: PrivateIntelMapResponse;
+    intel: MapObservationSet;
     bounds: MapBounds;
     links: PlanetLink[];
     shipPositions: ShipVisualPosition[];
