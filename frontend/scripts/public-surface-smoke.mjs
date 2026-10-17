@@ -91,6 +91,29 @@ try{
     "Do not duplicate the global game navigation above the tab strip");
   await page.screenshot({path:"/tmp/public-surface-smoke/dashboard.png"}).catch(()=>{});
   console.log("PASS: native dashboard layout parity - 17 tabs, six summary cards, 16 launch tiles");
+  // Each native object tab owns its table. There is no second object-type
+  // selector which could disagree with the selected tab.
+  for (const [tab, heading, rows] of [
+    ["Planets", "Planet List", 3],
+    ["Starships", "Starship List", 1],
+    ["Starbases", "Starbase List", 1],
+  ]) {
+    await page.locator(".game-dashboard-tabs").getByRole("button",{name:tab,exact:true}).click();
+    await visible(".game-object-table");
+    const title=await page.locator(".game-dashboard-content .panel-header h2").first().innerText();
+    assert(title.includes(heading),`Wrong ${tab} panel: ${title}`);
+    assert.equal(await page.locator(".game-object-table tbody tr").count(),rows,`Wrong ${tab} count`);
+    assert.equal(await page.getByLabel("Object type").count(),0,
+      `Redundant selector must not appear on ${tab}`);
+  }
+  // Backwards compatibility: former tab=objects renders Planets, not a stale
+  // object-type dropdown or unrelated overview.
+  await load("/intelboard/public/683230?slot=4&turn=54&view=dashboard&tab=objects");
+  await visible(".game-object-table");
+  assert((await page.locator(".game-dashboard-content .panel-header h2").first().innerText()).includes("Planet List"));
+  assert.equal(await page.getByLabel("Object type").count(),0);
+  console.log("PASS: Planets / Starships / Starbases tables have fixed native types and no redundant selector");
+  await page.locator(".game-dashboard-tabs").getByRole("button",{name:"Dashboard",exact:true}).click();
   assert.equal(await page.locator(".intel-map-panel").count(),0,"Map must not mount inside Dashboard");
   await page.locator(".global-page-nav-slot > .public-game-navigation")
     .getByRole("button",{name:"Starmap"}).click();
