@@ -1,4 +1,5 @@
 import { chromium } from "playwright";
+import { PNG } from "pngjs";
 import assert from "node:assert/strict";
 import { mkdirSync } from "node:fs";
 
@@ -102,6 +103,20 @@ try{
   assert(mapState.panelHeight>500 && mapState.navVisible,
     "Operational map or its navigation is missing "+JSON.stringify(mapState));
   assert(!String(mapState.mapDisplay).includes("none"));
+  // A visible WebGL canvas can still be an empty dark rectangle: sample its
+  // screenshot without changing the application's WebGL context.
+  await page.waitForTimeout(300);
+  const canvasPng=PNG.sync.read(await page.locator(".intel-map-canvas-host canvas").screenshot());
+  let brightPixels=0;
+  for(let y=0;y<canvasPng.height;y+=3) {
+    for(let x=0;x<canvasPng.width;x+=3) {
+      const p=(y*canvasPng.width+x)*4;
+      const [red,green,blue,alpha]=canvasPng.data.subarray(p,p+4);
+      if(alpha>0 && (red>120 || green>75 || blue>100)) brightPixels++;
+    }
+  }
+  assert(brightPixels>40,`Map has no visibly drawn objects (bright sampled pixels: ${brightPixels})`);
+  console.log("PASS: non-empty Pixi map drawing",brightPixels,"sampled bright pixels");
   mkdirSync("/tmp/public-surface-smoke",{recursive:true});
   await page.screenshot({path:"/tmp/public-surface-smoke/map.png"});
   console.log("PASS: fullscreen operational map",JSON.stringify(mapState));
