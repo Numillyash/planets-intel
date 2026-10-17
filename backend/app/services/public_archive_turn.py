@@ -192,7 +192,17 @@ async def fetch_finished_public_turn(
 ) -> dict[str, Any]:
     client = PlanetsNuClient()
     info = await client.load_info(game_id)
-    assert_finished_public_game(info, game_id)
+    game = assert_finished_public_game(info, game_id)
+    if (
+        not 1 <= player_id <= 35
+        or turn <= 0
+        or (_positive(game.get("turn")) is not None and turn > game["turn"])
+        or not any(
+            isinstance(row, dict) and _positive(row.get("id")) == player_id
+            for row in info["players"]
+        )
+    ):
+        raise ArchiveSourceMismatch("Invalid archived player slot or turn")
     payload = await client.load_finished_public_turn(
         game_id=game_id, player_id=player_id, turn=turn,
     )
