@@ -249,8 +249,7 @@ export function PublicSectorExplorer({
                 <div className="summary-card public-archive-inline-game">
                     <label htmlFor="public-archive-game-picker">Game</label>
                     <select id="public-archive-game-picker" className="secondary-button"
-                        value={game?.game.id ?? ""} disabled={game === null}
-                        onChange={() => {}}>
+                        value={game?.game.id ?? ""} disabled>
                         {game === null
                             ? <option value="">Loading game…</option>
                             : <option value={game.game.id}>
