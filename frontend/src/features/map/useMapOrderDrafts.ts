@@ -4,14 +4,15 @@ import { getShipOrderDraft } from "../../api/orderDraft";
 import type { ShipOrderDraft } from "../../types/orderDraft";
 import {
     isCombinedPrivateIntel,
-    type PrivateIntelMapResponse,
+    isPublicArchiveIntel,
+    type GameMapIntelSource,
 } from "../../types/intel";
 import { useMovementPrediction } from "./useMovementPrediction";
 
 
 export function useMapOrderDrafts(
-    intel: PrivateIntelMapResponse,
-    linkedAccountId: number,
+    intel: GameMapIntelSource,
+    linkedAccountId: number | null,
 ): ShipOrderDraft[] {
     const [drafts, setDrafts] = useState<ShipOrderDraft[]>([]);
     const [revision, setRevision] = useState(0);
@@ -26,9 +27,10 @@ export function useMapOrderDrafts(
         intel.turn,
     );
 
-    const primarySlotId = isCombinedPrivateIntel(intel)
-        ? intel.primary_observer.player_slot_id
-        : intel.observer.player_slot_id;
+    const primarySlotId = isPublicArchiveIntel(intel) ? null
+        : isCombinedPrivateIntel(intel)
+            ? intel.primary_observer.player_slot_id
+            : intel.observer.player_slot_id;
 
     const ownShipIds = useMemo(
         () => intel.ships
@@ -39,6 +41,7 @@ export function useMapOrderDrafts(
     );
 
     useEffect(() => {
+        if (linkedAccountId === null) return;
         const handleChanged = (event: Event) => {
             const detail = (event as CustomEvent<{
                 gameId?: number;
@@ -64,7 +67,7 @@ export function useMapOrderDrafts(
     useEffect(() => {
         let cancelled = false;
 
-        if (ownShipIds.length === 0) {
+        if (linkedAccountId === null || ownShipIds.length === 0) {
             setDrafts([]);
             return () => {
                 cancelled = true;
