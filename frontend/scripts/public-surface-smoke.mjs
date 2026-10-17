@@ -43,8 +43,10 @@ const context=await browser.newContext({viewport:{width:1440,height:900},deviceS
 const page=await context.newPage();
 page.on("pageerror",e=>errors.push(e.message));
 page.on("console",e=>{if(e.type()==="error") errors.push("console: "+e.text());});
-await page.route("**/api/**",async route=>{
+await page.route("**/*",async route=>{
   const url=new URL(route.request().url());
+  // Vite's source imports include /src/api/client.ts: never intercept those.
+  if(!url.pathname.startsWith("/api/")) return route.continue();
   calls.push(url.pathname);
   let status=200,body;
   if(url.pathname==="/api/auth/me") body={id:7,username:"tester",display_name:"Smoke tester"};
