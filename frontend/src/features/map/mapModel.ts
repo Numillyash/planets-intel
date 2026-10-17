@@ -7,7 +7,6 @@ import type {
     MapShipObservation,
     MapStarbaseObservation,
     MapStellarCartographyObservation,
-    PrivateIntelMapResponse,
 } from "../../types/intel";
 
 export type MapObservationSet = Pick<
