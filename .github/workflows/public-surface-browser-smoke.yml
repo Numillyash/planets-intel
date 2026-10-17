@@ -19,7 +19,7 @@ jobs:
         working-directory: frontend
         run: |
           npm install
-          npm install --no-save --ignore-scripts playwright@1.56.1
+          npm install --no-save --ignore-scripts playwright@1.56.1 pngjs@7.0.0
           npx playwright install --with-deps chromium
       - name: Browser regression against mocked public read-only API
         working-directory: frontend
