@@ -124,3 +124,24 @@ class PublicArchiveTurnTests(unittest.TestCase):
             game_id=GAME_ID, player_id=4, turn=17,
         )
         client.load_turn.assert_not_awaited()
+
+    def test_archive_transport_cannot_send_api_key_or_save_capability(self):
+        from app.planetsnu.client import PlanetsNuClient
+
+        client = object.__new__(PlanetsNuClient)
+        request = AsyncMock(return_value=historical_payload())
+        client.post_form = request
+        result = asyncio.run(client.load_finished_public_turn(
+            game_id=GAME_ID, player_id=4, turn=17,
+        ))
+        self.assertIn("rst", result)
+        request.assert_awaited_once()
+        args, kwargs = request.await_args
+        self.assertEqual(args[0], "game/loadturn")
+        data = args[1]
+        self.assertEqual(data["gameid"], GAME_ID)
+        self.assertEqual(data["playerid"], 4)
+        self.assertEqual(data["turn"], 17)
+        self.assertEqual(data["forsave"], "false")
+        self.assertNotIn("apikey", data)
+        self.assertNotIn("savekey", data)
