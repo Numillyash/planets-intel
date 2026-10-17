@@ -10,6 +10,11 @@ import type {
     PrivateIntelMapResponse,
 } from "../../types/intel";
 
+export type MapObservationSet = Pick<
+    import("../../types/api").LatestPrivateIntelResponse,
+    "game_id" | "turn" | "planets" | "ships" | "starbases" | "stellar_cartography"
+>;
+
 export type PlanetLabelMode = "none" | "id" | "name";
 export type ShipRole = "freighter" | "torpedo" | "carrier" | "warship";
 
@@ -113,7 +118,7 @@ export function shipRole(ship: ShipObservationResponse): ShipRole {
     return "warship";
 }
 
-export function observedBounds(intel: PrivateIntelMapResponse): MapBounds {
+export function observedBounds(intel: MapObservationSet): MapBounds {
     const coordinates: Array<{ x: number; y: number }> = [];
 
     for (const planet of intel.planets) {
@@ -306,7 +311,7 @@ function clusteredOffset(
 }
 
 export function shipVisualPositions(
-    intel: PrivateIntelMapResponse,
+    intel: MapObservationSet,
     bounds: MapBounds,
 ): ShipVisualPosition[] {
     // PrivateIntelMapResponse is a union whose `ships` member is either the
