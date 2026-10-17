@@ -50,3 +50,36 @@ follow-up work. Private-only tabs remain unmounted in public mode.
 
 Do not call this deploy-verified until the host operator runs
 `scripts/deploy/production.sh` and checks its final SHA/health.
+
+
+## Operational UI unification (PR #59)
+
+The archive adapter must not duplicate the main IntelBoard UI. The game
+header is now shared (`GamePageHeader`). The starmap uses the same
+`IntelMapWorkspace`, the same `PixiMapCanvas` and the same
+`EntityDetails` / operational planet, ship, starbase and stellar panels
+as an owned sector. No JSON-inspector panel remains.
+
+`GameMapIntelSource` is a tagged union, not a synthetic
+`LatestPrivateIntelResponse`:
+- `public_finished_archive` has no `observer.linked_account_id`.
+- Draft/prediction and private history/network hooks must gate on the
+  **absence of a linked observer** before making any network request.
+- Archive source hides order tabs, private loadout/inference, private
+  threats and post-host combat lookups rather than pretending those
+  linked-account records exist.
+- An owned game still uses the original private hooks; archive view
+  only uses authenticated, authorized public `loadturn` facts.
+- Missing archival facts stay unknown. Never upgrade inferred/contact
+  facts to owner-observed truth.
+
+A future stage may add separate public archival VCR or message sources,
+but they must be proof-tagged; do not implicitly reuse the private
+observer's VCR/track/message endpoints for a foreign game.
+
+Browser acceptance still requires a real deployed build. Exercise
+`/intelboard/public/683230?slot=9&turn=54&view=dashboard&tab=starmap`,
+select a planet and ship, verify that the same operational detail
+panel appears, and verify the browser Network panel contains no
+`linked_account_id` observer history/draft endpoints in archive mode.
+Also check an owned game for regressions in layer controls and orders.
