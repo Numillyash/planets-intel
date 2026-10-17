@@ -10,17 +10,30 @@ import {
     starbaseByPlanetId,
     type SelectedEntity,
 } from "./mapModel";
-import { planetFacts } from "./observationView";
+import { EntityDetails } from "./EntityDetails";
+import {
+    IntelMapWorkspace, IntelMapStage, IntelMapDetails,
+    IntelMapHelp, IntelMapLegend,
+} from "./IntelMapWorkspace";
+import type { PlayerInfo } from "../../types/api";
+import type { PlanetLabelMode } from "./mapModel";
 import "./map.css";
 
 /** The existing Pixi factual map renderer, without private observer hooks,
  * historical private requests, order drafts, or linked account impersonation.
  */
-export function PublicArchiveMap({ archive }: { archive: PublicArchiveTurn }) {
+export function PublicArchiveMap({
+    archive, players,
+}: {
+    archive: PublicArchiveTurn;
+    players: PlayerInfo[];
+}) {
     const hostRef = useRef<HTMLDivElement>(null);
     const appRef = useRef<Application | null>(null);
     const worldRef = useRef<Container | null>(null);
     const fitRevisionRef = useRef<string | null>(null);
+    const fitViewRef = useRef<(() => void) | null>(null);
+    const [labelMode, setLabelMode] = useState<PlanetLabelMode>("none");
     const [ready, setReady] = useState(false);
     const [selected, setSelected] = useState<SelectedEntity | null>(null);
     const bounds = useMemo(() => observedBounds(archive), [archive]);
@@ -107,6 +120,7 @@ export function PublicArchiveMap({ archive }: { archive: PublicArchiveTurn }) {
         return () => {
             disposed = true;
             cleanup?.();
+            fitViewRef.current = null;
             appRef.current = null;
             worldRef.current = null;
             if (initialized) app.destroy(true, true);
@@ -126,7 +140,7 @@ export function PublicArchiveMap({ archive }: { archive: PublicArchiveTurn }) {
             links,
             shipPositions: ships,
             basesByPlanet: bases,
-            labelMode: "name",
+            labelMode,
             selected,
             onSelect: setSelected,
             loadedHullAssetUrls: new Set<string>(),
@@ -134,43 +148,81 @@ export function PublicArchiveMap({ archive }: { archive: PublicArchiveTurn }) {
         const revision = `${archive.game_id}:${archive.player_slot_id}:${archive.turn}`;
         if (fitRevisionRef.current === revision) return;
         fitRevisionRef.current = revision;
-        const width = Math.max(bounds.maxX - bounds.minX, 1);
-        const height = Math.max(bounds.maxY - bounds.minY, 1);
-        const scale = Math.max(.05, Math.min(
-            (app.screen.width - 70) / width,
-            (app.screen.height - 70) / height,
-            4,
-        ));
-        world.scale.set(scale);
-        world.position.set(
-            app.screen.width / 2 - ((bounds.minX + bounds.maxX) / 2) * scale,
-            app.screen.height / 2 - renderY((bounds.minY + bounds.maxY) / 2, bounds) * scale,
-        );
-    }, [ready, archive, bounds, links, ships, bases, selected]);
+        const fit = () => {
+            const width = Math.max(bounds.maxX - bounds.minX, 1);
+            const height = Math.max(bounds.maxY - bounds.minY, 1);
+            const scale = Math.max(.05, Math.min(
+                (app.screen.width - 70) / width,
+                (app.screen.height - 70) / height,
+                4,
+            ));
+            world.scale.set(scale);
+            world.position.set(
+                app.screen.width / 2 - ((bounds.minX + bounds.maxX) / 2) * scale,
+                app.screen.height / 2 - renderY((bounds.minY + bounds.maxY) / 2, bounds) * scale,
+            );
+        };
+        fitViewRef.current = fit;
+        fit();
+    }, [ready, archive, bounds, links, ships, bases, selected, labelMode]);
 
     useEffect(() => setSelected(null), [archive.game_id, archive.turn, archive.player_slot_id]);
 
-    const details = selected === null ? null : selected.kind === "planet"
-        ? planetFacts(selected.value)
-        : selected.value.payload;
     return (
         <section className="panel intel-map-panel">
             <div className="panel-header intel-map-header">
                 <div>
-                    <div className="eyebrow">Finished public archive · read-only</div>
-                    <h2>Starmap · T{archive.turn}</h2>
-                    <p>Historical perspective: slot #{archive.player_slot_id}. Only entities revealed in this RST are factual.</p>
+                    <h2>Intelligence map</h2>
+                    <p>
+                        Public completed archive · slot #{archive.player_slot_id}
+                        {" · "}Turn {archive.turn} · source game/loadturn
+                    </p>
+                    <p className="intel-no-facts">
+                        Read-only historical player perspective. No private observer
+                        sharing, live orders or inferred enemy facts.
+                    </p>
+                </div>
+                <div className="intel-map-actions">
+                    <span>{archive.counts.planets} planets</span>
+                    <span>{archive.counts.ships} ships</span>
+                    <span>{archive.counts.starbases} bases</span>
+                    <label className="intel-label-control">
+                        <span>Planet labels</span>
+                        <select className="secondary-button"
+                            value={labelMode}
+                            onChange={(event) => setLabelMode(event.target.value as PlanetLabelMode)}>
+                            <option value="none">None</option>
+                            <option value="id">Number</option>
+                            <option value="name">Name</option>
+                        </select>
+                    </label>
+                    <button type="button" className="secondary-button"
+                        onClick={() => fitViewRef.current?.()}>Fit view</button>
                 </div>
             </div>
-            <div className="public-archive-map-stage">
-                <div className="intel-map-canvas-host" ref={hostRef} />
-            </div>
-            {selected !== null && (
-                <div style={{ margin: "12px 22px 22px" }}>
-                    <strong>{selected.kind} · {"name" in selected.value ? selected.value.name ?? "Unnamed" : "Selected"}</strong>
-                    <pre style={{ overflowX: "auto", whiteSpace: "pre-wrap" }}>{JSON.stringify(details, null, 2)}</pre>
-                </div>
-            )}
+            <IntelMapWorkspace>
+                <IntelMapStage>
+                    <div className="intel-map-canvas-host" ref={hostRef} />
+                    <IntelMapHelp />
+                    <IntelMapLegend />
+                </IntelMapStage>
+                <IntelMapDetails>
+                    <div className="eyebrow">Selected factual observation</div>
+                    <EntityDetails
+                        key={archive.game_id + ":" + archive.player_slot_id + ":" + archive.turn}
+                        intel={archive}
+                        players={players}
+                        selected={selected}
+                        onSelect={setSelected}
+                    />
+                    <div className="intel-provenance-note">
+                        <strong>Provenance</strong>
+                        <span>Planets.nu public finished-game archival loadturn</span>
+                        <span>Slot #{archive.player_slot_id} · turn {archive.turn}</span>
+                        <span>Read-only · no linked observer snapshot or write capability</span>
+                    </div>
+                </IntelMapDetails>
+            </IntelMapWorkspace>
         </section>
     );
 }
