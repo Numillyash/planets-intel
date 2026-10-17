@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { PLANET_LINK_RANGE } from "./mapModel";
 
 /** The same operational map layout for owned and public archived observations.
  * Authorization and fetching are handled by the source adapters, not this view.
@@ -23,7 +24,7 @@ export function IntelMapHelp() {
 
 export function IntelMapLegend() {
     return <div className="intel-map-legend">
-        <span><i className="legend-link" />≤ 81 ly</span>
+        <span><i className="legend-link" />≤ {PLANET_LINK_RANGE} ly</span>
         <span><i className="legend-planet" />Planet</span>
         <span><i className="legend-surveyed" />Surveyed · owner unknown</span>
         <span><i className="legend-starbase" />Planet + base</span>
