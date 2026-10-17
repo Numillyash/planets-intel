@@ -162,8 +162,8 @@ export function PublicArchiveMap({ archive }: { archive: PublicArchiveTurn }) {
                     <p>Historical perspective: slot #{archive.player_slot_id}. Only entities revealed in this RST are factual.</p>
                 </div>
             </div>
-            <div className="intel-map-workspace" style={{ minHeight: 520 }}>
-                <div className="intel-map-canvas-host" ref={hostRef} style={{ height: 520, minHeight: 520 }} />
+            <div className="public-archive-map-stage">
+                <div className="intel-map-canvas-host" ref={hostRef} />
             </div>
             {selected !== null && (
                 <div style={{ margin: "12px 22px 22px" }}>

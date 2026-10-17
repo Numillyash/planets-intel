@@ -714,3 +714,62 @@
         grid-template-columns: 1fr;
     }
 }
+
+
+/* Public archive shares the normal dashboard shell, but never mounts the
+   operational observer controls. One primary nav; time controls only in TM. */
+.public-archive-dashboard .game-dashboard-content { min-height: 0; }
+.public-archive-page { max-width: 1720px; margin: 0 auto; padding: 18px clamp(12px, 3vw, 38px) 56px; }
+.public-archive-header {
+    display: flex; align-items: flex-end; justify-content: space-between;
+    gap: 16px; min-width: 0;
+}
+.public-archive-header h1 { margin: 5px 0 3px; font-size: clamp(1.5rem, 3vw, 2.4rem); }
+.public-archive-header p { margin: 0; color: #97abc2; font-size: .83rem; }
+.public-archive-header a { display: inline-block; margin-bottom: 10px; font-size: .8rem; }
+.public-archive-game-switch { min-width: 160px; color: #94abc5; font-size: .8rem; }
+.public-archive-game-switch summary { cursor: pointer; padding: 9px 11px; border: 1px solid #2b3e56; border-radius: 7px; }
+.public-archive-game-switch form { display: flex; flex-direction: column; gap: 7px; margin-top: 10px; }
+.public-archive-game-switch input { width: 100%; max-width: 175px; }
+.public-archive-status {
+    padding: 12px 14px; margin-bottom: 12px;
+    border: 1px solid #304c66; border-radius: 8px;
+    background: #0e1b2a; color: #b7d7f0; font-size: .8rem;
+}
+.public-archive-status.is-error { border-color: #7d4a4a; color: #ffd0c8; }
+.public-archive-context {
+    padding: 12px 22px 18px; color: #a4b9d1; font-size: .82rem;
+    line-height: 1.5;
+}
+.public-archive-settings { overflow: hidden; }
+.public-archive-settings summary { padding: 15px 20px; cursor: pointer; font-weight: 700; }
+.public-archive-settings summary small { color: #8da2bc; font-weight: 400; }
+.public-archive-settings .game-dashboard-settings-grid { padding: 5px 20px 20px; }
+.public-archive-objects-header { align-items: end; gap: 12px; }
+.public-archive-objects-header label, .public-archive-time-controls label {
+    display: flex; flex-direction: column; gap: 6px; color: #9bb0ca; font-size: .78rem;
+}
+.public-archive-objects-header select { min-height: 36px; }
+.public-archive-time-controls {
+    display: flex; align-items: end; flex-wrap: wrap; gap: 12px;
+    padding: 16px 20px;
+}
+.public-archive-time-controls label { min-width: 110px; }
+.public-archive-time-controls select { min-width: 200px; max-width: min(100%, 330px); }
+.public-archive-time-controls input { width: 95px; }
+.public-archive-time-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.public-archive-time-note { padding: 0 20px 20px; color: #99b6d6; font-size: .83rem; }
+.public-archive-time-note p { margin: 10px 0 0; }
+.public-archive-error { color: #ffbdbd; }
+.public-archive-map-stage {
+    position: relative; min-width: 0; height: clamp(360px, 62vh, 680px);
+    overflow: hidden; background: #070c13;
+}
+.public-archive-map-stage .intel-map-canvas-host { position: absolute; inset: 0; }
+.public-archive-map-stage canvas { display: block; width: 100%; height: 100%; }
+@media (max-width: 700px) {
+    .public-archive-header { align-items: stretch; flex-direction: column; }
+    .public-archive-time-controls { padding: 12px; }
+    .public-archive-context { padding: 10px 12px 16px; }
+    .public-archive-objects-header { align-items: stretch; flex-direction: column; }
+}
