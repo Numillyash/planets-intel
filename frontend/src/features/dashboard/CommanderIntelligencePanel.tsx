@@ -44,6 +44,8 @@ function PublicEventTimeline({ timeline }: { timeline: PublicSectorTimeline }) {
                     <div className="eyebrow">Public loadinfo · original event descriptions</div>
                     <h2>Sector event timeline</h2>
                     <p>Observed events only. Descriptions are source text, not verified claims of intent or diplomacy.</p>
+                    <p>Event dates are exactly as provided by Planets.nu (`dateadded`).
+                        The source does not specify a timezone; no local time conversion is applied.</p>
                 </div>
             </div>
             {timeline.status === "unavailable" ? (
@@ -63,6 +65,9 @@ function PublicEventTimeline({ timeline }: { timeline: PublicSectorTimeline }) {
                                     {item.turn === null ? "Turn unknown" : "T" + item.turn}
                                     {" · type " + item.event_type}
                                     {item.slot_id === null ? "" : " · slot " + item.slot_id}
+                                    {" · " + (item.date_added
+                                        ? "recorded " + item.date_added + " (source time)"
+                                        : "time not provided")}
                                 </span>
                                 <span className="commander-timeline-description">{item.description}</span>
                             </li>
