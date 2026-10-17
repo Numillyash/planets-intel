@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { getGame, getScoreHistory } from "../../api/client";
 import { getPublicArchiveTurn } from "../../api/publicArchive";
@@ -9,6 +9,7 @@ import "./intelboard-game-picker.css";
 
 export function PublicSectorExplorer({ gameId }: { gameId: number }) {
     const [sectorInput, setSectorInput] = useState(String(gameId));
+    const archiveRequestRevision = useRef(0);
     const [game, setGame] = useState<GameDetailsResponse | null>(null);
     const [history, setHistory] = useState<ScoreHistoryResponse | null>(null);
     const [slot, setSlot] = useState("4");
@@ -21,6 +22,7 @@ export function PublicSectorExplorer({ gameId }: { gameId: number }) {
 
     useEffect(() => {
         let cancelled = false;
+        archiveRequestRevision.current += 1;
         setLoading(true);
         setError(null);
         setGame(null);
@@ -66,11 +68,13 @@ export function PublicSectorExplorer({ gameId }: { gameId: number }) {
         const selectedTurn = Number(turn);
         if (!Number.isSafeInteger(playerId) || !Number.isSafeInteger(selectedTurn)
             || playerId < 1 || selectedTurn < 1 || selectedTurn > game.game.turn) return;
+        const revision = ++archiveRequestRevision.current;
         setArchiveLoading(true);
         setArchiveError(null);
         setArchive(null);
         try {
             const data = await getPublicArchiveTurn(gameId, playerId, selectedTurn);
+            if (archiveRequestRevision.current !== revision) return;
             if (data.game_id !== gameId
                 || data.turn !== selectedTurn
                 || data.player_slot_id !== playerId) {
@@ -78,9 +82,11 @@ export function PublicSectorExplorer({ gameId }: { gameId: number }) {
             }
             setArchive(data);
         } catch (reason) {
-            setArchiveError(reason instanceof Error ? reason.message : "Archive turn unavailable");
+            if (archiveRequestRevision.current === revision) {
+                setArchiveError(reason instanceof Error ? reason.message : "Archive turn unavailable");
+            }
         } finally {
-            setArchiveLoading(false);
+            if (archiveRequestRevision.current === revision) setArchiveLoading(false);
         }
     }
 
@@ -133,7 +139,7 @@ export function PublicSectorExplorer({ gameId }: { gameId: number }) {
                                 onSubmit={(event) => { event.preventDefault(); void loadArchive(); }}
                             >
                                 <label>Player slot
-                                    <select value={slot} onChange={(event) => { setSlot(event.target.value); setArchive(null); }}>
+                                    <select value={slot} onChange={(event) => { archiveRequestRevision.current += 1; setSlot(event.target.value); setArchive(null); setArchiveLoading(false); }}>
                                         {game.players.filter((p) => p.slot_id > 0 && p.race_id < 100)
                                             .map((p) => (
                                                 <option key={p.slot_id} value={p.slot_id}>
@@ -144,7 +150,7 @@ export function PublicSectorExplorer({ gameId }: { gameId: number }) {
                                 </label>
                                 <label>Turn
                                     <input type="number" min={1} max={game.game.turn}
-                                        value={turn} onChange={(event) => { setTurn(event.target.value); setArchive(null); }} />
+                                        value={turn} onChange={(event) => { archiveRequestRevision.current += 1; setTurn(event.target.value); setArchive(null); setArchiveLoading(false); }} />
                                 </label>
                                 <button className="primary-button" type="submit"
                                     disabled={archiveLoading || !Number.isSafeInteger(Number(turn))
