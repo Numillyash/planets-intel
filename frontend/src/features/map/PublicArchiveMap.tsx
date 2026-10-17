@@ -20,6 +20,7 @@ export function PublicArchiveMap({ archive }: { archive: PublicArchiveTurn }) {
     const hostRef = useRef<HTMLDivElement>(null);
     const appRef = useRef<Application | null>(null);
     const worldRef = useRef<Container | null>(null);
+    const fitRevisionRef = useRef<string | null>(null);
     const [ready, setReady] = useState(false);
     const [selected, setSelected] = useState<SelectedEntity | null>(null);
     const bounds = useMemo(() => observedBounds(archive), [archive]);
@@ -32,6 +33,7 @@ export function PublicArchiveMap({ archive }: { archive: PublicArchiveTurn }) {
         if (host === null) return;
         const app = new Application();
         let disposed = false;
+        let initialized = false;
         let cleanup: (() => void) | null = null;
         void (async () => {
             await app.init({
@@ -39,6 +41,7 @@ export function PublicArchiveMap({ archive }: { archive: PublicArchiveTurn }) {
                 antialias: true,
                 resizeTo: host,
             });
+            initialized = true;
             if (disposed) {
                 app.destroy(true, true);
                 return;
@@ -106,8 +109,7 @@ export function PublicArchiveMap({ archive }: { archive: PublicArchiveTurn }) {
             cleanup?.();
             appRef.current = null;
             worldRef.current = null;
-            setReady(false);
-            if (app.renderer) app.destroy(true, true);
+            if (initialized && !disposed) app.destroy(true, true);
         };
     }, []);
 
@@ -129,6 +131,9 @@ export function PublicArchiveMap({ archive }: { archive: PublicArchiveTurn }) {
             onSelect: setSelected,
             loadedHullAssetUrls: new Set<string>(),
         });
+        const revision = `${archive.game_id}:${archive.player_slot_id}:${archive.turn}`;
+        if (fitRevisionRef.current === revision) return;
+        fitRevisionRef.current = revision;
         const width = Math.max(bounds.maxX - bounds.minX, 1);
         const height = Math.max(bounds.maxY - bounds.minY, 1);
         const scale = Math.max(.05, Math.min(
