@@ -21,6 +21,7 @@ import {
     shipRole,
     shipsAtPlanet,
     type MapBounds,
+    type MapObservationSet,
     type PlanetLabelMode,
     type PlanetLink,
     type SelectedEntity,
@@ -320,7 +321,7 @@ function drawIonStorm(
 
 function drawStellarCartography(
     world: Container,
-    intel: PrivateIntelMapResponse,
+    intel: MapObservationSet,
     bounds: MapBounds,
     selected: SelectedEntity | null,
     onSelect: (entity: SelectedEntity) => void,
