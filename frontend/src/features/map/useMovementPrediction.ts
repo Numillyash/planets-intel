@@ -10,7 +10,7 @@ import {
 
 export function useMovementPrediction(
     gameId: number,
-    linkedAccountId: number,
+    linkedAccountId: number | null,
     turn: number,
 ): DraftMovementPredictionResponse | null {
     const [prediction, setPrediction] =
@@ -41,6 +41,7 @@ export function useMovementPrediction(
 
     useEffect(() => {
         let cancelled = false;
+        if (linkedAccountId === null) return () => { cancelled = true; };
         void getDraftMovementPrediction(gameId, linkedAccountId, turn)
             .then((value) => {
                 if (cancelled) return;
