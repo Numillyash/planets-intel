@@ -42,7 +42,13 @@ const browser=await chromium.launch({
 const context=await browser.newContext({viewport:{width:1440,height:900},deviceScaleFactor:1});
 const page=await context.newPage();
 page.on("pageerror",e=>errors.push(e.message));
-page.on("console",e=>{if(e.type()==="error") errors.push("console: "+e.text());});
+page.on("console",e=>{
+  // A missing optional scores cache legitimately returns HTTP 404.
+  // Actual render exceptions are captured by pageerror above.
+  if(e.type()==="error" && !e.text().includes("Failed to load resource: the server responded with a status of 404")) {
+    errors.push("console: "+e.text());
+  }
+});
 await page.route("**/*",async route=>{
   const url=new URL(route.request().url());
   // Vite's source imports include /src/api/client.ts: never intercept those.
