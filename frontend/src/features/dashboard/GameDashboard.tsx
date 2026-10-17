@@ -164,7 +164,7 @@ export function GameDashboard({
             : "dashboard";
     });
     const [dashboardTurn, setDashboardTurn] = useState(game.game.turn);
-    const [publicObjectType, setPublicObjectType] = useState<"planets" | "starships" | "starbases">("planets");
+
     const [historicalIntel, setHistoricalIntel] =
         useState<PrivateIntelMapResponse | null>(null);
     const [historicalLoading, setHistoricalLoading] = useState(false);
@@ -286,7 +286,7 @@ export function GameDashboard({
     // No private observer token or local order hooks exist in this branch.
     if (publicMode) {
         const publicTab = TABS.some((t) => t.id === activeTab)
-            ? activeTab : "dashboard";
+            ? activeTab : activeTab === "objects" ? "planets" : "dashboard";
 
         const publicScores = new Map<number, ScoreHistoryItem>();
         for (const item of history?.items ?? []) {
@@ -297,9 +297,10 @@ export function GameDashboard({
         const observedCounts = publicArchive?.counts;
         const currentTurn = publicArchive?.turn ?? game.game.turn;
         const isFinished = game.game.status_id === 3;
-        const effectiveObjectType = publicTab === "planets" ? "planets"
-            : publicTab === "starships" ? "starships"
-                : publicTab === "starbases" ? "starbases" : publicObjectType;
+        // Each native section determines its own object type. Legacy
+        // tab=objects links open the planet list without an extra selector.
+        const effectiveObjectType = publicTab === "starships" ? "starships"
+            : publicTab === "starbases" ? "starbases" : "planets";
 
         return (
             <section className="game-dashboard-shell public-archive-dashboard">
@@ -336,22 +337,15 @@ export function GameDashboard({
                             </button>}
                         />
                     )}
-                    {(publicTab === "objects" || publicTab === "planets" ||
-                        publicTab === "starships" || publicTab === "starbases") && (
+                    {(publicTab === "planets" || publicTab === "starships" ||
+                        publicTab === "starbases") && (
                         <section className="panel">
-                            <div className="panel-header public-archive-objects-header">
+                            <div className="panel-header">
                                 <div>
                                     <h2>{effectiveObjectType === "starships" ? "Starship List" : effectiveObjectType === "starbases" ? "Starbase List" : "Planet List"} · {publicArchive === null ? "unavailable" : `T${publicArchive.turn}`}</h2>
                                     <p>Observed data for the selected slot only; missing fields remain unknown.</p>
                                 </div>
-                                <label>Object type
-                                    <select value={effectiveObjectType}
-                                        onChange={(event) => setPublicObjectType(event.target.value as typeof publicObjectType)}>
-                                        <option value="planets">Planets</option>
-                                        <option value="starships">Starships</option>
-                                        <option value="starbases">Starbases</option>
-                                    </select>
-                                </label>
+
                             </div>
                             {publicArchive === null ? (
                                 <p className="public-archive-context">
