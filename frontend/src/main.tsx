@@ -199,7 +199,7 @@ function App() {
     if (publicSectorId !== null && Number.isSafeInteger(publicSectorId) && publicSectorId > 0) {
         return (
             <AuthenticatedSurface>
-                <PublicSectorExplorer gameId={publicSectorId} />
+                <PublicSectorExplorer gameId={publicSectorId} user={user} onLogout={handleLogout} />
             </AuthenticatedSurface>
         );
     }
