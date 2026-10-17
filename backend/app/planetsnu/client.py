@@ -403,6 +403,47 @@ class PlanetsNuClient:
 
         return payload
 
+    async def load_finished_public_turn(
+        self,
+        *,
+        game_id: int,
+        player_id: int,
+        turn: int,
+    ) -> dict[str, Any]:
+        """Read-only Planets.nu historical RST: never include an API key.
+
+        Caller must first verify public/finished game status from loadinfo,
+        then validate the returned game, turn and selected player identity.
+        """
+        if min(game_id, player_id, turn) <= 0:
+            raise ValueError("game, player and turn must be positive")
+
+        payload = await self.post_form(
+            "game/loadturn",
+            {
+                "gameid": game_id,
+                "playerid": player_id,
+                "turn": turn,
+                "forsave": "false",
+                "activity": "false",
+            },
+            headers={
+                "Origin": "https://planets.nu",
+                "Referer": "https://planets.nu/",
+                "User-Agent": "Mozilla/5.0",
+            },
+            use_proxy=True,
+        )
+        if not isinstance(payload, dict) or payload.get("success") is False:
+            raise PlanetsNuError(
+                str(payload.get("error", "Historical turn unavailable"))
+                if isinstance(payload, dict)
+                else "Historical turn response is not an object"
+            )
+        if not isinstance(payload.get("rst"), dict):
+            raise PlanetsNuError("Historical turn response has no rst object")
+        return payload
+
     async def send_message(
         self,
         *,
