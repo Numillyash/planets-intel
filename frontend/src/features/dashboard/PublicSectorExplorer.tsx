@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { getGame, getScoreHistory } from "../../api/client";
 import { getPublicArchiveTurn } from "../../api/publicArchive";
@@ -219,45 +220,60 @@ export function PublicSectorExplorer({
                     setLoggingOut(true);
                     void onLogout().finally(() => setLoggingOut(false));
                 }}
-                extra={<a className="public-archive-back-link" href="/intelboard">← My games</a>}
             />
-            <section className="summary-grid public-archive-scope">
-                <div className="summary-card">
-                    <span>Observation source</span>
-                    <strong>Public archival RST</strong>
-                    <small>Read-only · not a linked observer</small>
-                </div>
-                <div className="summary-card">
-                    <span>Perspective</span>
-                    <strong>{archive !== null
-                        ? `Slot #${archive.player_slot_id} · T${archive.turn}`
-                        : game !== null && game.game.status_id !== 3
-                            ? "Public metadata" : "Loading archive"}</strong>
-                    <small>Change in Time machine</small>
-                </div>
-                <details className="summary-card public-archive-game-switch">
-                    <summary>Open another sector</summary>
-                    <form onSubmit={(event) => {
+            <section className="summary-grid public-archive-observer-selectors">
+                <label className="summary-card">
+                    <span>Observer</span>
+                    <select className="secondary-button"
+                        aria-label="Historical player perspective"
+                        value={archive?.player_slot_id ?? ""}
+                        disabled={game === null || archiveLoading || game.game.status_id !== 3}
+                        onChange={(event) => {
+                            if (game !== null) {
+                                openSelected(Number(event.target.value),
+                                    archive?.turn ?? game.game.turn);
+                            }
+                        }}>
+                        {archive === null && <option value="">Loading perspective…</option>}
+                        {game?.players.filter((p) => p.slot_id > 0 && p.slot_id <= 35
+                            && p.race_id < 100).map((p) => (
+                            <option key={p.slot_id} value={p.slot_id}>
+                                #{p.slot_id} · {p.username} · public archive
+                            </option>
+                        ))}
+                    </select>
+                </label>
+                <form className="summary-card public-archive-inline-game"
+                    onSubmit={(event) => {
                         event.preventDefault();
                         const id = Number(gameInput);
                         if (Number.isSafeInteger(id) && id > 0) {
                             window.location.assign(`/intelboard/public/${id}`);
                         }
                     }}>
-                        <label htmlFor="public-archive-game-id">Game ID</label>
-                        <input id="public-archive-game-id" type="number" min="1"
-                            value={gameInput} onChange={(event) => setGameInput(event.target.value)}/>
-                        <button type="submit" className="primary-button">Open</button>
-                    </form>
-                </details>
+                    <label htmlFor="public-archive-game-id">Game</label>
+                    <div className="public-archive-game-input-row">
+                        <input id="public-archive-game-id" className="secondary-button"
+                            type="number" min="1" value={gameInput}
+                            aria-label="Open a public game by ID"
+                            onChange={(event) => setGameInput(event.target.value)}/>
+                        <button className="secondary-button" type="submit">Open</button>
+                    </div>
+                </form>
             </section>
 
             {gameLoading && game === null && <section className="panel public-archive-state">Loading public sector…</section>}
             {error !== null && <section className="panel public-archive-state" role="alert">{error}</section>}
             {game !== null && (
                 <>
-                    <PublicGameNavigation mapOpen={false}
-                        archiveAvailable={archive !== null} />
+                    {createPortal(
+                        <PublicGameNavigation
+                            mapOpen={false}
+                            archiveAvailable={archive !== null}
+                            turn={archive?.turn ?? game.game.turn}
+                        />,
+                        document.getElementById("operational-page-surface-nav-root")!,
+                    )}
                     <GameDashboard
                     game={game}
                     history={history}
@@ -282,7 +298,7 @@ export function PublicSectorExplorer({
                     archive={archive}
                     players={game.players}
                 >
-                    <PublicGameNavigation mapOpen archiveAvailable />
+                    <PublicGameNavigation mapOpen archiveAvailable turn={archive.turn} />
                 </PublicArchiveMap>
             )}
         </main>
