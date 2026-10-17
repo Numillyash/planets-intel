@@ -6,6 +6,9 @@ import type { CurrentUserResponse, GameDetailsResponse, ScoreHistoryResponse } f
 import type { PublicArchiveTurn } from "../../types/publicArchive";
 import { GameDashboard } from "./GameDashboard";
 import { GamePageHeader } from "./GamePageHeader";
+import { PublicGameNavigation } from "./PublicGameNavigation";
+import { PublicArchiveMap } from "../map/PublicArchiveMap";
+import { subscribeGameSurfaceRoute } from "../../lib/uiRouteState";
 import "./intelboard-game-picker.css";
 
 /**
@@ -21,6 +24,16 @@ export function PublicSectorExplorer({
 }) {
     const [gameInput, setGameInput] = useState(String(gameId));
     const [loggingOut, setLoggingOut] = useState(false);
+    const [mapOpen, setMapOpen] = useState(() => {
+        const query = new URLSearchParams(window.location.search);
+        return query.get("view") === "starmap"
+            || (query.get("view") === "dashboard" && query.get("tab") === "starmap");
+    });
+    useEffect(() => subscribeGameSurfaceRoute(() => {
+        const query = new URLSearchParams(window.location.search);
+        setMapOpen(query.get("view") === "starmap"
+            || (query.get("view") === "dashboard" && query.get("tab") === "starmap"));
+    }), []);
     const requestRevision = useRef(0);
     const [game, setGame] = useState<GameDetailsResponse | null>(null);
     const [history, setHistory] = useState<ScoreHistoryResponse | null>(null);
@@ -242,7 +255,10 @@ export function PublicSectorExplorer({
             {gameLoading && game === null && <section className="panel public-archive-state">Loading public sector…</section>}
             {error !== null && <section className="panel public-archive-state" role="alert">{error}</section>}
             {game !== null && (
-                <GameDashboard
+                <>
+                    <PublicGameNavigation mapOpen={false}
+                        archiveAvailable={archive !== null} />
+                    <GameDashboard
                     game={game}
                     history={history}
                     latestScores={scores}
@@ -257,7 +273,17 @@ export function PublicSectorExplorer({
                     publicArchiveNotice={archiveNotice}
                     onOpenPublicTurn={openSelected}
                     onOpenPublicLatest={openLatest}
-                />
+                    />
+                </>
+            )}
+            {mapOpen && archive !== null && game !== null && (
+                <PublicArchiveMap
+                    key={`${archive.game_id}:${archive.player_slot_id}:${archive.turn}`}
+                    archive={archive}
+                    players={game.players}
+                >
+                    <PublicGameNavigation mapOpen archiveAvailable />
+                </PublicArchiveMap>
             )}
         </main>
     );

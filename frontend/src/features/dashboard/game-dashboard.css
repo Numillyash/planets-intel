@@ -793,3 +793,57 @@
 .public-archive-scope .public-archive-game-switch form { max-width: 260px; }
 .public-archive-scope .public-archive-game-switch input { min-height: 34px; }
 .public-archive-scope .public-archive-game-switch button { align-self: flex-start; }
+
+
+/* A public map is a sibling of the dashboard, exactly like an owned game.
+   The full-screen operational shell intentionally hides sibling page content,
+   so controls for the map must be CHILDREN of the map surface. */
+.public-game-navigation {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+    margin: 13px 0 12px;
+}
+.public-game-navigation .secondary-button,
+.public-game-navigation .primary-button,
+.public-game-navigation-back {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 38px;
+    padding: 7px 13px;
+    border-radius: 7px;
+    text-decoration: none;
+    font-size: .82rem;
+    font-weight: 650;
+}
+.public-game-navigation.is-map {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 150;
+    margin: 0;
+    max-width: calc(100vw - 24px);
+    padding: 7px;
+    border: 1px solid rgba(77, 101, 132, .8);
+    border-radius: 9px;
+    background: rgba(8, 13, 21, .94);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .34);
+}
+.public-game-navigation.is-map .secondary-button,
+.public-game-navigation.is-map .primary-button {
+    border: 1px solid #385270;
+    background: #132338;
+    color: #dceafa;
+}
+.public-game-navigation.is-map .primary-button {
+    background: #2c568b;
+    border-color: #4c83c2;
+}
+@media (max-width: 650px) {
+    .public-game-navigation.is-map { top: 7px; right: 7px; left: 7px; }
+    .public-game-navigation.is-map .secondary-button,
+    .public-game-navigation.is-map .primary-button { min-height: 34px; padding: 6px; }
+}
