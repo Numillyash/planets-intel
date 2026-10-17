@@ -30,6 +30,7 @@ import {
 import { PlayersTable } from "../players/PlayersTable";
 import { MilitaryScoreChart } from "../statistics/MilitaryScoreChart";
 import { PublicArchiveTimeMachine } from "./PublicArchiveTimeMachine";
+import { DASHBOARD_TABS, GameDashboardTabs, GameDashboardOverview } from "./GameDashboardHome";
 import type { PublicArchiveTurn } from "../../types/publicArchive";
 import { AdvantagesPanel } from "./AdvantagesPanel";
 import { BattlePlannerDashboardPanel } from "./BattlePlannerDashboardPanel";
@@ -67,25 +68,7 @@ type GameDashboardTab =
     | "advantages"
     | "settings";
 
-const TABS: Array<{ id: GameDashboardTab; label: string }> = [
-    { id: "dashboard", label: "Dashboard" },
-    { id: "turn-review", label: "Turn Review" },
-    { id: "vcr", label: "VCR" },
-    { id: "battle-planner", label: "Battle Planner" },
-    { id: "reports", label: "Reports" },
-    { id: "communications", label: "Communications" },
-    { id: "commander-intel", label: "Commander intel" },
-    { id: "planets", label: "Planets" },
-    { id: "starships", label: "Starships" },
-    { id: "starbases", label: "Starbases" },
-    { id: "scoreboard", label: "Scoreboard" },
-    { id: "military-intel", label: "Military intel" },
-    { id: "turn-timing", label: "Turn timing" },
-    { id: "diplomacy", label: "Diplomacy" },
-    { id: "time-machine", label: "Time machine" },
-    { id: "advantages", label: "Advantages" },
-    { id: "settings", label: "Settings" },
-];
+const TABS = DASHBOARD_TABS;
 
 function dashboardTabFromRoute(value: string | null): GameDashboardTab {
     return value === "starmap" || value === "objects" || TABS.some((tab) => tab.id === value)
@@ -302,15 +285,8 @@ export function GameDashboard({
     // Shared game Dashboard layout, with source-gated read-only content.
     // No private observer token or local order hooks exist in this branch.
     if (publicMode) {
-        const availableTabs: Array<{ id: GameDashboardTab; label: string }> = [
-            { id: "dashboard", label: "Dashboard" },
-            { id: "objects", label: "Objects" },
-            { id: "commander-intel", label: "Commander intel" },
-            { id: "time-machine", label: "Time machine" },
-        ];
-        const publicTab = availableTabs.some((t) => t.id === activeTab)
-            ? activeTab : activeTab === "planets" || activeTab === "starships"
-                || activeTab === "starbases" ? "objects" : "dashboard";
+        const publicTab = TABS.some((t) => t.id === activeTab)
+            ? activeTab : "dashboard";
 
         const publicScores = new Map<number, ScoreHistoryItem>();
         for (const item of history?.items ?? []) {
@@ -321,19 +297,13 @@ export function GameDashboard({
         const observedCounts = publicArchive?.counts;
         const currentTurn = publicArchive?.turn ?? game.game.turn;
         const isFinished = game.game.status_id === 3;
+        const effectiveObjectType = publicTab === "planets" ? "planets"
+            : publicTab === "starships" ? "starships"
+                : publicTab === "starbases" ? "starbases" : publicObjectType;
 
         return (
             <section className="game-dashboard-shell public-archive-dashboard">
-                <nav className="game-dashboard-tabs" aria-label="Game dashboard sections">
-                    {availableTabs.map((tab) => (
-                        <button key={tab.id}
-                            type="button"
-                            className={publicTab === tab.id ? "is-active" : ""}
-                            onClick={() => selectTab(tab.id)}>
-                            {tab.label}
-                        </button>
-                    ))}
-                </nav>
+                <GameDashboardTabs activeTab={publicTab} onSelect={selectTab} />
                 <div className="game-dashboard-content">
                     {publicArchiveLoading && (
                         <div className="public-archive-status" role="status">
@@ -347,82 +317,35 @@ export function GameDashboard({
                         <div className="public-archive-status is-error" role="alert">{publicArchiveError}</div>
                     )}
                     {publicTab === "dashboard" && (
-                        <div className="game-dashboard-stack">
-                            <section className="summary-grid game-dashboard-summary">
-                                <div className="summary-card">
-                                    <span>Perspective</span>
-                                    <strong>{publicArchive === null ? "Public metadata" : `Slot #${publicArchive.player_slot_id}`}</strong>
-                                </div>
-                                <div className="summary-card">
-                                    <span>Snapshot</span>
-                                    <strong>{publicArchive === null ? "—" : `T${publicArchive.turn}`}</strong>
-                                </div>
-                                <div className="summary-card">
-                                    <span>Observed planets</span>
-                                    <strong>{observedCounts?.planets ?? "—"}</strong>
-                                </div>
-                                <div className="summary-card">
-                                    <span>Observed ships</span>
-                                    <strong>{observedCounts?.ships ?? "—"}</strong>
-                                </div>
-                                <div className="summary-card">
-                                    <span>Observed starbases</span>
-                                    <strong>{observedCounts?.starbases ?? "—"}</strong>
-                                </div>
-                            </section>
-                            <section className="panel game-dashboard-home">
-                                <div className="panel-header"><div>
-                                    <div className="eyebrow">Public historical game view</div>
-                                    <h2>{game.game.name}</h2>
-                                    <p>
-                                        {game.game.status_name} · final recorded turn T{game.game.turn}
-                                        {publicArchive !== null
-                                            ? ` · archival view T${publicArchive.turn} from slot #${publicArchive.player_slot_id}`
-                                            : " · no player RST loaded"}
-                                    </p>
-                                </div></div>
-                                <p className="public-archive-context">
-                                    {isFinished
-                                        ? publicArchive === null
-                                            ? "Historical observations are currently unavailable. Use Time machine to choose a different perspective or turn."
-                                            : "The displayed objects are visible from the chosen archived player's perspective. This is not an omniscient map."
-                                        : "Active public sector: private player turns are not accessible. Public roster, current settings and Commander Intelligence remain available."}
-                                </p>
-                            </section>
-                            <PlayersTable
-                                latestScores={publicScores}
-                                players={game.players}
-                                snapshotTurn={isFinished ? currentTurn : null}
-                            />
-                            {history !== null && history.items.length > 0 ? (
-                                <MilitaryScoreChart history={history.items} players={game.players} />
-                            ) : (
-                                <section className="panel public-archive-context">
-                                    Public score history has not been collected for this sector. Player totals for an earlier turn are not inferred from current metadata.
-                                </section>
-                            )}
-                            <details className="panel public-archive-settings">
-                                <summary>Game settings <small>(public current loadinfo, not historical turn state)</small></summary>
-                                <div className="game-dashboard-settings-grid">
-                                    {Object.entries(game.settings).map(([key, value]) => (
-                                        <div key={key}>
-                                            <span>{key.split("_").join(" ")}</span>
-                                            <strong>{value === null ? "—" : String(value)}</strong>
-                                        </div>
-                                    ))}
-                                </div>
-                            </details>
-                        </div>
+                        <GameDashboardOverview
+                            game={game}
+                            onSelect={selectTab}
+                            summary={{
+                                planets: observedCounts?.planets ?? "—",
+                                ships: observedCounts?.ships ?? "—",
+                                starbases: observedCounts?.starbases ?? "—",
+                                turnState: publicArchive === null ? "—"
+                                    : `Snapshot T${publicArchive.turn}`,
+                                schedule: game.schedule || "—",
+                                nextHost: isFinished ? "Finished" : game.time_to_host || "—",
+                            }}
+                            context={`Public archival perspective · slot #${publicArchive?.player_slot_id ?? "?"} · T${publicArchive?.turn ?? "?"} · ${game.game.status_name} · read-only (current schedule is public metadata)`}
+                            action={<button type="button" className="secondary-button"
+                                onClick={() => selectTab("time-machine")}>
+                                {isFinished ? "Change historical turn" : "Time machine"}
+                            </button>}
+                        />
                     )}
-                    {publicTab === "objects" && (
+                    {(publicTab === "objects" || publicTab === "planets" ||
+                        publicTab === "starships" || publicTab === "starbases") && (
                         <section className="panel">
                             <div className="panel-header public-archive-objects-header">
                                 <div>
-                                    <h2>Historical objects · {publicArchive === null ? "unavailable" : `T${publicArchive.turn}`}</h2>
+                                    <h2>{effectiveObjectType === "starships" ? "Starship List" : effectiveObjectType === "starbases" ? "Starbase List" : "Planet List"} · {publicArchive === null ? "unavailable" : `T${publicArchive.turn}`}</h2>
                                     <p>Observed data for the selected slot only; missing fields remain unknown.</p>
                                 </div>
                                 <label>Object type
-                                    <select value={publicObjectType}
+                                    <select value={effectiveObjectType}
                                         onChange={(event) => setPublicObjectType(event.target.value as typeof publicObjectType)}>
                                         <option value="planets">Planets</option>
                                         <option value="starships">Starships</option>
@@ -437,7 +360,7 @@ export function GameDashboard({
                             ) : (
                                 <div className="table-wrapper">
                                     <table className="players-table game-object-table">
-                                        {publicObjectType === "planets" ? (
+                                        {effectiveObjectType === "planets" ? (
                                             <>
                                                 <thead><tr><th>ID</th><th>Planet</th><th>Owner</th><th>Clans</th><th>MC</th></tr></thead>
                                                 <tbody>{publicArchive.planets.map((p) => {
@@ -451,7 +374,7 @@ export function GameDashboard({
                                                     </tr>;
                                                 })}</tbody>
                                             </>
-                                        ) : publicObjectType === "starships" ? (
+                                        ) : effectiveObjectType === "starships" ? (
                                             <>
                                                 <thead><tr><th>ID</th><th>Ship</th><th>Owner</th><th>Hull</th><th>Warp</th></tr></thead>
                                                 <tbody>{publicArchive.ships.map((ship) => (
@@ -478,6 +401,37 @@ export function GameDashboard({
                             )}
                         </section>
                     )}
+                    {publicTab === "scoreboard" && (
+                        <div className="game-dashboard-stack">
+                            <PlayersTable
+                                latestScores={publicScores}
+                                players={game.players}
+                                snapshotTurn={publicArchive?.turn ?? null}
+                            />
+                            {history !== null && history.items.length > 0 && (
+                                <MilitaryScoreChart history={history.items} players={game.players} />
+                            )}
+                            {history === null && (
+                                <p className="muted">No stored public score history is available for this sector.</p>
+                            )}
+                        </div>
+                    )}
+                    {publicTab === "settings" && (
+                        <section className="panel">
+                            <div className="panel-header"><div>
+                                <h2>Game settings</h2>
+                                <p>Public current loadinfo settings; not a verified historical T{currentTurn} snapshot.</p>
+                            </div></div>
+                            <div className="game-dashboard-settings-grid">
+                                {Object.entries(game.settings).map(([key, value]) => (
+                                    <div key={key}>
+                                        <span>{key.replaceAll("_", " ")}</span>
+                                        <strong>{value === null ? "—" : String(value)}</strong>
+                                    </div>
+                                ))}
+                            </div>
+                        </section>
+                    )}
                     {publicTab === "commander-intel" && (
                         <CommanderIntelligencePanel gameId={game.game.id} publicMode />
                     )}
@@ -501,6 +455,17 @@ export function GameDashboard({
                             </section>
                         )
                     )}
+                    {!["dashboard", "planets", "starships", "starbases",
+                        "objects", "scoreboard", "settings", "commander-intel",
+                        "time-machine"].includes(publicTab) && (
+                        <section className="panel game-dashboard-placeholder">
+                            <div className="eyebrow">Public historical mode · T{currentTurn}</div>
+                            <h2>{TABS.find((tab) => tab.id === publicTab)?.label ?? "Section"}</h2>
+                            <p>This section currently requires observer-specific or turn-indexed
+                                evidence that is not included in the public archival RST.
+                                No private account data is substituted.</p>
+                        </section>
+                    )}
                 </div>
             </section>
         );
@@ -512,21 +477,7 @@ export function GameDashboard({
 
     return (
         <section className="game-dashboard-shell">
-            <nav
-                className="game-dashboard-tabs"
-                aria-label="Game dashboard sections"
-            >
-                {TABS.map((tab) => (
-                    <button
-                        className={activeTab === tab.id ? "is-active" : ""}
-                        key={tab.id}
-                        onClick={() => selectTab(tab.id)}
-                        type="button"
-                    >
-                        {tab.label}
-                    </button>
-                ))}
-            </nav>
+            <GameDashboardTabs activeTab={activeTab} onSelect={selectTab} />
 
             {historicalMode && (
                 <div
@@ -568,86 +519,37 @@ export function GameDashboard({
 
             <div className="game-dashboard-content">
                 {activeTab === "dashboard" && (
-                    <>
-                        <section className="summary-grid game-dashboard-summary">
-                            <button className="summary-card" onClick={() => selectTab("planets")} type="button">
-                                <span>Planets</span>
-                                <strong>
-                                    {historicalMode
-                                        ? intelCounts?.planets ?? "—"
-                                        : myPlayer?.planets ?? intelCounts?.planets ?? "—"}
-                                </strong>
+                    <GameDashboardOverview
+                        game={game}
+                        onSelect={selectTab}
+                        summary={{
+                            planets: historicalMode
+                                ? intelCounts?.planets ?? "—"
+                                : myPlayer?.planets ?? intelCounts?.planets ?? "—",
+                            ships: historicalMode
+                                ? intelCounts?.ships ?? "—"
+                                : myPlayer?.ships ?? intelCounts?.ships ?? "—",
+                            starbases: historicalMode
+                                ? intelCounts?.starbases ?? "—"
+                                : myPlayer?.starbases ?? intelCounts?.starbases ?? "—",
+                            turnState: historicalMode ? `Snapshot T${dashboardTurn}`
+                                : myPlayer?.turn_ready === null || myPlayer === null
+                                    ? "—" : myPlayer.turn_ready ? "Ready" : "Open",
+                            schedule: game.schedule || "—",
+                            nextHost: game.time_to_host || "—",
+                        }}
+                        context={`Observer ${selectedAccount.planets_username} · Turn ${dashboardTurn} · ${historicalMode ? "historical snapshot" : game.game.status_name}${!historicalMode && game.source === "canonical-cache" ? " · cached game metadata" : ""}`}
+                        action={historicalMode ? (
+                            <button className="secondary-button" onClick={returnToLive} type="button">
+                                Return to live
                             </button>
-                            <button className="summary-card" onClick={() => selectTab("starships")} type="button">
-                                <span>Starships</span>
-                                <strong>
-                                    {historicalMode
-                                        ? intelCounts?.ships ?? "—"
-                                        : myPlayer?.ships ?? intelCounts?.ships ?? "—"}
-                                </strong>
+                        ) : (
+                            <button className="secondary-button" disabled={refreshing}
+                                onClick={onRefresh} type="button">
+                                {refreshing ? "Syncing…" : "Refresh intel"}
                             </button>
-                            <button className="summary-card" onClick={() => selectTab("starbases")} type="button">
-                                <span>Starbases</span>
-                                <strong>
-                                    {historicalMode
-                                        ? intelCounts?.starbases ?? "—"
-                                        : myPlayer?.starbases ?? intelCounts?.starbases ?? "—"}
-                                </strong>
-                            </button>
-                            <button className="summary-card" onClick={() => selectTab("scoreboard")} type="button">
-                                <span>Turn state</span>
-                                <strong>
-                                    {historicalMode
-                                        ? `Snapshot T${dashboardTurn}`
-                                        : myPlayer?.turn_ready === null || myPlayer === null
-                                            ? "—"
-                                            : myPlayer.turn_ready ? "Ready" : "Open"}
-                                </strong>
-                            </button>
-                            <div className="summary-card">
-                                <span>{historicalMode ? "Live schedule" : "Schedule"}</span>
-                                <strong>{game.schedule || "—"}</strong>
-                            </div>
-                            <div className="summary-card">
-                                <span>{historicalMode ? "Live next host" : "Next host"}</span>
-                                <strong>{game.time_to_host || "—"}</strong>
-                            </div>
-                        </section>
-
-                        <section className="panel game-dashboard-home">
-                            <div className="panel-header">
-                                <div>
-                                    <h2>{game.game.name}</h2>
-                                    <p>
-                                        Observer {selectedAccount.planets_username}
-                                        {" · "}Turn {dashboardTurn}
-                                        {historicalMode ? " · historical snapshot" : ` · ${game.game.status_name}`}
-                                        {!historicalMode && game.source === "canonical-cache"
-                                            ? " · cached game metadata"
-                                            : ""}
-                                    </p>
-                                </div>
-                                {historicalMode ? (
-                                    <button className="secondary-button" onClick={returnToLive} type="button">
-                                        Return to live
-                                    </button>
-                                ) : (
-                                    <button className="secondary-button" disabled={refreshing} onClick={onRefresh} type="button">
-                                        {refreshing ? "Syncing…" : "Refresh intel"}
-                                    </button>
-                                )}
-                            </div>
-
-                            <div className="game-dashboard-launch-grid">
-                                {TABS.filter((tab) => tab.id !== "dashboard").map((tab) => (
-                                    <button key={tab.id} onClick={() => selectTab(tab.id)} type="button">
-                                        <strong>{tab.label}</strong>
-                                        <small>Open section</small>
-                                    </button>
-                                ))}
-                            </div>
-                        </section>
-                    </>
+                        )}
+                    />
                 )}
 
                 {activeTab === "turn-review" && (
