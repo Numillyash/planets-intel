@@ -1,6 +1,6 @@
 import { Container, Graphics, Text } from "pixi.js";
 import { raceVisual } from "../../lib/races";
-import type { PrivateIntelMapResponse } from "../../types/intel";
+import type { MapObservationSet } from "./mapModel";
 import {
     renderY,
     type MapBounds,
@@ -23,7 +23,7 @@ export function drawMinefields({
     onSelect,
 }: {
     world: Container;
-    intel: PrivateIntelMapResponse;
+    intel: MapObservationSet;
     bounds: MapBounds;
     selected: SelectedEntity | null;
     onSelect: (entity: SelectedEntity) => void;
