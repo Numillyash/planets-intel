@@ -352,6 +352,56 @@ class PublicSectorTimelineTests(unittest.TestCase):
         self.assertFalse(all_rows["truncated"])
         self.assertEqual(all_rows["events"][2]["description"], "valid")
 
+    def test_public_event_timestamps_are_preserved_without_timezone_guess(self) -> None:
+        payload = {
+            "game": {"id": 683230, "isprivate": False},
+            "events": [
+                {
+                    **event(
+                        event_id=501, event_type=6, turn=54,
+                        player_id=4, description="Game won",
+                    ),
+                    "dateadded": "9/27/2026 3:53:46 PM",
+                },
+                {
+                    **event(
+                        event_id=502, event_type=5, turn=53,
+                        player_id=4, description="Countdown",
+                    ),
+                    "dateadded": " 9/27/2026 3:53:37 PM ",
+                },
+                event(
+                    event_id=503, event_type=3, turn=1,
+                    player_id=4, description="Player joined",
+                ),
+            ],
+        }
+        result = public_events_from_loadinfo(payload, 683230)
+        self.assertEqual(
+            [row["date_added"] for row in result["events"]],
+            [
+                "9/27/2026 3:53:46 PM",
+                "9/27/2026 3:53:37 PM",
+                None,
+            ],
+        )
+        self.assertFalse(any(
+            row["date_added"] and ("UTC" in row["date_added"] or "Z" == row["date_added"][-1])
+            for row in result["events"]
+        ))
+
+    def test_public_event_timestamp_empty_or_nonstrings_are_unknown(self) -> None:
+        for raw in ("", " ", 1790524426, None):
+            payload = {
+                "game": {"id": 683230, "isprivate": False},
+                "events": [{
+                    **event(event_id=601, event_type=5, turn=53, player_id=4, description="Event"),
+                    "dateadded": raw,
+                }],
+            }
+            row = public_events_from_loadinfo(payload, 683230)["events"][0]
+            self.assertIsNone(row["date_added"])
+
     def test_explicit_empty_event_collection_is_known_empty(self) -> None:
         result = public_events_from_loadinfo(
             {"game": {"id": 12345, "isprivate": False}, "events": []},
