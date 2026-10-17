@@ -847,3 +847,32 @@
     .public-game-navigation.is-map .secondary-button,
     .public-game-navigation.is-map .primary-button { min-height: 34px; padding: 6px; }
 }
+
+
+/* Public and owned game screens share the exact same summary and tab styles. */
+.public-archive-observer-selectors .summary-card { min-width: 0; }
+.public-archive-observer-selectors select {
+    width: 100%; min-width: 0; min-height: 36px;
+}
+.public-archive-inline-game label {
+    color: #7f8da1;
+    font-size: .78rem;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+}
+.public-archive-game-input-row { display: flex; gap: 8px; min-width: 0; }
+.public-archive-game-input-row input {
+    width: min(100%, 205px); min-width: 0; min-height: 36px;
+}
+.public-archive-game-input-row button { flex: 0 0 auto; }
+.global-page-nav-slot > .public-game-navigation {
+    margin: 0; min-height: 38px; justify-content: flex-end;
+}
+.global-page-nav-slot .public-game-navigation .primary-button,
+.global-page-nav-slot .public-game-navigation .secondary-button {
+    min-height: 38px;
+}
+@media (max-width: 650px) {
+    .public-archive-game-input-row { flex-wrap: wrap; }
+    .global-page-nav-slot .public-game-navigation { justify-content: center; }
+}
