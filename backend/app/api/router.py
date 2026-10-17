@@ -14,6 +14,7 @@ from app.api.routes.movement_prediction import router as movement_prediction_rou
 from app.api.routes.order_drafts import router as order_drafts_router
 from app.api.routes.private_assets import router as private_assets_router
 from app.api.routes.private_intel import router as private_intel_router
+from app.api.routes.public_archive import router as public_archive_router
 from app.api.routes.planets_accounts import (
     router as planets_accounts_router,
 )
@@ -100,4 +101,9 @@ api_router.include_router(
 api_router.include_router(
     scores_router,
     tags=["scores"],
+)
+
+api_router.include_router(
+    public_archive_router,
+    tags=["public-archive"],
 )
