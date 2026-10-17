@@ -110,6 +110,19 @@ class PublicArchiveTurnTests(unittest.TestCase):
                 asyncio.run(fetch_finished_public_turn(GAME_ID, 4, 17))
         client.load_finished_public_turn.assert_not_awaited()
 
+    def test_out_of_range_turn_and_unknown_slot_do_not_hit_upstream(self):
+        client = AsyncMock()
+        client.load_info.return_value = finished_info()
+        with patch(
+            "app.services.public_archive_turn.PlanetsNuClient",
+            return_value=client,
+        ):
+            for slot, turn in ((4, 41), (5, 17), (4, 0)):
+                with self.subTest(slot=slot, turn=turn):
+                    with self.assertRaises(ArchiveSourceMismatch):
+                        asyncio.run(fetch_finished_public_turn(GAME_ID, slot, turn))
+        client.load_finished_public_turn.assert_not_awaited()
+
     def test_completed_game_calls_only_credential_free_method(self):
         client = AsyncMock()
         client.load_info.return_value = finished_info()
