@@ -82,12 +82,17 @@ const LAYERS: Array<{
 export function MapLayerControls({
     visibility,
     onChange,
+    available,
 }: {
     visibility: MapLayerVisibility;
     onChange: (next: MapLayerVisibility) => void;
+    available?: readonly (keyof MapLayerVisibility)[];
 }) {
     const [open, setOpen] = useState(false);
-    const enabledCount = LAYERS.filter(({ key }) => visibility[key]).length;
+    const visibleLayers = available === undefined
+        ? LAYERS
+        : LAYERS.filter(({ key }) => available.includes(key));
+    const enabledCount = visibleLayers.filter(({ key }) => visibility[key]).length;
 
     function toggle(key: MapLayerKey) {
         onChange({
@@ -97,11 +102,10 @@ export function MapLayerControls({
     }
 
     function setAll(value: boolean) {
-        onChange(
-            Object.fromEntries(
-                LAYERS.map(({ key }) => [key, value]),
-            ) as unknown as MapLayerVisibility,
-        );
+        onChange({
+            ...visibility,
+            ...Object.fromEntries(visibleLayers.map(({ key }) => [key, value])),
+        } as MapLayerVisibility);
     }
 
     return (
@@ -116,7 +120,7 @@ export function MapLayerControls({
                 type="button"
             >
                 <strong>Layers</strong>
-                <span>{enabledCount}/{LAYERS.length} visible</span>
+                <span>{enabledCount}/{visibleLayers.length} visible</span>
             </button>
 
             {open && (
@@ -141,7 +145,7 @@ export function MapLayerControls({
                     </div>
 
                     <div className="map-layer-controls-list">
-                        {LAYERS.map((layer) => (
+                        {visibleLayers.map((layer) => (
                             <button
                                 aria-pressed={visibility[layer.key]}
                                 className={
