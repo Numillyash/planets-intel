@@ -6,7 +6,6 @@ on:
 
 jobs:
   public-map-browser:
-    if: github.head_ref == 'fix/public-map-surface-navigation-v1'
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
