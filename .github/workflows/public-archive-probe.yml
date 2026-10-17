@@ -1,0 +1,60 @@
+name: Public archive upstream contract probe (temporary)
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  public-archive-probe:
+    if: github.head_ref == 'feature/public-archive-unified-dashboard-v1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Planets.nu transport
+        run: python -m pip install -r backend/requirements.txt
+      - name: Probe explicit public completed game and selected turn
+        env:
+          PYTHONPATH: backend
+        shell: bash
+        run: |
+          python - <<'PY'
+          import asyncio
+          from app.planetsnu.client import PlanetsNuClient
+          from app.services.public_archive_turn import fetch_finished_public_turn
+
+          async def probe():
+              client = PlanetsNuClient()
+              for game_id in (184630, 45561, 467047, 112611):
+                  try:
+                      info = await client.load_info(game_id)
+                      game = info.get("game") or {}
+                      if (game.get("id") != game_id or
+                          game.get("status") != 3 or
+                          game.get("isprivate") is not False):
+                          print("candidate", game_id, "not a verified finished public game")
+                          continue
+                      slots = [r.get("id") for r in info.get("players", [])
+                               if isinstance(r, dict)
+                               and isinstance(r.get("id"), int)
+                               and 1 <= r["id"] <= 35]
+                      if not slots:
+                          continue
+                      slot = 4 if 4 in slots else slots[0]
+                      turn = min(17, game.get("turn", 17))
+                      archive = await fetch_finished_public_turn(game_id, slot, turn)
+                      assert archive["game_id"] == game_id
+                      assert archive["turn"] == turn
+                      assert archive["player_slot_id"] == slot
+                      print("PASS: public archive loadturn", game_id, slot, turn, archive["counts"])
+                      return
+                  except Exception as exc:
+                      print("candidate", game_id, "failed:", type(exc).__name__)
+              raise SystemExit("No public archive candidate passed the live API contract probe")
+
+          asyncio.run(probe())
+          PY
