@@ -26,7 +26,7 @@ export type GameDashboardTab = typeof DASHBOARD_TABS[number]["id"];
 export function GameDashboardTabs({
     activeTab, onSelect,
 }: {
-    activeTab: GameDashboardTab;
+    activeTab: string;
     onSelect: (tab: GameDashboardTab) => void;
 }) {
     return (
