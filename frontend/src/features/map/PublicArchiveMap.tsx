@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import type { PlayerInfo } from "../../types/api";
 import type { PublicArchiveTurn } from "../../types/publicArchive";
 import { EntityDetails } from "./EntityDetails";
@@ -19,10 +19,11 @@ import "./map.css";
  * public_finished_archive has no linked observer, order or sharing capability.
  */
 export function PublicArchiveMap({
-    archive, players,
+    archive, players, children,
 }: {
     archive: PublicArchiveTurn;
     players: PlayerInfo[];
+    children?: ReactNode;
 }) {
     const fitViewRef = useRef<(() => void) | null>(null);
     const [selected, setSelected] = useState<SelectedEntity | null>(null);
@@ -30,6 +31,7 @@ export function PublicArchiveMap({
 
     return (
         <section className="panel intel-map-panel">
+            {children}
             <div className="panel-header intel-map-header">
                 <div>
                     <h2>Intelligence map</h2>
