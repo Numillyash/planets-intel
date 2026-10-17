@@ -109,7 +109,7 @@ export function PublicArchiveMap({ archive }: { archive: PublicArchiveTurn }) {
             cleanup?.();
             appRef.current = null;
             worldRef.current = null;
-            if (initialized && !disposed) app.destroy(true, true);
+            if (initialized) app.destroy(true, true);
         };
     }, []);
 
