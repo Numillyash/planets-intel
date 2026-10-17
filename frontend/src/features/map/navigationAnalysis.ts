@@ -2,8 +2,8 @@ import type { PlayerInfo } from "../../types/api";
 import type {
     MapShipObservation,
     MapStellarCartographyObservation,
-    PrivateIntelMapResponse,
 } from "../../types/intel";
+import type { MapObservationSet } from "./mapModel";
 
 
 export interface MapPoint {
@@ -232,7 +232,7 @@ function radiationForDistance(
 
 
 export function radiationAtPoint(
-    intel: PrivateIntelMapResponse,
+    intel: MapObservationSet,
     x: number,
     y: number,
 ): RadiationSample | null {
@@ -303,7 +303,7 @@ function closestPointOnSegment(
 
 
 export function analyzeRouteRadiation(
-    intel: PrivateIntelMapResponse,
+    intel: MapObservationSet,
     route: MapPoint[],
 ): RouteRadiationAnalysis {
     let best: RouteRadiationAnalysis = {
@@ -386,7 +386,7 @@ function ionStormRootId(feature: MapStellarCartographyObservation): number {
 
 
 export function ionStormAtPoint(
-    intel: PrivateIntelMapResponse,
+    intel: MapObservationSet,
     x: number,
     y: number,
 ): IonStormHazard | null {
