@@ -773,3 +773,23 @@
     .public-archive-context { padding: 10px 12px 16px; }
     .public-archive-objects-header { align-items: stretch; flex-direction: column; }
 }
+
+
+/* Shared operational shell for any public read-only game source. */
+.public-archive-operational-shell { min-width: 0; }
+.public-archive-back-link {
+    display: inline-block; margin-top: 8px;
+    color: #92bee5; font-size: .8rem;
+}
+.public-archive-scope { margin-top: 14px; }
+.public-archive-scope .summary-card { min-width: 0; }
+.public-archive-scope .summary-card strong { overflow-wrap: anywhere; }
+.public-archive-scope .summary-card small {
+    display: block; color: #8da4bc; font-size: .72rem;
+}
+.public-archive-scope .public-archive-game-switch summary {
+    padding: 0; border: 0; font-weight: 700; font-size: .8rem;
+}
+.public-archive-scope .public-archive-game-switch form { max-width: 260px; }
+.public-archive-scope .public-archive-game-switch input { min-height: 34px; }
+.public-archive-scope .public-archive-game-switch button { align-self: flex-start; }
