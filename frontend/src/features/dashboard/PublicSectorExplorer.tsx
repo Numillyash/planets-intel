@@ -61,6 +61,14 @@ export function PublicSectorExplorer({ gameId }: { gameId: number }) {
                         throw new Error("Returned historical RST identity does not match the requested game, slot and turn.");
                     }
                     setArchive(result);
+                    // Deep links and reloads must preserve the verified perspective,
+                    // never the requested-but-unavailable fallback candidate.
+                    const url = new URL(window.location.href);
+                    url.searchParams.set("slot", String(slot));
+                    url.searchParams.set("turn", String(candidate));
+                    window.history.replaceState(
+                        null, "", `${url.pathname}${url.search}${url.hash}`,
+                    );
                     if (candidate !== selectedTurn) {
                         setArchiveNotice(
                             `Final turn T${selectedTurn} was not available for slot #${slot}. Showing verified T${candidate} instead.`,
