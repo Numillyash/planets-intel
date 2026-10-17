@@ -90,8 +90,18 @@ export type PrivateIntelMapResponse =
     | LatestPrivateIntelResponse
     | CombinedPrivateIntelResponse;
 
+export type GameMapIntelSource =
+    | PrivateIntelMapResponse
+    | import("./publicArchive").PublicArchiveTurn;
+
+export function isPublicArchiveIntel(
+    intel: GameMapIntelSource,
+): intel is import("./publicArchive").PublicArchiveTurn {
+    return "mode" in intel && intel.mode === "public_finished_archive";
+}
+
 export function isCombinedPrivateIntel(
-    intel: PrivateIntelMapResponse,
+    intel: GameMapIntelSource,
 ): intel is CombinedPrivateIntelResponse {
     return "mode" in intel && intel.mode === "combined";
 }
