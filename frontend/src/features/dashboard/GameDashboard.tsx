@@ -29,7 +29,6 @@ import {
 } from "../map/observationView";
 import { PlayersTable } from "../players/PlayersTable";
 import { MilitaryScoreChart } from "../statistics/MilitaryScoreChart";
-import { PublicArchiveMap } from "../map/PublicArchiveMap";
 import { PublicArchiveTimeMachine } from "./PublicArchiveTimeMachine";
 import type { PublicArchiveTurn } from "../../types/publicArchive";
 import { AdvantagesPanel } from "./AdvantagesPanel";
@@ -305,7 +304,6 @@ export function GameDashboard({
     if (publicMode) {
         const availableTabs: Array<{ id: GameDashboardTab; label: string }> = [
             { id: "dashboard", label: "Dashboard" },
-            { id: "starmap", label: "Starmap" },
             { id: "objects", label: "Objects" },
             { id: "commander-intel", label: "Commander intel" },
             { id: "time-machine", label: "Time machine" },
@@ -415,18 +413,6 @@ export function GameDashboard({
                                 </div>
                             </details>
                         </div>
-                    )}
-                    {publicTab === "starmap" && (
-                        publicArchive !== null ? (
-                            <PublicArchiveMap key={`${publicArchive.game_id}:${publicArchive.player_slot_id}:${publicArchive.turn}`} archive={publicArchive} players={game.players} />
-                        ) : (
-                            <section className="panel game-dashboard-placeholder">
-                                <h2>Starmap unavailable</h2>
-                                <p>{isFinished
-                                    ? "Select an available archived player turn in Time machine to display its factual map."
-                                    : "An active foreign sector does not expose its private player-perspective map."}</p>
-                            </section>
-                        )
                     )}
                     {publicTab === "objects" && (
                         <section className="panel">
