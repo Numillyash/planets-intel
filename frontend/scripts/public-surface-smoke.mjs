@@ -60,6 +60,22 @@ await page.route("**/*",async route=>{
   else if(url.pathname==="/api/games/683230") body=game;
   else if(url.pathname==="/api/games/683230/scores/history") {
     status=404;body={detail:"not collected"};
+  } else if(url.pathname==="/api/games/683230/public-commander-intelligence") {
+    body={
+      game_id:683230,method_version:"test",commanders:[],pairwise:[],
+      public_timeline:{
+        status:"available",eligible_event_count:2,skipped_event_rows:0,
+        truncated:false,provenance:{
+          source:"planets.nu/game/loadinfo",cache_state:"fresh",fetched_at:null,
+        },
+        events:[
+          {event_id:1,turn:54,event_type:6,slot_id:4,
+            description:"Public victory event",date_added:"9/27/2026 3:53:46 PM"},
+          {event_id:2,turn:1,event_type:3,slot_id:4,
+            description:"Join event without date",date_added:null},
+        ],
+      },
+    };
   } else if(url.pathname==="/api/games/683230/public-archive/turn") body=archived;
   else {status=404;body={detail:"not available in smoke"};}
   await route.fulfill({status,contentType:"application/json",body:JSON.stringify(body)});
@@ -91,6 +107,18 @@ try{
     "Do not duplicate the global game navigation above the tab strip");
   await page.screenshot({path:"/tmp/public-surface-smoke/dashboard.png"}).catch(()=>{});
   console.log("PASS: native dashboard layout parity - 17 tabs, six summary cards, 16 launch tiles");
+  await page.locator(".game-dashboard-tabs")
+    .getByRole("button",{name:"Commander intel",exact:true}).click();
+  await visible(".commander-public-timeline");
+  const timeline=await page.locator(".commander-public-timeline").innerText();
+  assert(timeline.includes("recorded 9/27/2026 3:53:46 PM (source time)"),
+    "Source event time not displayed: "+timeline);
+  assert(timeline.includes("time not provided"),"Unknown event time must stay unknown");
+  assert(timeline.includes("does not specify a timezone"),
+    "Source timezone limitation must be visible");
+  console.log("PASS: public event timestamp is source-backed and missing time stays unknown");
+  await page.locator(".game-dashboard-tabs")
+    .getByRole("button",{name:"Dashboard",exact:true}).click();
   // Each native object tab owns its table. There is no second object-type
   // selector which could disagree with the selected tab.
   for (const [tab, heading, rows] of [
