@@ -476,7 +476,7 @@ function drawRouteLine(
 
 function drawSelectedShipTrajectory(
     world: Container,
-    intel: PrivateIntelMapResponse,
+    intel: MapObservationSet,
     bounds: MapBounds,
     selected: SelectedEntity | null,
 ) {
@@ -558,7 +558,7 @@ export function drawMapScene({
     loadedHullAssetUrls,
 }: {
     world: Container;
-    intel: PrivateIntelMapResponse;
+    intel: MapObservationSet;
     bounds: MapBounds;
     links: PlanetLink[];
     shipPositions: ShipVisualPosition[];
