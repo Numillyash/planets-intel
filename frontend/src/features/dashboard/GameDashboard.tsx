@@ -297,6 +297,9 @@ export function GameDashboard({
         const observedCounts = publicArchive?.counts;
         const currentTurn = publicArchive?.turn ?? game.game.turn;
         const isFinished = game.game.status_id === 3;
+        const effectiveObjectType = publicTab === "planets" ? "planets"
+            : publicTab === "starships" ? "starships"
+                : publicTab === "starbases" ? "starbases" : publicObjectType;
 
         return (
             <section className="game-dashboard-shell public-archive-dashboard">
@@ -338,11 +341,11 @@ export function GameDashboard({
                         <section className="panel">
                             <div className="panel-header public-archive-objects-header">
                                 <div>
-                                    <h2>Historical objects · {publicArchive === null ? "unavailable" : `T${publicArchive.turn}`}</h2>
+                                    <h2>{effectiveObjectType === "starships" ? "Starship List" : effectiveObjectType === "starbases" ? "Starbase List" : "Planet List"} · {publicArchive === null ? "unavailable" : `T${publicArchive.turn}`}</h2>
                                     <p>Observed data for the selected slot only; missing fields remain unknown.</p>
                                 </div>
                                 <label>Object type
-                                    <select value={publicObjectType}
+                                    <select value={effectiveObjectType}
                                         onChange={(event) => setPublicObjectType(event.target.value as typeof publicObjectType)}>
                                         <option value="planets">Planets</option>
                                         <option value="starships">Starships</option>
@@ -357,7 +360,7 @@ export function GameDashboard({
                             ) : (
                                 <div className="table-wrapper">
                                     <table className="players-table game-object-table">
-                                        {publicObjectType === "planets" ? (
+                                        {effectiveObjectType === "planets" ? (
                                             <>
                                                 <thead><tr><th>ID</th><th>Planet</th><th>Owner</th><th>Clans</th><th>MC</th></tr></thead>
                                                 <tbody>{publicArchive.planets.map((p) => {
@@ -371,7 +374,7 @@ export function GameDashboard({
                                                     </tr>;
                                                 })}</tbody>
                                             </>
-                                        ) : publicObjectType === "starships" ? (
+                                        ) : effectiveObjectType === "starships" ? (
                                             <>
                                                 <thead><tr><th>ID</th><th>Ship</th><th>Owner</th><th>Hull</th><th>Warp</th></tr></thead>
                                                 <tbody>{publicArchive.ships.map((ship) => (
