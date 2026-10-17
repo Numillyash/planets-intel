@@ -438,6 +438,10 @@ export function GameDashboard({
         );
     }
 
+    if (selectedAccount === null) {
+        return <section className="panel"><p>Local observer is unavailable.</p></section>;
+    }
+
     return (
         <section className="game-dashboard-shell">
             <nav
