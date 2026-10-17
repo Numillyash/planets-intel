@@ -943,6 +943,7 @@ export function PixiMapCanvas({
             <MapLayerControls
                 onChange={setLayerVisibility}
                 visibility={layerVisibility}
+                available={isArchive ? ["entities", "minefields"] : undefined}
             />
 
             {!isArchive && layerVisibility.historicalTracks && (
