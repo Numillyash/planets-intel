@@ -805,6 +805,15 @@ def public_events_from_loadinfo(
                 "turn": _int(raw.get("turn"), positive=True),
                 "event_type": event_type,
                 "slot_id": _int(raw.get("playerid"), positive=True),
+                # Planets.nu loadinfo events carry dateadded as a source-local
+                # string, without an explicit timezone. Preserve it verbatim;
+                # never substitute fetch time, UTC or a host-derived estimate.
+                "date_added": (
+                    raw["dateadded"].strip()
+                    if isinstance(raw.get("dateadded"), str)
+                    and raw["dateadded"].strip()
+                    else None
+                ),
                 "description": description.strip(),
             },
         ))

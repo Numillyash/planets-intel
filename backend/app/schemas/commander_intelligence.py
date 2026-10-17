@@ -138,6 +138,8 @@ class PublicSectorEvent(BaseModel):
     event_type: int
     slot_id: int | None
     description: str
+    # Raw Planets.nu source-local dateadded (no timezone supplied).
+    date_added: str | None = None
 
 
 class PublicSectorTimeline(BaseModel):
