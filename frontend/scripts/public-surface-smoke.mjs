@@ -12,7 +12,8 @@ const archived = {
   planets:[
     {planet_id:1,owner_id:4,info_turn:54,name:"Alpha",x:1140,y:1000,payload:{id:1,clans:200,mines:10}},
     {planet_id:2,owner_id:null,info_turn:54,name:"Beta",x:1400,y:1260,payload:{id:2}},
-    {planet_id:3,owner_id:2,info_turn:54,name:"Gamma",x:1660,y:1120,payload:{id:3}},
+    {planet_id:3,owner_id:2,info_turn:54,name:"Gamma",x:1660,y:1120,
+      payload:{id:3,temp:52,clans:12,nativetaxrate:0}},
   ],
   ships:[{ship_id:11,owner_id:4,info_turn:54,hull_id:5,name:"Scout",
     x:1140,y:1000,warp:7,payload:{id:11,warp:7}}],
@@ -107,6 +108,25 @@ try{
     "Do not duplicate the global game navigation above the tab strip");
   await page.screenshot({path:"/tmp/public-surface-smoke/dashboard.png"}).catch(()=>{});
   console.log("PASS: native dashboard layout parity - 17 tabs, six summary cards, 16 launch tiles");
+  const surveyChecks=await page.evaluate(async()=>{
+    const {showForeignPlanetSurveyRing,hasPlanetSurveyEvidence}=
+      await import("/src/features/map/planetSurveyMarker.ts");
+    const p=(owner_id,payload,info_turn=54)=>({
+      planet_id:7,owner_id,info_turn,name:"Known position",x:1210,y:1300,payload,
+    });
+    return [
+      showForeignPlanetSurveyRing(p(4,{temp:49,clans:100}),4),
+      showForeignPlanetSurveyRing(p(2,{temp:49,clans:100}),4),
+      showForeignPlanetSurveyRing(p(null,{mines:0,groundneutronium:120}),4),
+      showForeignPlanetSurveyRing(p(null,{nativetaxrate:0,ownerid:0,infoturn:0},null),4),
+      showForeignPlanetSurveyRing(p(2,{ownerid:2,infoturn:25,nativetaxrate:0},25),4),
+      hasPlanetSurveyEvidence(p(null,{temp:0})),
+      showForeignPlanetSurveyRing(p(2,{mines:0,nativetaxrate:0}),4),
+    ];
+  });
+  assert.deepEqual(surveyChecks,[false,true,true,false,false,true,true],
+    "Surveyed non-owned marker must follow disclosure, not owner identity or placeholder zeros");
+  console.log("PASS: factual planet survey classifier for owned, foreign, neutral, zero and owner-only rows");
   await page.locator(".game-dashboard-tabs")
     .getByRole("button",{name:"Commander intel",exact:true}).click();
   await visible(".commander-public-timeline");
@@ -179,7 +199,19 @@ try{
     }
   }
   assert(brightPixels>40,`Map has no visibly drawn objects (bright sampled pixels: ${brightPixels})`);
-  console.log("PASS: non-empty Pixi map drawing",brightPixels,"sampled bright pixels");
+  let cyanSurveyPixels=0;
+  for(let y=0;y<canvasPng.height;y+=2) {
+    for(let x=0;x<canvasPng.width;x+=2) {
+      const p=(y*canvasPng.width+x)*4;
+      const [red,green,blue,alpha]=canvasPng.data.subarray(p,p+4);
+      if(alpha>0 && red>=70 && red<=160 && green>=175 && blue>=175
+         && Math.abs(green-blue)<60) cyanSurveyPixels++;
+    }
+  }
+  assert(cyanSurveyPixels>20,
+    `Surveyed foreign planet ring must be visible in Pixi output (cyan pixels: ${cyanSurveyPixels})`);
+  console.log("PASS: non-empty Pixi map drawing",brightPixels,
+    "sampled bright pixels, surveyed ring pixels",cyanSurveyPixels);
   mkdirSync("/tmp/public-surface-smoke",{recursive:true});
   await page.screenshot({path:"/tmp/public-surface-smoke/map.png"});
   console.log("PASS: fullscreen operational map",JSON.stringify(mapState));

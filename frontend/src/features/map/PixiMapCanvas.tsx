@@ -203,6 +203,10 @@ export function PixiMapCanvas({
     );
 
     const isArchive = isPublicArchiveIntel(intel);
+    const observerSlotId = isArchive ? intel.player_slot_id
+        : isCombinedPrivateIntel(intel)
+            ? intel.primary_observer.player_slot_id
+            : intel.observer.player_slot_id;
     const linkedAccountId = isArchive ? null
         : isCombinedPrivateIntel(intel)
             ? intel.primary_observer.linked_account_id
@@ -765,6 +769,7 @@ export function PixiMapCanvas({
             drawMapScene({
                 world,
                 intel,
+                observerSlotId,
                 bounds,
                 links,
                 shipPositions,

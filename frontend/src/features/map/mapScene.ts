@@ -12,7 +12,7 @@ import type {
 } from "../../types/intel";
 import { privateHullAssetUrl } from "../../lib/privateAssets";
 import { raceVisual } from "../../lib/races";
-import { planetFacts } from "./observationView";
+import { showForeignPlanetSurveyRing } from "./planetSurveyMarker";
 import {
     PLANET_RADIUS,
     planetLabel,
@@ -37,8 +37,9 @@ import {
 
 const UNKNOWN_OWNER_COLOR = 0x7b8798;
 const PLANETS_SELECTION_GREEN = 0x15f27a;
-// The known-survey marker does not assert colony absence or ownership.
-const SURVEYED_UNKNOWN_OWNER_RING = 0x62d9de;
+// A cyan ring marks factual survey details on a non-owned planet,
+// independent of whether its owner is known.
+const SURVEYED_FOREIGN_PLANET_RING = 0x62d9de;
 
 
 function ownerColor(ownerId: number | null): number {
@@ -548,6 +549,7 @@ function drawShipVisualAnchor(
 export function drawMapScene({
     world,
     intel,
+    observerSlotId,
     bounds,
     links,
     shipPositions,
@@ -559,6 +561,7 @@ export function drawMapScene({
 }: {
     world: Container;
     intel: MapObservationSet;
+    observerSlotId: number;
     bounds: MapBounds;
     links: PlanetLink[];
     shipPositions: ShipVisualPosition[];
@@ -614,15 +617,15 @@ export function drawMapScene({
         const starbase = basesByPlanet.get(planet.planet_id) ?? null;
         const isSelected = planetIsSelected(selected, planet);
         const color = ownerColor(planet.owner_id);
-        // Unlike a position-only dot, a surveyed planet carries real field
-        // evidence even when no owner can be attributed to this snapshot.
-        const surveyedWithoutOwner = planet.owner_id === null
-            && planetFacts(planet).knownFieldCount > 0;
+        // Known ownership and surveyed planet details are independent:
+        // non-owned colonies and non-colonized worlds can both be surveyed.
+        // Keep the cyan ring outside the ordinary ship-orbit marker.
+        const hasForeignSurvey = showForeignPlanetSurveyRing(planet, observerSlotId);
 
-        if (surveyedWithoutOwner) {
+        if (hasForeignSurvey) {
             const surveyRing = new Graphics()
-                .circle(0, 0, PLANET_RADIUS + 2.3)
-                .stroke({ color: SURVEYED_UNKNOWN_OWNER_RING, width: 1.7, alpha: 0.94 });
+                .circle(0, 0, PLANET_RADIUS + 4.2)
+                .stroke({ color: SURVEYED_FOREIGN_PLANET_RING, width: 2.2, alpha: 0.98 });
             surveyRing.position.set(planet.x, y);
             world.addChild(surveyRing);
         }

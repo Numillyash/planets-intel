@@ -26,7 +26,7 @@ export function IntelMapLegend() {
     return <div className="intel-map-legend">
         <span><i className="legend-link" />≤ {PLANET_LINK_RANGE} ly</span>
         <span><i className="legend-planet" />Planet</span>
-        <span><i className="legend-surveyed" />Surveyed · owner unknown</span>
+        <span><i className="legend-surveyed" />Surveyed · not yours (owner may be known)</span>
         <span><i className="legend-starbase" />Planet + base</span>
         <span><i className="legend-orbit" />Ships in orbit</span>
         <span><i style={{ border: "1px solid #5c9cca", borderRadius: "50%", background: "rgba(63,127,174,.35)" }} />Nebula</span>
