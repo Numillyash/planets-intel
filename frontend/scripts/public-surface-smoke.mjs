@@ -122,9 +122,12 @@ try{
       showForeignPlanetSurveyRing(p(2,{ownerid:2,infoturn:25,nativetaxrate:0},25),4),
       hasPlanetSurveyEvidence(p(null,{temp:0})),
       showForeignPlanetSurveyRing(p(2,{mines:0,nativetaxrate:0}),4),
+      showForeignPlanetSurveyRing(p(2,{temp:0,clans:0,infoturn:54},54),4),
+      showForeignPlanetSurveyRing(p(2,{clans:0,mines:0,temp:100},54),4),
+      showForeignPlanetSurveyRing(p(null,{groundneutronium:80},null),4),
     ];
   });
-  assert.deepEqual(surveyChecks,[false,true,true,false,false,true,true],
+  assert.deepEqual(surveyChecks,[false,true,true,false,false,false,false,false,true,false],
     "Surveyed non-owned marker must follow disclosure, not owner identity or placeholder zeros");
   console.log("PASS: factual planet survey classifier for owned, foreign, neutral, zero and owner-only rows");
   await page.locator(".game-dashboard-tabs")
