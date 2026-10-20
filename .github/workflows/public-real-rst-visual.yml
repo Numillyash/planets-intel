@@ -1,0 +1,96 @@
+name: Public RST visual evidence
+
+on:
+  workflow_dispatch:
+    inputs:
+      game_id:
+        description: "Finished public game ID (public data only)"
+        required: true
+        type: string
+        default: "683230"
+      slot_id:
+        description: "Historical player slot"
+        required: true
+        type: string
+        default: "4"
+      turn:
+        description: "Historical turn"
+        required: true
+        type: string
+        default: "54"
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  capture-public-rst:
+    if: github.event_name == 'workflow_dispatch' || github.head_ref == 'fix/source-backed-survey-and-public-visual-evidence'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package.json
+      - name: Install source and Chromium prerequisites
+        run: |
+          python -m pip install -r backend/requirements.txt
+          cd frontend
+          npm install
+          npm install --no-save --ignore-scripts playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Fetch verified, finished, public-only historical RST
+        env:
+          PYTHONPATH: backend
+          PUBLIC_GAME_ID: ${{ inputs.game_id || '683230' }}
+          PUBLIC_SLOT_ID: ${{ inputs.slot_id || '4' }}
+          PUBLIC_TURN: ${{ inputs.turn || '54' }}
+        run: |
+          python - <<'PY'
+          import asyncio, json, os
+          from pathlib import Path
+          from app.services.public_archive_turn import fetch_finished_public_turn
+          def valid(name):
+              n=int(os.environ[name])
+              if n <= 0 or n > 1_000_000_000: raise ValueError("Out of range "+name)
+              return n
+          async def main():
+              game=valid("PUBLIC_GAME_ID")
+              slot=valid("PUBLIC_SLOT_ID")
+              turn=valid("PUBLIC_TURN")
+              if slot > 35 or turn > 20000:
+                  raise ValueError("Invalid public slot or turn")
+              result=await fetch_finished_public_turn(game,slot,turn)
+              if result["mode"] != "public_finished_archive":
+                  raise ValueError("Not a public finished archive")
+              Path("/tmp/planets-public-visual-rst.json").write_text(json.dumps(result),encoding="utf8")
+              print(f"VALIDATED_PUBLIC_ONLY game={game} slot={slot} turn={turn} planets={len(result['planets'])}")
+          asyncio.run(main())
+          PY
+      - name: Render genuine public data with common frontend and capture
+        working-directory: frontend
+        shell: bash
+        run: |
+          npm run dev -- --host 127.0.0.1 --port 4173 >/tmp/vite-real-public.log 2>&1 &
+          VITE_PID=$!
+          trap 'kill $VITE_PID 2>/dev/null || true' EXIT
+          for i in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:4173/ >/dev/null; then break; fi
+            sleep 1
+          done
+          node scripts/public-real-rst-visual.mjs
+      - name: Upload public-only map screenshots and disclosure counts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-real-rst-visual
+          path: /tmp/planets-public-visual-evidence/
+          if-no-files-found: ignore
+          retention-days: 14
