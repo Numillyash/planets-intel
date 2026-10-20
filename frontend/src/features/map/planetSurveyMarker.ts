@@ -1,53 +1,51 @@
 import type { PlanetObservationResponse } from "../../types/api";
-import { planetFacts } from "./observationView";
+import { factNumber } from "./observationView";
 
 /**
- * Visible planet details independent of owner/position identity.
+ * A Planets.nu planet row is NOT automatically a surveyed planet.
  *
- * A Planets.nu RST can provide name, x/y, ownerid, infoturn and default
- * nativetaxrate=0 for a position-only or owner-only planet. None of those
- * alone establishes that a planet was surveyed. In particular, the broad
- * knownFieldCount includes some zero placeholders; do not use it here.
+ * A position/owner-only row may carry zero-valued defaults in arbitrary
+ * economy, native and climate fields. A positive info_turn is necessary for
+ * attributing observation, but even it can mean only "owner last seen".
  *
- * Read factual fields only; do not substitute inferred intel, stale data
- * from a different slot, or a private observer for public archive views.
+ * Do not infer a survey from the *presence* of a 0 value (temp:0,
+ * clans:0, mines:0, native tax:0 etc). A genuine zero is possible, but
+ * source data without a disclosure flag cannot distinguish it from a
+ * placeholder. Abstain in that case instead of painting every grey planet.
  */
 export function hasPlanetSurveyEvidence(planet: PlanetObservationResponse): boolean {
-    const facts = planetFacts(planet);
-    const directValues = [
-        facts.temperature,
-        facts.clans,
-        facts.mines,
-        facts.factories,
-        facts.defense,
-        facts.supplies,
-        facts.megacredits,
-        facts.nativeClans,
-        facts.colonistHappiness,
-        facts.colonistTaxRate,
-        facts.nativeHappiness,
-        facts.friendlyCode,
-    ];
-    if (directValues.some((value) => value !== null)) return true;
+    if (planet.info_turn === null || planet.info_turn <= 0) return false;
 
-    const mineralDetails = [
-        facts.neutronium, facts.duranium, facts.tritanium, facts.molybdenum,
-    ];
-    if (mineralDetails.some((mineral) =>
-        Object.values(mineral).some((value) => value !== null)
-    )) return true;
-
-    // A literal "none" or government/race index zero may be sent as a
-    // placeholder even with no observed planet details.
-    return [facts.nativeRace, facts.nativeGovernment].some(
-        (value) => value !== null
-            && !/^(none|unknown|race #0|government #0|0|\?+)$/.test(value.toLowerCase()),
-    );
+    const payload = planet.payload;
+    // Nonzero observed values demonstrate disclosed information beyond a
+    // planet's identity/location and owner. Require only one, but NEVER
+    // treat nominal zero defaults as evidence of a scan.
+    const disclosed = [
+        ["temp", "temperature"],
+        ["clans", "colonistclans", "colonists"],
+        ["nativeclans", "native_clans"],
+        ["mines"],
+        ["factories"],
+        ["defense", "defenseposts", "defense_posts"],
+        ["supplies"],
+        ["megacredits", "money", "mc"],
+        ["neutronium"], ["duranium"], ["tritanium"], ["molybdenum"],
+        ["groundneutronium", "neutroniumground", "neutronium_ground"],
+        ["groundduranium", "duraniumground", "duranium_ground"],
+        ["groundtritanium", "tritaniumground", "tritanium_ground"],
+        ["groundmolybdenum", "molybdenumground", "molybdenum_ground"],
+        ["densityneutronium", "neutroniumdensity", "neutronium_density"],
+        ["densityduranium", "duraniumdensity", "duranium_density"],
+        ["densitytritanium", "tritaniumdensity", "tritanium_density"],
+        ["densitymolybdenum", "molybdenumdensity", "molybdenum_density"],
+    ] as const;
+    return disclosed.some((keys) => {
+        const field = factNumber(payload, ...keys);
+        return field !== null && field > 0;
+    });
 }
 
-/** Cyan marker means surveyed *and not owned by the viewing slot*.
- * An enemy owner alone (or just an old infoturn) is not a survey.
- */
+/** Presence of actual details is separate from planet ownership. */
 export function showForeignPlanetSurveyRing(
     planet: PlanetObservationResponse,
     observerSlotId: number,
