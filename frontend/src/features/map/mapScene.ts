@@ -37,8 +37,7 @@ import {
 
 const UNKNOWN_OWNER_COLOR = 0x7b8798;
 const PLANETS_SELECTION_GREEN = 0x15f27a;
-// A cyan ring marks factual survey details on a non-owned planet,
-// independent of whether its owner is known.
+// A compact cyan diamond denotes surveyed non-owned planet details.
 const SURVEYED_FOREIGN_PLANET_RING = 0x62d9de;
 
 
@@ -617,18 +616,10 @@ export function drawMapScene({
         const starbase = basesByPlanet.get(planet.planet_id) ?? null;
         const isSelected = planetIsSelected(selected, planet);
         const color = ownerColor(planet.owner_id);
-        // Known ownership and surveyed planet details are independent:
-        // non-owned colonies and non-colonized worlds can both be surveyed.
-        // Keep the cyan ring outside the ordinary ship-orbit marker.
+        // Ownership colour and survey evidence are independent. Do not
+        // surround every observed planet with a second full-sized circle:
+        // dense clusters become unreadable and owner colours disappear.
         const hasForeignSurvey = showForeignPlanetSurveyRing(planet, observerSlotId);
-
-        if (hasForeignSurvey) {
-            const surveyRing = new Graphics()
-                .circle(0, 0, PLANET_RADIUS + 4.2)
-                .stroke({ color: SURVEYED_FOREIGN_PLANET_RING, width: 2.2, alpha: 0.98 });
-            surveyRing.position.set(planet.x, y);
-            world.addChild(surveyRing);
-        }
 
         if (isSelected) {
             const selectionHalo = new Graphics()
@@ -692,6 +683,24 @@ export function drawMapScene({
         highlight.position.set(planet.x, y);
         highlight.eventMode = "none";
         world.addChild(highlight);
+
+        if (hasForeignSurvey) {
+            // Compact cyan diamond at the upper-right edge. Keep it above
+            // the planet marker, but do not obscure its owner fill or any
+            // orbital ring, selected halo, or starbase shape.
+            const d = PLANET_RADIUS + 2.5;
+            const surveyPip = new Graphics()
+                .moveTo(d, -d - 3)
+                .lineTo(d + 3, -d)
+                .lineTo(d, -d + 3)
+                .lineTo(d - 3, -d)
+                .closePath()
+                .fill({ color: SURVEYED_FOREIGN_PLANET_RING, alpha: 0.9 })
+                .stroke({ color: 0x08131b, width: 0.8, alpha: 0.96 });
+            surveyPip.position.set(planet.x, y);
+            surveyPip.eventMode = "none";
+            world.addChild(surveyPip);
+        }
 
         const normalLabel = planetLabel(planet, labelMode);
         const labelText = normalLabel ?? (

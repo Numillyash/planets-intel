@@ -687,7 +687,9 @@
     align-items: center;
     justify-content: space-between;
     gap: 22px;
-    margin: 16px 0;
+    width: 100%;
+    max-width: 1720px;
+    margin: 16px auto;
     padding: 18px 22px;
     border: 1px solid rgba(94, 173, 206, 0.4);
     border-radius: 12px;
@@ -743,4 +745,12 @@
         flex-direction: column;
         align-items: stretch;
     }
+}
+
+/* Keep the independent public-sector launcher aligned to the same
+   page grid as the header, account settings, observers and game cards. */
+.intelboard-public-sector-entry > div:first-child { min-width: 0; }
+.intelboard-public-sector-entry form { flex: 0 0 auto; }
+@media (max-width: 760px) {
+    .intelboard-public-sector-entry form { flex: 1 1 auto; }
 }

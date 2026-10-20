@@ -124,9 +124,12 @@
 }
 
 .legend-surveyed {
-    border: 2px solid #62d9de;
-    border-radius: 50%;
-    background: #7b8798;
+    width: 7px !important;
+    height: 7px !important;
+    border: 1px solid #08131b;
+    border-radius: 1px;
+    background: #62d9de;
+    transform: rotate(45deg);
 }
 
 .legend-starbase {
