@@ -208,10 +208,10 @@ try{
          && Math.abs(green-blue)<60) cyanSurveyPixels++;
     }
   }
-  assert(cyanSurveyPixels>20,
-    `Surveyed foreign planet ring must be visible in Pixi output (cyan pixels: ${cyanSurveyPixels})`);
+  assert(cyanSurveyPixels>=3 && cyanSurveyPixels<=40,
+    `Surveyed foreign planet must have a small cyan pip, not a full halo (cyan sampled pixels: ${cyanSurveyPixels})`);
   console.log("PASS: non-empty Pixi map drawing",brightPixels,
-    "sampled bright pixels, surveyed ring pixels",cyanSurveyPixels);
+    "sampled bright pixels, compact survey pip pixels",cyanSurveyPixels);
   mkdirSync("/tmp/public-surface-smoke",{recursive:true});
   await page.screenshot({path:"/tmp/public-surface-smoke/map.png"});
   console.log("PASS: fullscreen operational map",JSON.stringify(mapState));
@@ -233,6 +233,41 @@ try{
   assert.equal(privateHits.length,0,"Archive must not call private endpoints: "+privateHits);
   noErrors();
   console.log("PASS: no runtime errors, no private observer API requests");
+
+  // Wide desktop exposes the historical layout regression: header and
+  // game grid were centered at 1720px while the sector launcher spanned
+  // the viewport. Exercise the real page DOM, not only a CSS selector.
+  await page.setViewportSize({width:2100,height:900});
+  await load("/intelboard");
+  await visible(".intelboard-public-sector-entry");
+  const wide=await page.evaluate(()=>{
+    const rect=(selector)=>{
+      const e=document.querySelector(selector);
+      if(!e) return null;
+      const b=e.getBoundingClientRect();
+      return {left:b.left,right:b.right,width:b.width};
+    };
+    return {header:rect(".intelboard-game-menu-header"),
+      launcher:rect(".intelboard-public-sector-entry")};
+  });
+  assert(wide.header && wide.launcher,"Missing game-picker header or public launcher");
+  assert(Math.abs(wide.header.left-wide.launcher.left)<2
+    && Math.abs(wide.header.right-wide.launcher.right)<2,
+    "Public sector launcher misaligned with game picker at wide viewport: "+JSON.stringify(wide));
+  await page.screenshot({path:"/tmp/public-surface-smoke/game-picker-wide.png"});
+  await page.setViewportSize({width:390,height:844});
+  await page.waitForTimeout(250);
+  const mobile=await page.evaluate(()=>{
+    const pageWidth=document.documentElement.scrollWidth;
+    const viewportWidth=window.innerWidth;
+    const e=document.querySelector(".intelboard-public-sector-entry");
+    const b=e?.getBoundingClientRect();
+    return {pageWidth,viewportWidth,left:b?.left,right:b?.right};
+  });
+  assert(mobile.right<=mobile.viewportWidth+1 && mobile.left>=0,
+    "Public sector launcher overflows narrow viewport: "+JSON.stringify(mobile));
+  await page.screenshot({path:"/tmp/public-surface-smoke/game-picker-mobile.png"});
+  console.log("PASS: public sector search aligns to common header width at desktop and fits mobile");
 } catch(e){
   mkdirSync("/tmp/public-surface-smoke",{recursive:true});
   await page.screenshot({path:"/tmp/public-surface-smoke/failure.png"}).catch(()=>{});
