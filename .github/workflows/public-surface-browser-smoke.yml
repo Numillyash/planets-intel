@@ -6,7 +6,8 @@ on:
 
 jobs:
   public-map-browser:
-    runs-on: ubuntu-latest
+    # Playwright 1.56 Chromium dependencies are not provided on Ubuntu 26.04.
+    runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
@@ -33,10 +34,13 @@ jobs:
             sleep 1
           done
           node scripts/public-surface-smoke.mjs
+          node scripts/turn-timing-now-smoke.mjs
       - name: Upload map and failure captures
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: public-surface-screenshots
-          path: /tmp/public-surface-smoke
+          name: public-surface-and-turn-timing-screenshots
+          path: |
+            /tmp/public-surface-smoke
+            /tmp/turn-timing-now-smoke
           if-no-files-found: ignore
