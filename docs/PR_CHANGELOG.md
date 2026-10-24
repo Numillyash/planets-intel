@@ -1,5 +1,13 @@
 # IntelBoard — PR changelog
 
+## PR #69 — минималистичный маркер времени и удаление вводящей в заблуждение ready latency (2026-10-24)
+
+- После обратной связи на реальном Turn timing убрана надпись NOW из каждого SVG, жёлтая линия и единственный образец общей легенды стали сплошными. Синхронные локальные/UTC часы сохранены.
+- Вместо двух медиан оставлена информативная медиана *first observed open after host (this game)*; `ready after host` больше не рендерится, потому что значение может быть отрицательным ещё до ошибочного приведения к `0m` в интерфейсе.
+- `formatDelay` больше не маскирует отрицательные значения нулём: отображает `—`, сохраняя легитимный неотрицательный 0m. Backend observations и KDE неизменны.
+- Обновлены Chromium fixture и assertions: legend-only NOW, solid SVG marker, clock advance, mobile, misleading latency. PR handoff: `docs/CONTINUE_HERE.md` + тематическая записка `docs/handoff/2026-10-24-turn-timing-legend-ready-latency.md`.
+- CI, merge, deployment: **проверить по фактическому последнему head**; production acceptance не заявлена.
+
 ## PR #68 — обязательное сохранение контекста и репозиторной документации (2026-10-24)
 
 - Перенесён из `planets-lab` доказуемый процесс handoff: обязательный русский `docs/CONTINUE_HERE.md` **в каждом PR**, эта запись в `docs/PR_CHANGELOG.md` и третий тематический документ.

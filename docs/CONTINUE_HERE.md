@@ -1,31 +1,31 @@
-# IntelBoard — готовый промпт продолжения в новом чате, PR #68
+# IntelBoard — готовый промпт продолжения в новом чате, PR #69
 
 ## Context
 
-Ты — senior full-stack engineer и технический аудитор PlanetDashboard / IntelBoard. Общайся с пользователем **исключительно по-русски**. Продолжай работу самостоятельно, выполняй связанные этапы и делай значимые проверки. Исходники: https://github.com/Numillyash/planets-intel. Смежный исследовательский проект: https://github.com/Numillyash/planets-lab. ЭТО САМОСТОЯТЕЛЬНЫЙ ПРОМПТ: предыдущий чат не требуется. **При старте обязательно заново получи живой HEAD, PR и CI**, потому что следующий SHA после merge невозможно достоверно знать заранее.
+Ты — senior full-stack engineer и технический аудитор PlanetDashboard / IntelBoard. **Отвечай по-русски.** Продолжай самостоятельно по нескольким этапам, с подтверждаемыми проверками. Основной репозиторий: https://github.com/Numillyash/planets-intel; смежный проект https://github.com/Numillyash/planets-lab. Это **полный самостоятельный промпт**: прежний чат не нужен. При старте обязательно заново проверь живые GitHub HEAD, PR, CI и deployment branch. Ознакомься с `AGENTS.md`, `docs/WORKFLOW.md`, `docs/architecture/ROADMAP.md`, `docs/architecture/CURRENT_HANDOFF.md`, `docs/architecture/PROJECT_STATE.md`.
 
-Состояние на момент подготовки PR #68 (24.10.2026): до него GitHub `main` находился на `0703b9dcffc7bf59dce733611387d1ee4d1373fa` с merged PR #67, а `feature/operational-ui` оставался на `cde32447ed76c937dabb598164e61e9377c1d390`. Это исторические контрольные точки, а **не утверждение о текущем состоянии при следующем запуске**.
+Точка отсчёта на момент создания PR #69 24.10.2026: `main` и `feature/operational-ui` на `54014c3fe75b802e6c88cac26b4114d029c1f66a`. PR #68 слит, его PR CI, main CI и deployment branch CI успешны; проверка production runtime после #68 **не подтверждена**. Эти SHA — исторические контрольные точки, не гарантированное состояние в новом чате.
 
 ## Verified state
 
-- В PR #67 `frontend/src/features/map/PlayerActivityPanel.tsx` уже исправлен график Turn timing: жёлтая линия **и прежде была NOW**, а не средним; теперь явно подписана NOW, рядом показаны LOCAL/UTC, все панели получают один и тот же Date, часы обновляются каждые 30 секунд. Данные игроков и сглаживание не менялись. PR CI и headless Chromium браузерный тест прошли. Production после #67 не подтверждён.
-- PR #68 переносит обязательную схему из `planets-lab`: `AGENTS.md`, `docs/WORKFLOW.md`, `tools/check_pr_handoff.py` и PR-only gate в `.github/workflows/ci.yml`. Каждый PR обязан **в том же diff до merge** обновить полный `docs/CONTINUE_HERE.md`, запись `docs/PR_CHANGELOG.md` с настоящим номером PR и отдельную содержательную документацию. Скрипт сравнивает настоящие base/head SHA.
-- Исторический публичный просмотр сторонних завершённых игр использует выбранный слот и ход из публичного RST; не заменяет приватные snapshots. Исправления карты требуют проверки на реальном наблюдателе; выполненные synthetic/public CI не подтверждают private production parity.
-- `main` — источник истины, `feature/operational-ui` — ветка штатного развёртывания CentOS. Репозиторий публичный; никакие реальные private RST/cookies/HAR/ключи/сообщения не публикуются.
-- Данные и причины: `docs/architecture/PROJECT_STATE.md`, `docs/architecture/CURRENT_HANDOFF.md`, `docs/architecture/ROADMAP.md`, `docs/handoff/2026-10-24-turn-timing-now-visibility.md`.
+- PR #67 добавил явный маркер NOW и единый 30-секундный clock в `frontend/src/features/map/PlayerActivityPanel.tsx`; линия всегда обозначает текущие часы браузера, не среднее KDE. Сглаживание и реальные семплы не менялись.
+- На реальном скриншоте пользователь указал два UX-дефекта: надпись NOW поверх каждого графика выглядит плохо, пунктир предпочтительнее заменить на сплошную линию; `This-game median ready after host 0m` повторяется и бесполезно. В `formatDelay` обнаружено реальное логическое искажение: отрицательные интервалы принудительно превращались в `0m`. Backend готовую медиану вычисляет из `turnreadydate - hostcompleted`, что может быть отрицательным. Ни ноль, ни точный смысл всех таких интервалов на private production не доказаны.
+- PR #69 (https://github.com/Numillyash/planets-intel/pull/69) меняет frontend: метку NOW оставляет только в существующей общепанельной легенде LOCAL/UTC; график показывает сплошную жёлтую вертикальную линию с SVG tooltip/a11y; удаляет из карточки misleading `median ready after host`, оставляет `Median first observed open after host (this game)`, отрицательные и отсутствующие задержки отображает `—`. Data/model/backend не изменены.
+- PR #69 дополняет `frontend/scripts/turn-timing-now-smoke.mjs` проверками общей легенды, четырёх синхронных сплошных линий, исчезновения плавающих подпунктов, мобильного вида и отрицательной задержки. Статус CI/merge **нужно проверить заново**, не считать исходя из существования файлов.
+- Правила PR #68: в **каждом** PR до merge обновляются полный `docs/CONTINUE_HERE.md`, `docs/PR_CHANGELOG.md` с реальным номером PR и тематический документ; PR-only gate `tools/check_pr_handoff.py` проверяет точный base/head SHA.
 
 ## Next actions
 
-1. Проверить live GitHub `main`, `feature/operational-ui`, PR #68, статус PR CI, затем main CI и deployment CI; смотреть документацию, исходники и фактические результаты.
-2. Если PR #68 ещё открыт: исправить все CI замечания, убедиться в прохождении handoff gate, merge только с зелёными тестами, затем проверить push/main CI и синхронизировать deployment-ветку **fast-forward без force** только при подтверждённой истории.
-3. Проверить отображение `NOW` в реальном браузере на собственных Turn timing charts после операторского deploy; считать это отдельной acceptance-проверкой, не заявлять, что один CI доказывает production. Время UTC и browser-local должно соответствовать одному instant; marker position не зависит от среднего KDE.
-4. Продолжить аудит IntelBoard, особенно подтверждения цветов/разведанных планет в собственных observer данных; не публиковать реальные приватные захваты в публичный GitHub. Для доступных публичных архивов есть workflow Public RST visual evidence.
-5. **После каждого существенного сообщения/этапа обновлять и пушить этот промпт по-русски**, а каждый PR должен содержать полный handoff + changelog + дополнительный doc. Не создавать бесконечный docs-only PR для одного обновления SHA после merge; достаточно требования перепроверить live HEAD.
+1. Проверить live PR #69, SHA, backend/frontend/Chromium browser CI, PR handoff gate. Если тесты красные — прочитать конкретные job logs, исправить эту же ветку, синхронизировать handoff и повторить CI.
+2. Перед merge проверить desktop/mobile screenshot артефакты при возможности. Не путать synthetic Chromium с проверкой реальных личных игровых данных. Merge только после успешного CI на точном head SHA.
+3. Проверить postmerge `main` CI, сравнить `feature/operational-ui` с main через compare; выполнить fast-forward **без force**, только при подтверждённом ancestry, проверить deployment branch CI.
+4. После команды оператора `bash /opt/planets-intel/scripts/deploy/production.sh` и доказательства `DEPLOY OK` проверить собственный Turn timing: сплошная линия без NOW внутри графиков, легенда LOCAL/UTC обновляется автоматически, карточка больше не показывает бессмысленную медиану Ready. Без runtime-доказательств production не подтверждён.
+5. Дальше провести реальную разрешённую observer-acceptance карты разведанных чужих и нейтральных планет, не публикуя private RST/HAR/cookies/ключи. Доступен workflow Public RST visual evidence для публичных завершённых игр.
+6. Перед каждым существенным итоговым ответом сохранять актуальный полный **русский** промпт в Git; не открывать отдельный docs-only PR ради недостоверного прогнозируемого SHA.
 
 ## Boundaries
 
-- `factual observation != historical evidence != inference != prediction != draft`, `known zero != unknown`; не заполнять неизвестные значения нулями.
-- Приватный observer только собственный/разрешённый выбранный, не расширять sharing; `INTEL_EXPANDED_SHARING_ENABLED` остаётся off.
-- Исследовательские Host-уровни доказательности `planets-lab` не переносятся автоматически на IntelBoard production.
-- Не заявляй успешный серверный deployment без `DEPLOY OK` и проверки runtime. Операторская команда: `bash /opt/planets-intel/scripts/deploy/production.sh`.
-- Ожидается один связный русский результат после нескольких шагов; запрошенные изменения всегда сначала фиксируются в репозитории.
+- Разделять `factual observation != historical evidence != inference != prediction != draft`; `known zero != unknown`. Не заявлять, что все отрицательные интервалы `turnreadydate - hostcompleted` объяснены; нужен отдельный аудит семантики Host по независимому источнику.
+- Репозиторий публичный: не загружать private RST/cookies/HAR/API keys/личные сообщения. Private observer ограничен собственным/разрешённым выбранным; `INTEL_EXPANDED_SHARING_ENABLED` остаётся off.
+- `planets-lab` не служит самостоятельным доказательством production NuHost parity.
+- Не говорить `deployed` без `DEPLOY OK` и runtime evidence; сам deploy выполняет оператор. Итог на русском, после нескольких связанных действий.
