@@ -6,7 +6,8 @@ on:
 
 jobs:
   public-map-browser:
-    runs-on: ubuntu-latest
+    # Playwright 1.56 Chromium dependencies are not provided on Ubuntu 26.04.
+    runs-on: ubuntu-24.04
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
