@@ -47,8 +47,8 @@ function utcLabelForLocalMinute(local: number): string {
 }
 
 function formatDelay(minutes: number | null): string {
-    if (minutes === null || !Number.isFinite(minutes)) return "—";
-    const rounded = Math.max(0, Math.round(minutes));
+    if (minutes === null || !Number.isFinite(minutes) || minutes < 0) return "—";
+    const rounded = Math.round(minutes);
     const hours = Math.floor(rounded / 60);
     const rest = rounded % 60;
     if (hours === 0) return `${rest}m`;
@@ -124,8 +124,7 @@ function SmoothTimingChart({
     // Both axes refer to the same instant, not the peak/mean of the samples.
     const nowMinute = currentLocalMinute(now);
     const nowX = nowMinute * CHART_WIDTH / DAY_MINUTES;
-    const nowLabel = `NOW · ${formatAxisMinute(nowMinute)} local / ${formatAxisMinute(currentUtcMinute(now))} UTC`;
-    const labelOnRight = nowX < CHART_WIDTH - 44;
+    const nowLabel = `Current time · ${formatAxisMinute(nowMinute)} local / ${formatAxisMinute(currentUtcMinute(now))} UTC`;
     const localTicks = [0, 360, 720, 1080, 1440];
 
     return (
@@ -146,13 +145,13 @@ function SmoothTimingChart({
             </div>
 
             <svg
-                aria-label={`${label} smoothed local-time distribution from ${values.length} factual turn observations. ${nowLabel} is the yellow dashed current-time marker, not an average.`}
+                aria-label={`${label} smoothed local-time distribution from ${values.length} factual turn observations. ${nowLabel} is the solid yellow current-time marker, not an average.`}
                 className="turn-timing-density-svg"
                 preserveAspectRatio="none"
                 role="img"
                 viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
             >
-                <title>{nowLabel} — dashed yellow line marks the current time, not the mean.</title>
+                <title>{nowLabel} — solid yellow line marks the current time, not the mean.</title>
                 <line className="turn-timing-grid-line" x1="0" x2={CHART_WIDTH} y1="43" y2="43" />
                 <line className="turn-timing-grid-line" x1="0" x2={CHART_WIDTH} y1={CHART_BASELINE} y2={CHART_BASELINE} />
                 {values.length > 0 && (
@@ -179,18 +178,9 @@ function SmoothTimingChart({
                     data-now-minute={nowMinute.toFixed(2)}
                     x1={nowX}
                     x2={nowX}
-                    y1="14"
+                    y1="4"
                     y2={CHART_BASELINE + 8}
                 />
-                <text
-                    className="turn-timing-now-label"
-                    data-now-label={nowLabel}
-                    x={nowX + (labelOnRight ? 5 : -5)}
-                    y="10"
-                    textAnchor={labelOnRight ? "start" : "end"}
-                >
-                    NOW
-                </text>
             </svg>
 
             <div className="turn-timing-dual-axis is-local" aria-hidden="true">
@@ -258,12 +248,8 @@ function ActivityCard({
 
             <div className="turn-timing-latency-row">
                 <span>
-                    This-game median open after host
+                    Median first observed open after host (this game)
                     <strong>{formatDelay(item.median_open_after_host_minutes)}</strong>
-                </span>
-                <span>
-                    This-game median ready after host
-                    <strong>{formatDelay(item.median_ready_after_host_minutes)}</strong>
                 </span>
             </div>
         </article>
@@ -382,7 +368,7 @@ export function PlayerActivityPanel(props: {
 
                 {scope === "all-current" && (
                     <div className="turn-timing-scope-note">
-                        Combining same canonical usernames across {currentGamesConsidered} Running/Joining game{currentGamesConsidered === 1 ? "" : "s"}
+                        Combining same canonical usernames across {currentGamesConsidered} Running/Joining game{currentGamesConsidered === 1 ? "" : "s"}{" "}
                         accessible to your active linked observers. Ambiguous same-game identities are excluded.
                     </div>
                 )}
@@ -401,10 +387,11 @@ export function PlayerActivityPanel(props: {
                     Bottom axis is this browser&apos;s local clock; the aligned top axis is UTC. Curves are
                     circular presentation smoothing of factual time-of-day samples and are normalized per
                     chart, so curve height should be read as habit shape rather than an absolute probability.
-                    The yellow dashed NOW line marks the current clock time on both axes and updates automatically;
+                    The solid yellow line (identified in the NOW legend above) marks the current clock time on both axes and updates automatically;
                     it is not an average of player activity.
-                    First-open remains bounded by the polling interval; Ready uses Planets.nu turnreadydate
-                    when available. These observations describe game-turn activity, not continuous online presence.
+                    First-open and its after-host delay are bounded by the polling interval; Ready uses Planets.nu turnreadydate
+                    when available. A ready-after-host median is not displayed because ready timestamps can predate the
+                    matching host timestamp and an apparent 0m may be misleading. These observations describe game-turn activity, not continuous online presence.
                 </p>
             </div>
         </section>

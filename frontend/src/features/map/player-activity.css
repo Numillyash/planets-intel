@@ -52,7 +52,7 @@
 .turn-timing-now-reference i {
     width: 12px;
     height: 0;
-    border-top: 2px dashed #ebc56e;
+    border-top: 2px solid #ebc56e;
 }
 
 .turn-timing-heading-actions {
@@ -245,20 +245,8 @@
 .turn-timing-now-line {
     stroke: #efc86f;
     stroke-width: 1.4;
-    stroke-dasharray: 4 3;
     opacity: 0.94;
     vector-effect: non-scaling-stroke;
-}
-
-.turn-timing-now-label {
-    fill: #efc86f;
-    stroke: #07101a;
-    stroke-width: 2px;
-    paint-order: stroke;
-    font-size: 9px;
-    font-weight: 750;
-    letter-spacing: 0.04em;
-    pointer-events: none;
 }
 
 .turn-timing-dual-axis {
@@ -293,8 +281,8 @@
 }
 
 .turn-timing-latency-row {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    display: flex;
+    flex-wrap: wrap;
     gap: 8px;
 }
 
@@ -302,6 +290,7 @@
     display: flex;
     align-items: baseline;
     justify-content: space-between;
+    flex: 1 1 260px;
     gap: 8px;
     padding: 6px 8px;
     border-radius: 6px;
@@ -361,7 +350,4 @@
         flex: 1 1 0;
     }
 
-    .turn-timing-latency-row {
-        grid-template-columns: 1fr;
-    }
 }

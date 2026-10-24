@@ -12,7 +12,7 @@ const samplePlayer=(slot_id,username)=>({
   open_utc_minutes:[30,180,720],
   ready_utc_minutes:[60,660,1100],
   typical_open_utc_minute:null,typical_ready_utc_minute:null,
-  median_open_after_host_minutes:120,median_ready_after_host_minutes:95,
+  median_open_after_host_minutes:slot_id===2?-90:120,median_ready_after_host_minutes:95,
   prediction_confidence:"high",all_current_games_count:2,
   all_current_games_open_samples:3,all_current_games_ready_samples:3,
   all_current_games_open_utc_minutes:[30,180,720],
@@ -48,7 +48,9 @@ const assertMarkers=async (local,utc)=>{
   const marker=page.locator(".turn-timing-now-line");
   const labels=page.locator(".turn-timing-now-label");
   assert.equal(await marker.count(),4,"Every chart must have its own live marker");
-  assert.equal(await labels.count(),4,"Every chart must visibly say NOW");
+  assert.equal(await labels.count(),0,"NOW must appear only in the legend, not inside plots");
+  const strokeStyles=await marker.evaluateAll(nodes=>nodes.map(node=>getComputedStyle(node).strokeDasharray));
+  assert(strokeStyles.every(dash=>dash==="none"),"Current-time markers must be solid: "+strokeStyles);
   const positions=await marker.evaluateAll(els=>els.map(el=>Number(el.getAttribute("x1"))));
   assert(positions.every(x=>Math.abs(x-positions[0])<0.001),
     "Four charts disagree about what time it is: "+positions);
@@ -70,18 +72,22 @@ try {
     waitUntil:"networkidle",timeout:30000,
   });
   const before=await assertMarkers("16:41","13:41");
+  const cardText=await page.locator(".turn-timing-player-card").allTextContents();
+  assert(cardText.every(t=>!t.includes("median ready after host")),"Invalid ready-after-host median is still rendered");
+  assert(cardText[0].includes("Median first observed open after host (this game)")&&cardText[0].includes("2h"),"First-open median is missing");
+  assert(cardText[1].includes("—")&&!cardText[1].includes("0m"),"Negative delay was silently clamped to 0m");
   await page.screenshot({path:output+"/desktop-now.png",fullPage:true});
-  console.log("PASS: current time label and identical marker positions in 4 real charts",before);
+  console.log("PASS: legend-only label, solid markers and identical positions in 4 real charts",before);
 
   await page.clock.fastForward(2*60*1000);
   const after=await assertMarkers("16:43","13:43");
   assert(after>before,"NOW marker did not advance when time advanced");
-  console.log("PASS: NOW label and all chart lines advance automatically",before,after);
+  console.log("PASS: clock legend and all chart lines advance automatically",before,after);
 
   await page.setViewportSize({width:390,height:844});
   await page.screenshot({path:output+"/mobile-now.png",fullPage:true});
-  const labels=await page.locator(".turn-timing-now-label").allTextContents();
-  assert(labels.every(t=>t==="NOW"),"Mobile marker labels must remain visible");
+  assert.equal(await page.locator(".turn-timing-now-label").count(),0,"Mobile must not add in-plot labels");
+  assert(await page.getByTestId("turn-timing-now-clock").isVisible(),"Clock legend missing on mobile");
   assert.equal(errors.length,0,"Browser JS errors: "+errors.join("\n"));
   console.log("PASS: responsive browser capture, no JS errors");
 } catch(e){
