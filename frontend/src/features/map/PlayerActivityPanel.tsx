@@ -12,6 +12,7 @@ const CHART_BASELINE = 70;
 const CHART_AMPLITUDE = 54;
 
 type TimingScope = "all-current" | "this-game";
+type TimingZone = "local" | "utc";
 
 function localOffsetMinutes(): number {
     return -new Date().getTimezoneOffset();
@@ -24,6 +25,12 @@ function browserTimezoneName(): string {
 function localMinute(utcMinute: number): number {
     const offsetMinutes = localOffsetMinutes();
     return ((Math.trunc(utcMinute) + offsetMinutes) % DAY_MINUTES + DAY_MINUTES) % DAY_MINUTES;
+}
+
+function sampleMinute(utcMinute: number, zone: TimingZone): number {
+    return zone === "local"
+        ? localMinute(utcMinute)
+        : ((Math.trunc(utcMinute) % DAY_MINUTES) + DAY_MINUTES) % DAY_MINUTES;
 }
 
 function formatUtcOffset(): string {
@@ -42,10 +49,6 @@ function formatAxisMinute(minute: number): string {
         : `${String(hour).padStart(2, "0")}:${String(rest).padStart(2, "0")}`;
 }
 
-function utcLabelForLocalMinute(local: number): string {
-    return formatAxisMinute(local - localOffsetMinutes());
-}
-
 function formatDelay(minutes: number | null): string {
     if (minutes === null || !Number.isFinite(minutes) || minutes < 0) return "—";
     const rounded = Math.round(minutes);
@@ -61,11 +64,11 @@ function circularDistance(left: number, right: number): number {
     return Math.min(direct, DAY_MINUTES - direct);
 }
 
-function smoothedDensity(values: number[]): number[] {
-    const localSamples = values
+function smoothedDensity(values: number[], zone: TimingZone): number[] {
+    const clockSamples = values
         .filter(Number.isFinite)
-        .map(localMinute);
-    if (localSamples.length === 0) {
+        .map((minute) => sampleMinute(minute, zone));
+    if (clockSamples.length === 0) {
         return Array.from({ length: DENSITY_POINTS }, () => 0);
     }
 
@@ -73,7 +76,7 @@ function smoothedDensity(values: number[]): number[] {
         const minute = index === DENSITY_POINTS - 1
             ? 0
             : index * DAY_MINUTES / (DENSITY_POINTS - 1);
-        return localSamples.reduce((sum, sample) => {
+        return clockSamples.reduce((sum, sample) => {
             const distance = circularDistance(minute, sample);
             const z = distance / DENSITY_SIGMA_MINUTES;
             return sum + Math.exp(-0.5 * z * z);
@@ -110,22 +113,24 @@ function SmoothTimingChart({
     kind,
     gameCount,
     now,
+    zone,
 }: {
     label: string;
     values: number[];
     kind: "open" | "ready";
     gameCount: number;
     now: Date;
+    zone: TimingZone;
 }) {
-    const density = useMemo(() => smoothedDensity(values), [values]);
+    const density = useMemo(() => smoothedDensity(values, zone), [values, zone]);
     const linePath = useMemo(() => densityLinePath(density), [density]);
     const areaPath = useMemo(() => densityAreaPath(density), [density]);
     // One clock is shared by every card and chart; see PlayerActivityPanel.
-    // Both axes refer to the same instant, not the peak/mean of the samples.
-    const nowMinute = currentLocalMinute(now);
+    // Each axis begins at midnight; the marker, density and factual ticks use the same zone.
+    const nowMinute = zone === "local" ? currentLocalMinute(now) : currentUtcMinute(now);
     const nowX = nowMinute * CHART_WIDTH / DAY_MINUTES;
-    const nowLabel = `Current time · ${formatAxisMinute(nowMinute)} local / ${formatAxisMinute(currentUtcMinute(now))} UTC`;
-    const localTicks = [0, 360, 720, 1080, 1440];
+    const nowLabel = `Current time · ${formatAxisMinute(currentLocalMinute(now))} local / ${formatAxisMinute(currentUtcMinute(now))} UTC`;
+    const axisTicks = [0, 360, 720, 1080, 1440];
 
     return (
         <div className={`turn-timing-density is-${kind}`}>
@@ -137,15 +142,10 @@ function SmoothTimingChart({
                 </span>
             </div>
 
-            <div className="turn-timing-dual-axis is-utc" aria-hidden="true">
-                <b>UTC</b>
-                {localTicks.map((minute, index) => (
-                    <span key={`utc-${minute}-${index}`}>{utcLabelForLocalMinute(minute)}</span>
-                ))}
-            </div>
+            <div className="turn-timing-axis-name">{zone === "local" ? "LOCAL" : "UTC"} · 00:00–24:00</div>
 
             <svg
-                aria-label={`${label} smoothed local-time distribution from ${values.length} factual turn observations. ${nowLabel} is the solid yellow current-time marker, not an average.`}
+                aria-label={`${label} smoothed ${zone === "local" ? "local" : "UTC"} time-of-day distribution from ${values.length} factual turn observations. ${nowLabel} is the solid yellow current-time marker, not an average.`}
                 className="turn-timing-density-svg"
                 preserveAspectRatio="none"
                 role="img"
@@ -161,7 +161,7 @@ function SmoothTimingChart({
                     </>
                 )}
                 {values.filter(Number.isFinite).map((raw, index) => {
-                    const x = localMinute(raw) * CHART_WIDTH / DAY_MINUTES;
+                    const x = sampleMinute(raw, zone) * CHART_WIDTH / DAY_MINUTES;
                     return (
                         <line
                             className="turn-timing-sample-tick"
@@ -183,10 +183,11 @@ function SmoothTimingChart({
                 />
             </svg>
 
-            <div className="turn-timing-dual-axis is-local" aria-hidden="true">
-                <b>LOCAL</b>
-                {localTicks.map((minute, index) => (
-                    <span key={`local-${minute}-${index}`}>{minute === 1440 ? "24" : formatAxisMinute(minute)}</span>
+            <div className="turn-timing-day-axis" data-axis-zone={zone} aria-label={`${zone === "local" ? "Local" : "UTC"} time-of-day axis from midnight to midnight`}>
+                {axisTicks.map((minute) => (
+                    <span key={minute} data-axis-minute={minute} style={{ left: `${minute * 100 / DAY_MINUTES}%` }}>
+                        {minute === DAY_MINUTES ? "24" : formatAxisMinute(minute)}
+                    </span>
                 ))}
             </div>
         </div>
@@ -197,10 +198,12 @@ function ActivityCard({
     item,
     scope,
     now,
+    zone,
 }: {
     item: PlayerActivityItem;
     scope: TimingScope;
     now: Date;
+    zone: TimingZone;
 }) {
     const aggregate = scope === "all-current";
     const openValues = aggregate
@@ -234,6 +237,7 @@ function ActivityCard({
                     gameCount={gameCount}
                     kind="ready"
                     now={now}
+                    zone={zone}
                     label="Turn ready"
                     values={readyValues}
                 />
@@ -241,6 +245,7 @@ function ActivityCard({
                     gameCount={gameCount}
                     kind="open"
                     now={now}
+                    zone={zone}
                     label="First observed open"
                     values={openValues}
                 />
@@ -264,6 +269,7 @@ export function PlayerActivityPanel(props: {
     const [items, setItems] = useState<PlayerActivityItem[]>([]);
     const [currentGamesConsidered, setCurrentGamesConsidered] = useState(0);
     const [scope, setScope] = useState<TimingScope>("all-current");
+    const [zone, setZone] = useState<TimingZone>("local");
     const [open, setOpen] = useState(props.embedded ?? false);
     const [now, setNow] = useState(() => new Date());
 
@@ -338,6 +344,12 @@ export function PlayerActivityPanel(props: {
                         </div>
                     </div>
                     <div className="turn-timing-heading-actions">
+                        <div className="turn-timing-scope" role="group" aria-label="Chart timezone">
+                            <button type="button" data-testid="turn-timing-zone-local" aria-pressed={zone === "local"}
+                                className={zone === "local" ? "is-active" : ""} onClick={() => setZone("local")}>LOCAL</button>
+                            <button type="button" data-testid="turn-timing-zone-utc" aria-pressed={zone === "utc"}
+                                className={zone === "utc" ? "is-active" : ""} onClick={() => setZone("utc")}>UTC</button>
+                        </div>
                         <div className="turn-timing-scope" aria-label="Timing data scope">
                             <button
                                 className={scope === "all-current" ? "is-active" : ""}
@@ -378,16 +390,17 @@ export function PlayerActivityPanel(props: {
                 ) : (
                     <div className="turn-timing-player-grid">
                         {visibleItems.map((item) => (
-                            <ActivityCard item={item} key={item.slot_id} now={now} scope={scope} />
+                            <ActivityCard item={item} key={item.slot_id} now={now} scope={scope} zone={zone} />
                         ))}
                     </div>
                 )}
 
                 <p className="turn-timing-note">
-                    Bottom axis is this browser&apos;s local clock; the aligned top axis is UTC. Curves are
-                    circular presentation smoothing of factual time-of-day samples and are normalized per
-                    chart, so curve height should be read as habit shape rather than an absolute probability.
-                    The solid yellow line (identified in the NOW legend above) marks the current clock time on both axes and updates automatically;
+                    Each chart shows one time-of-day axis starting at midnight. Switch LOCAL/UTC to rotate factual ticks,
+                    smoothed curves and the current-time marker together; the two clocks remain visible above.
+                    Curves are circular presentation smoothing of factual time-of-day samples and are normalized per
+                    chart, so curve height represents habit shape rather than an absolute probability.
+                    The solid yellow line (identified in the NOW legend above) marks current time on the selected axis and updates automatically;
                     it is not an average of player activity.
                     First-open and its after-host delay are bounded by the polling interval; Ready uses Planets.nu turnreadydate
                     when available. A ready-after-host median is not displayed because ready timestamps can predate the

@@ -249,35 +249,33 @@
     vector-effect: non-scaling-stroke;
 }
 
-.turn-timing-dual-axis {
-    display: grid;
-    grid-template-columns: 34px repeat(4, 1fr) auto;
-    align-items: center;
-    color: #61768e;
+.turn-timing-axis-name {
+    margin: 3px 0 0;
+    color: #7891aa;
+    font-size: 8px;
+    letter-spacing: 0.05em;
+}
+
+.turn-timing-day-axis {
+    position: relative;
+    height: 14px;
+    color: #7891aa;
     font-size: 8px;
     font-variant-numeric: tabular-nums;
 }
 
-.turn-timing-dual-axis.is-utc {
-    margin: 4px 0 -2px;
+.turn-timing-day-axis span {
+    position: absolute;
+    top: 0;
+    transform: translateX(-50%);
 }
 
-.turn-timing-dual-axis.is-local {
-    margin-top: -5px;
+.turn-timing-day-axis span:first-child {
+    transform: none;
 }
 
-.turn-timing-dual-axis b {
-    color: #7891aa;
-    font-size: 7px;
-    letter-spacing: 0.06em;
-}
-
-.turn-timing-dual-axis span {
-    text-align: center;
-}
-
-.turn-timing-dual-axis span:last-child {
-    text-align: right;
+.turn-timing-day-axis span:last-child {
+    transform: translateX(-100%);
 }
 
 .turn-timing-latency-row {

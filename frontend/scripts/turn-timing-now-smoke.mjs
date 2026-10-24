@@ -40,7 +40,7 @@ page.on("console",e=>{if(e.type()==="error")errors.push(e.text());});
 await page.route("**/api/games/687568/activity*",route=>route.fulfill({
   status:200,contentType:"application/json",body:JSON.stringify(response),
 }));
-const assertMarkers=async (local,utc)=>{
+const assertMarkers=async (local,utc,zone="local")=>{
   await page.getByTestId("turn-timing-now-clock").waitFor({state:"visible"});
   const header=await page.getByTestId("turn-timing-now-clock").innerText();
   assert(header.includes("NOW") && header.includes(local+" local")
@@ -54,10 +54,20 @@ const assertMarkers=async (local,utc)=>{
   const positions=await marker.evaluateAll(els=>els.map(el=>Number(el.getAttribute("x1"))));
   assert(positions.every(x=>Math.abs(x-positions[0])<0.001),
     "Four charts disagree about what time it is: "+positions);
-  const expectedLocalMinute=Number(local.slice(0,2))*60+Number(local.slice(3));
-  const expectedX=expectedLocalMinute*300/1440;
+  const target=zone==="local"?local:utc;
+  const expectedMinute=Number(target.slice(0,2))*60+Number(target.slice(3));
+  const expectedX=expectedMinute*300/1440;
   assert(Math.abs(positions[0]-expectedX)<0.25,
-    "NOW line position does not match local time: "+positions[0]+" expected "+expectedX);
+    "NOW line position does not match selected zone: "+positions[0]+" expected "+expectedX);
+  const axes=page.locator(".turn-timing-day-axis");
+  assert.equal(await axes.count(),4,"Every chart needs exactly one midnight-first axis");
+  const axisZones=await axes.evaluateAll(nodes=>nodes.map(n=>n.getAttribute("data-axis-zone")));
+  assert(axisZones.every(x=>x===zone),"Chart axis did not switch: "+axisZones);
+  const axisLabels=await axes.first().locator("span").allTextContents();
+  assert.deepEqual(axisLabels.map(s=>s.trim()),["00","06","12","18","24"],"Axis must start at midnight");
+  assert.equal(await page.locator(".turn-timing-dual-axis").count(),0,"Legacy mismatched UTC axis still present");
+  assert.equal(await page.getByTestId("turn-timing-zone-"+zone).getAttribute("aria-pressed"),"true");
+  assert.equal(await page.getByTestId("turn-timing-zone-"+(zone==="local"?"utc":"local")).getAttribute("aria-pressed"),"false");
   // SVG <title> does not expose innerText in Chromium; read textContent.
   const titles=await page.locator(".turn-timing-density-svg title")
     .evaluateAll(nodes=>nodes.map(node=>node.textContent??""));
@@ -76,7 +86,22 @@ try {
   assert(cardText.every(t=>!t.includes("median ready after host")),"Invalid ready-after-host median is still rendered");
   assert(cardText[0].includes("Median first observed open after host (this game)")&&cardText[0].includes("2h"),"First-open median is missing");
   assert(cardText[1].includes("—")&&!cardText[1].includes("0m"),"Negative delay was silently clamped to 0m");
+  const localTick=Number(await page.locator(".turn-timing-density.is-ready .turn-timing-sample-tick").first().getAttribute("x1"));
+  const localDensity=await page.locator(".turn-timing-density.is-ready .turn-timing-density-line").first().getAttribute("d");
+  assert(Math.abs(localTick-240*300/1440)<0.01,"UTC 01:00 should be LOCAL 04:00 at UTC+3: "+localTick);
   await page.screenshot({path:output+"/desktop-now.png",fullPage:true});
+
+  await page.getByTestId("turn-timing-zone-utc").click();
+  const utcBefore=await assertMarkers("16:41","13:41","utc");
+  const utcTick=Number(await page.locator(".turn-timing-density.is-ready .turn-timing-sample-tick").first().getAttribute("x1"));
+  const utcDensity=await page.locator(".turn-timing-density.is-ready .turn-timing-density-line").first().getAttribute("d");
+  assert(Math.abs(utcTick-60*300/1440)<0.01,"UTC 01:00 should remain UTC 01:00: "+utcTick);
+  assert.notEqual(localDensity,utcDensity,"Smoothed curves must rotate along with samples");
+  assert(Math.abs(before-utcBefore-3*60*300/1440)<0.01,"LOCAL/UTC marker offset should be exactly 3h");
+  await page.screenshot({path:output+"/desktop-utc.png",fullPage:true});
+  await page.getByTestId("turn-timing-zone-local").click();
+  await assertMarkers("16:41","13:41");
+  assert.equal(await page.locator(".turn-timing-density.is-ready .turn-timing-density-line").first().getAttribute("d"),localDensity,"Switching back must restore original curve");
   console.log("PASS: legend-only label, solid markers and identical positions in 4 real charts",before);
 
   await page.clock.fastForward(2*60*1000);
@@ -85,9 +110,12 @@ try {
   console.log("PASS: clock legend and all chart lines advance automatically",before,after);
 
   await page.setViewportSize({width:390,height:844});
+  await page.getByTestId("turn-timing-zone-utc").click();
+  await assertMarkers("16:43","13:43","utc");
   await page.screenshot({path:output+"/mobile-now.png",fullPage:true});
   assert.equal(await page.locator(".turn-timing-now-label").count(),0,"Mobile must not add in-plot labels");
   assert(await page.getByTestId("turn-timing-now-clock").isVisible(),"Clock legend missing on mobile");
+  assert(await page.getByTestId("turn-timing-zone-local").isVisible(),"Timezone toggle missing on mobile");
   assert.equal(errors.length,0,"Browser JS errors: "+errors.join("\n"));
   console.log("PASS: responsive browser capture, no JS errors");
 } catch(e){
