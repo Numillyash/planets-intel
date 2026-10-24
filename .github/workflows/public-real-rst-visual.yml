@@ -27,7 +27,8 @@ permissions:
 jobs:
   capture-public-rst:
     if: github.event_name == 'workflow_dispatch' || github.head_ref == 'fix/source-backed-survey-and-public-visual-evidence'
-    runs-on: ubuntu-latest
+    # Playwright 1.56 Chromium supports Ubuntu 24.04; not the latest 26.04 image.
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
