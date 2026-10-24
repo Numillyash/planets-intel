@@ -33,10 +33,13 @@ jobs:
             sleep 1
           done
           node scripts/public-surface-smoke.mjs
+          node scripts/turn-timing-now-smoke.mjs
       - name: Upload map and failure captures
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: public-surface-screenshots
-          path: /tmp/public-surface-smoke
+          name: public-surface-and-turn-timing-screenshots
+          path: |
+            /tmp/public-surface-smoke
+            /tmp/turn-timing-now-smoke
           if-no-files-found: ignore
