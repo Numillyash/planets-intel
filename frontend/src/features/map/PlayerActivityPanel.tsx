@@ -96,9 +96,12 @@ function densityAreaPath(density: number[]): string {
     return `${line} L${CHART_WIDTH},${CHART_BASELINE} L0,${CHART_BASELINE} Z`;
 }
 
-function currentLocalMinute(): number {
-    const now = new Date();
+function currentLocalMinute(now: Date): number {
     return now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
+}
+
+function currentUtcMinute(now: Date): number {
+    return now.getUTCHours() * 60 + now.getUTCMinutes() + now.getUTCSeconds() / 60;
 }
 
 function SmoothTimingChart({
@@ -106,23 +109,23 @@ function SmoothTimingChart({
     values,
     kind,
     gameCount,
+    now,
 }: {
     label: string;
     values: number[];
     kind: "open" | "ready";
     gameCount: number;
+    now: Date;
 }) {
     const density = useMemo(() => smoothedDensity(values), [values]);
     const linePath = useMemo(() => densityLinePath(density), [density]);
     const areaPath = useMemo(() => densityAreaPath(density), [density]);
-    const [nowMinute, setNowMinute] = useState(currentLocalMinute);
-
-    useEffect(() => {
-        const timer = window.setInterval(() => setNowMinute(currentLocalMinute()), 60 * 1000);
-        return () => window.clearInterval(timer);
-    }, []);
-
+    // One clock is shared by every card and chart; see PlayerActivityPanel.
+    // Both axes refer to the same instant, not the peak/mean of the samples.
+    const nowMinute = currentLocalMinute(now);
     const nowX = nowMinute * CHART_WIDTH / DAY_MINUTES;
+    const nowLabel = `NOW · ${formatAxisMinute(nowMinute)} local / ${formatAxisMinute(currentUtcMinute(now))} UTC`;
+    const labelOnRight = nowX < CHART_WIDTH - 44;
     const localTicks = [0, 360, 720, 1080, 1440];
 
     return (
@@ -143,12 +146,13 @@ function SmoothTimingChart({
             </div>
 
             <svg
-                aria-label={`${label} smoothed local-time distribution from ${values.length} factual turn observations`}
+                aria-label={`${label} smoothed local-time distribution from ${values.length} factual turn observations. ${nowLabel} is the yellow dashed current-time marker, not an average.`}
                 className="turn-timing-density-svg"
                 preserveAspectRatio="none"
                 role="img"
                 viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
             >
+                <title>{nowLabel} — dashed yellow line marks the current time, not the mean.</title>
                 <line className="turn-timing-grid-line" x1="0" x2={CHART_WIDTH} y1="43" y2="43" />
                 <line className="turn-timing-grid-line" x1="0" x2={CHART_WIDTH} y1={CHART_BASELINE} y2={CHART_BASELINE} />
                 {values.length > 0 && (
@@ -172,11 +176,21 @@ function SmoothTimingChart({
                 })}
                 <line
                     className="turn-timing-now-line"
+                    data-now-minute={nowMinute.toFixed(2)}
                     x1={nowX}
                     x2={nowX}
-                    y1="5"
+                    y1="14"
                     y2={CHART_BASELINE + 8}
                 />
+                <text
+                    className="turn-timing-now-label"
+                    data-now-label={nowLabel}
+                    x={nowX + (labelOnRight ? 5 : -5)}
+                    y="10"
+                    textAnchor={labelOnRight ? "start" : "end"}
+                >
+                    NOW
+                </text>
             </svg>
 
             <div className="turn-timing-dual-axis is-local" aria-hidden="true">
@@ -192,9 +206,11 @@ function SmoothTimingChart({
 function ActivityCard({
     item,
     scope,
+    now,
 }: {
     item: PlayerActivityItem;
     scope: TimingScope;
+    now: Date;
 }) {
     const aggregate = scope === "all-current";
     const openValues = aggregate
@@ -227,12 +243,14 @@ function ActivityCard({
                 <SmoothTimingChart
                     gameCount={gameCount}
                     kind="ready"
+                    now={now}
                     label="Turn ready"
                     values={readyValues}
                 />
                 <SmoothTimingChart
                     gameCount={gameCount}
                     kind="open"
+                    now={now}
                     label="First observed open"
                     values={openValues}
                 />
@@ -261,6 +279,14 @@ export function PlayerActivityPanel(props: {
     const [currentGamesConsidered, setCurrentGamesConsidered] = useState(0);
     const [scope, setScope] = useState<TimingScope>("all-current");
     const [open, setOpen] = useState(props.embedded ?? false);
+    const [now, setNow] = useState(() => new Date());
+
+    // A single live clock drives every chart; 30 seconds is ample for
+    // time-of-day context without mounting a timer for every player.
+    useEffect(() => {
+        const timer = window.setInterval(() => setNow(new Date()), 30 * 1000);
+        return () => window.clearInterval(timer);
+    }, []);
 
     useEffect(() => {
         if (props.embedded) setOpen(true);
@@ -317,6 +343,12 @@ export function PlayerActivityPanel(props: {
                         <div className="turn-timing-time-reference">
                             <span><strong>LOCAL</strong> {browserTimezoneName()} · {formatUtcOffset()}</span>
                             <span><strong>GLOBAL</strong> UTC</span>
+                            <span className="turn-timing-now-reference" data-testid="turn-timing-now-clock">
+                                <i aria-hidden="true" />
+                                <strong>NOW</strong>
+                                {formatAxisMinute(currentLocalMinute(now))} local
+                                {" / "}{formatAxisMinute(currentUtcMinute(now))} UTC
+                            </span>
                         </div>
                     </div>
                     <div className="turn-timing-heading-actions">
@@ -360,7 +392,7 @@ export function PlayerActivityPanel(props: {
                 ) : (
                     <div className="turn-timing-player-grid">
                         {visibleItems.map((item) => (
-                            <ActivityCard item={item} key={item.slot_id} scope={scope} />
+                            <ActivityCard item={item} key={item.slot_id} now={now} scope={scope} />
                         ))}
                     </div>
                 )}
@@ -369,6 +401,8 @@ export function PlayerActivityPanel(props: {
                     Bottom axis is this browser&apos;s local clock; the aligned top axis is UTC. Curves are
                     circular presentation smoothing of factual time-of-day samples and are normalized per
                     chart, so curve height should be read as habit shape rather than an absolute probability.
+                    The yellow dashed NOW line marks the current clock time on both axes and updates automatically;
+                    it is not an average of player activity.
                     First-open remains bounded by the polling interval; Ready uses Planets.nu turnreadydate
                     when available. These observations describe game-turn activity, not continuous online presence.
                 </p>
