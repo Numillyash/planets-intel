@@ -12,6 +12,21 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  pr-handoff:
+    name: PR continuation and documentation
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify exact PR base and head documentation
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$PR_BASE_SHA" "$PR_HEAD_SHA"
+          python3 tools/check_pr_handoff.py --base "$PR_BASE_SHA" --head "$PR_HEAD_SHA" --pr-number "$PR_NUMBER"
+
   backend-tests:
     name: Backend tests
     runs-on: ubuntu-latest
