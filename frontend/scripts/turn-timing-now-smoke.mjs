@@ -56,7 +56,9 @@ const assertMarkers=async (local,utc)=>{
   const expectedX=expectedLocalMinute*300/1440;
   assert(Math.abs(positions[0]-expectedX)<0.25,
     "NOW line position does not match local time: "+positions[0]+" expected "+expectedX);
-  const titles=await page.locator(".turn-timing-density-svg title").allInnerTexts();
+  // SVG <title> does not expose innerText in Chromium; read textContent.
+  const titles=await page.locator(".turn-timing-density-svg title")
+    .evaluateAll(nodes=>nodes.map(node=>node.textContent??""));
   assert.equal(titles.length,4);
   assert(titles.every(t=>t.includes(local+" local")&&t.includes(utc+" UTC")
     &&t.includes("not the mean")),"SVG tooltips missing time context: "+titles);
