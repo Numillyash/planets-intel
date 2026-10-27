@@ -1,3 +1,21 @@
+export interface FullTankMassScenario {
+    assumed_fuel: number;
+    feasible: boolean;
+    remaining_mass_ceiling: number | null;
+    fighter_ceiling: number | null;
+}
+
+export interface UniformBeamScenario {
+    beam_id: number;
+    beam_name: string;
+    beam_tech: number | null;
+    beam_count_assumed: number;
+    beam_mass_each: number;
+    beam_mass_total: number;
+    full_tank_compatible: boolean;
+    fighter_ceiling: number | null;
+}
+
 export type ThreatRisk = "critical" | "high" | "medium" | "low" | "unknown";
 
 export interface ThreatRaceTrait {
@@ -125,12 +143,8 @@ export interface ShipThreatAnalysis {
         vcr_reveal: ThreatVcrReveal | null;
         beam_candidates: ThreatBeamCandidate[];
         torpedo_candidates: ThreatTorpedoCandidate[];
-        full_tank_scenario?: {
-            assumed_fuel: number;
-            feasible: boolean;
-            remaining_mass_ceiling: number | null;
-            fighter_ceiling: number | null;
-        } | null;
+        full_tank_scenario?: FullTankMassScenario | null;
+        uniform_beam_scenarios?: UniformBeamScenario[];
         mass_excess_over_bare_hull: number | null;
         mass_caveat: string;
     };
