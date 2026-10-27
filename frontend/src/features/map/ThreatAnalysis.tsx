@@ -8,6 +8,7 @@ import type {
     ThreatTorpedoCandidate,
 } from "../../types/threat";
 import { DetailSection, FactRow } from "./DetailPrimitives";
+import { FullTankBeamScenarios } from "./FullTankBeamScenarios";
 
 
 function riskColor(risk: ThreatRisk): string {
@@ -149,7 +150,6 @@ export function ThreatAnalysis({
     const provenance = analysis.provenance ?? null;
     const subjectFactTurn = analysis.subject.info_turn ?? analysis.turn;
     const observerCount = provenance?.accessible_observer_ids.length ?? 0;
-    const fullTank = analysis.loadout.full_tank_scenario ?? null;
 
     return (
         <DetailSection title="Threat analysis · inference">
@@ -227,26 +227,13 @@ export function ThreatAnalysis({
                 <p className="intel-no-facts" style={{ marginTop: 6 }}>
                     {analysis.loadout.mass_caveat}
                 </p>
-                {fullTank !== null && (
-                    <div style={{ marginTop: 9 }}>
-                        <strong style={{ fontSize: 11 }}>Full-tank scenario · NOT OBSERVED</strong>
-                        {fullTank.feasible ? (
-                            <dl className="intel-fact-list" style={{ marginTop: 4 }}>
-                                <FactRow label="Assumed fuel" value={`${fullTank.assumed_fuel} kt`} />
-                                <FactRow label="Mass available for all other components" value={`≤ ${fullTank.remaining_mass_ceiling} kt`} />
-                                {fullTank.fighter_ceiling !== null && (
-                                    <FactRow label="Conditional fighters upper bound" value={`≤ ${fullTank.fighter_ceiling}`} />
-                                )}
-                            </dl>
-                        ) : (
-                            <p className="intel-no-facts">The observed mass cannot accommodate a full tank.</p>
-                        )}
-                        <p className="intel-no-facts">
-                            Assumes a full tank and 1 kt per fighter. Beams and cargo consume this residual too.
-                            Unlimited Fuel does not prove a full tank; this is not a measured fighter count.
-                        </p>
-                    </div>
-                )}
+                <FullTankBeamScenarios
+                    observedMass={analysis.subject.observed_mass}
+                    hullMass={analysis.subject.hull_mass}
+                    beamSlots={analysis.subject.beam_slots}
+                    fullTank={analysis.loadout.full_tank_scenario}
+                    candidates={analysis.loadout.uniform_beam_scenarios}
+                />
             </div>
 
             {analysis.race_traits !== undefined && analysis.race_traits.length > 0 && (

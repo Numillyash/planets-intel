@@ -14,7 +14,10 @@ from app.models.score_observation import ScoreObservation
 from app.models.ship_observation import ShipObservation
 from app.models.starbase_observation import StarbaseObservation
 from app.services.intel_access import accessible_intel_accounts
-from app.services.ship_threat_evidence import compatible_vcr_side, defender_ammo, full_tank_scenario
+from app.services.ship_threat_evidence import (
+    compatible_vcr_side, defender_ammo, full_tank_scenario,
+    hull_fuel_capacity, uniform_beam_fighter_scenarios,
+)
 
 
 WARP_9_DISTANCE = 81.0
@@ -396,7 +399,7 @@ def get_ship_threat_analysis(
     hull_beam_slots = _integer(hull, "beams") if hull is not None else None
     hull_tube_slots = _integer(hull, "launchers") if hull is not None else None
     hull_bays = _integer(hull, "fighterbays") if hull is not None else None
-    fuel_capacity = _integer(hull, "fuel") if hull is not None else None
+    fuel_capacity = hull_fuel_capacity(hull)
 
     vcr_equipment = _combat_equipment(
         combats=combat_rows,
@@ -433,8 +436,8 @@ def get_ship_threat_analysis(
         ):
             minimum_mass = hull_mass + hull_beam_slots * beam_mass
             if (
-                minimum_observed_mass is not None
-                and minimum_mass > minimum_observed_mass
+                observed_mass is not None
+                and minimum_mass > observed_mass
             ):
                 continue
         beam_candidates.append(
@@ -731,6 +734,11 @@ def get_ship_threat_analysis(
             "full_tank_scenario": full_tank_scenario(
                 mass=observed_mass, bare_mass=hull_mass,
                 fuel_capacity=fuel_capacity, fighter_bays=hull_bays,
+            ),
+            "uniform_beam_scenarios": uniform_beam_fighter_scenarios(
+                mass=observed_mass, bare_mass=hull_mass,
+                fuel_capacity=fuel_capacity, beam_slots=hull_beam_slots,
+                fighter_bays=hull_bays, beams=list(beams.values()),
             ),
         },
         "race_traits": race_traits,

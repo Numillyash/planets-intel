@@ -9,7 +9,10 @@ from app.models.private_observation_batch import PrivateObservationBatch
 from app.models.score_observation import ScoreObservation
 from app.models.ship_observation import ShipObservation
 from app.services.intel_access import accessible_intel_accounts
-from app.services.ship_threat_evidence import compatible_vcr_side
+from app.services.ship_threat_evidence import (
+    compatible_vcr_side, hull_fuel_capacity, full_tank_scenario,
+    uniform_beam_fighter_scenarios,
+)
 
 
 COST_MC_KEYS = ("megacredits", "mc", "costmc", "megacreditcost")
@@ -310,7 +313,7 @@ def get_ship_loadout_inference(
     payload = subject.payload if isinstance(subject.payload, dict) else {}
     observed_mass = _integer(payload, "mass")
     hull_mass = _integer(hull, "mass")
-    fuel_capacity = _integer(hull, "fuel", "fueltank", "fuelcapacity")
+    fuel_capacity = hull_fuel_capacity(hull)
     cargo_capacity = _integer(hull, "cargo", "cargocapacity")
     engine_count = _integer(hull, "engines") or 0
     beam_slots = _integer(hull, "beams") or 0
@@ -533,6 +536,15 @@ def get_ship_loadout_inference(
                 f"{len(candidate_build_events)} public fleet-growth event(s) at or before first factual sighting T{first_observed_turn} are evaluated independently."
             ),
         },
+        "full_tank_scenario": full_tank_scenario(
+            mass=observed_mass, bare_mass=hull_mass,
+            fuel_capacity=fuel_capacity, fighter_bays=fighter_bays,
+        ),
+        "uniform_beam_scenarios": uniform_beam_fighter_scenarios(
+            mass=observed_mass, bare_mass=hull_mass,
+            fuel_capacity=fuel_capacity, beam_slots=beam_slots,
+            fighter_bays=fighter_bays, beams=list(beams.values()),
+        ),
         "ranked_candidates": candidates[:16],
         "provenance": {
             "analysis_kind": "read_time_inference",

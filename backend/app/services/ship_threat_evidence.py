@@ -58,3 +58,67 @@ def full_tank_scenario(*, mass: int | None, bare_mass: int | None,
         "remaining_mass_ceiling": residual if residual >= 0 else None,
         "fighter_ceiling": residual if residual >= 0 and (fighter_bays or 0) > 0 else None,
     }
+
+
+def hull_fuel_capacity(hull: dict[str, Any] | None) -> int | None:
+    """Resolve the same per-hull fuel aliases used by loadout inference.
+
+    Planets.nu rule catalogs may spell capacity as fuel, fueltank or
+    fuelcapacity. No hull-specific numeric fallback or invented data.
+    """
+    if not isinstance(hull, dict):
+        return None
+    keys = {str(key).casefold(): value for key, value in hull.items()}
+    for name in ("fuel", "fueltank", "fuelcapacity"):
+        value = nonnegative_int(keys.get(name))
+        if value is not None:
+            return value
+    return None
+
+
+def uniform_beam_fighter_scenarios(
+    *, mass: int | None, bare_mass: int | None,
+    fuel_capacity: int | None, beam_slots: int | None,
+    fighter_bays: int | None, beams: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """What-if full fuel + all beam slots filled with one weapon type.
+
+    The calculation deliberately leaves zero OTHER cargo and counts a fighter
+    as 1 kt. Beam count, fuel fill, uniform weapon type and fighter count are
+    NOT factual observations. Incompatible candidates are kept and marked.
+    The engine is already included in the hull mass.
+    """
+    budget = full_tank_scenario(
+        mass=mass, bare_mass=bare_mass,
+        fuel_capacity=fuel_capacity, fighter_bays=fighter_bays,
+    )
+    if (budget is None or not budget["feasible"]
+            or beam_slots is None or beam_slots <= 0
+            or fighter_bays is None or fighter_bays <= 0):
+        return []
+    residual = budget["remaining_mass_ceiling"]
+    if type(residual) is not int:
+        return []
+    variants: list[dict[str, Any]] = []
+    for record in beams:
+        if not isinstance(record, dict):
+            continue
+        beam_id = nonnegative_int(record.get("id"))
+        beam_mass = nonnegative_int(record.get("mass"))
+        if beam_id is None or beam_id <= 0 or beam_mass is None or beam_mass <= 0:
+            continue
+        total = beam_slots * beam_mass
+        remainder = residual - total
+        variants.append({
+            "beam_id": beam_id,
+            "beam_name": record.get("name") if isinstance(record.get("name"), str)
+                         else f"Beam #{beam_id}",
+            "beam_tech": nonnegative_int(record.get("techlevel")),
+            "beam_count_assumed": beam_slots,
+            "beam_mass_each": beam_mass,
+            "beam_mass_total": total,
+            "full_tank_compatible": remainder >= 0,
+            "fighter_ceiling": remainder if remainder >= 0 else None,
+        })
+    variants.sort(key=lambda v: (v["beam_mass_total"], v["beam_id"]))
+    return variants

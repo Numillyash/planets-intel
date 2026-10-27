@@ -1,3 +1,5 @@
+import type { FullTankMassScenario, UniformBeamScenario } from "./threat";
+
 export interface BuildEventCandidate {
     turn: number;
     warship_delta: number;
@@ -88,6 +90,8 @@ export interface ShipLoadoutInference {
         first_seen_caveat: string;
         historical_score_link?: string;
     };
+    full_tank_scenario?: FullTankMassScenario | null;
+    uniform_beam_scenarios?: UniformBeamScenario[];
     ranked_candidates?: RankedLoadoutCandidate[];
     provenance?: {
         analysis_kind: "read_time_inference";

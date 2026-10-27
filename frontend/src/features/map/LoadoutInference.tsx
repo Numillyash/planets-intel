@@ -7,6 +7,7 @@ import type {
     ShipLoadoutInference,
 } from "../../types/loadout";
 import { FactRow } from "./DetailPrimitives";
+import { FullTankBeamScenarios } from "./FullTankBeamScenarios";
 
 function signed(value: number | null): string {
     if (value === null) return "—";
@@ -92,6 +93,14 @@ export function LoadoutInference({
                     {engineConstraint.detail}
                 </p>
             )}
+
+            <FullTankBeamScenarios
+                observedMass={result.subject.observed_mass}
+                hullMass={result.subject.hull_mass}
+                beamSlots={result.subject.beam_slots}
+                fullTank={result.full_tank_scenario}
+                candidates={result.uniform_beam_scenarios}
+            />
 
             <strong style={{ display: "block", fontSize: 11, marginTop: 10 }}>Candidate construction events</strong>
             {buildEvents.length === 0 ? (
