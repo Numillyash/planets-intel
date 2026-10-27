@@ -79,7 +79,9 @@ export function LoadoutInference({
                 <FactRow label="First observed" value={`T${result.subject.first_observed_turn}`} />
                 <FactRow label="Observed warp" value={result.subject.observed_warp ?? "—"} />
                 {engineConstraint?.kind === "hard_minimum_tech" && (
-                    <FactRow label="Engine constraint" value={`Tech ${engineConstraint.min_engine_tech}+`} />
+                    <FactRow label="Engine constraint" value={engineConstraint.resolved_engine
+                        ? `${engineConstraint.resolved_engine.name} · Tech ${engineConstraint.resolved_engine.tech} (unique catalog match)`
+                        : `Tech ${engineConstraint.min_engine_tech}+`} />
                 )}
                 {ledger !== undefined && <FactRow label="Public fleet" value={`${ledger.warships ?? "?"} warships${ledger.warship_delta !== null ? ` (${signed(ledger.warship_delta)})` : ""} · ${ledger.freighters ?? "?"} freighters${ledger.freighter_delta !== null ? ` (${signed(ledger.freighter_delta)})` : ""}`} />}
                 {ledger !== undefined && <FactRow label="Visible fleet" value={`${ledger.visible_warships} warships · ${ledger.visible_noncombat_ships} non-combat`} />}
