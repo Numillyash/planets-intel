@@ -9,6 +9,7 @@ from app.models.private_observation_batch import PrivateObservationBatch
 from app.models.score_observation import ScoreObservation
 from app.models.ship_observation import ShipObservation
 from app.services.intel_access import accessible_intel_accounts
+from app.services.ship_threat_evidence import compatible_vcr_side
 
 
 COST_MC_KEYS = ("megacredits", "mc", "costmc", "megacreditcost")
@@ -99,6 +100,7 @@ def _latest_subject(
 def _latest_vcr_equipment(
     combats: list[tuple[CombatObservation, PrivateObservationBatch]],
     ship_id: int,
+    *, hull_id: int | None, beam_slots: int, tube_slots: int, fighter_bays: int,
 ) -> dict[str, Any] | None:
     candidates: list[dict[str, Any]] = []
     for combat, batch in combats:
@@ -106,6 +108,9 @@ def _latest_vcr_equipment(
         for side_name in ("left", "right"):
             side = payload.get(side_name)
             if not isinstance(side, dict) or side.get("objectid") != ship_id:
+                continue
+            if not compatible_vcr_side(side, hull_id=hull_id, beam_slots=beam_slots,
+                                       tube_slots=tube_slots, fighter_bays=fighter_bays):
                 continue
             candidates.append(
                 {
@@ -310,6 +315,7 @@ def get_ship_loadout_inference(
     engine_count = _integer(hull, "engines") or 0
     beam_slots = _integer(hull, "beams") or 0
     tube_slots = _integer(hull, "launchers", "tubes") or 0
+    fighter_bays = _integer(hull, "fighterbays") or 0
     observed_warp = subject.warp if isinstance(subject.warp, int) and subject.warp > 0 else _integer(payload, "warp")
 
     settings = catalog.settings if isinstance(catalog.settings, dict) else {}
@@ -322,10 +328,24 @@ def get_ship_loadout_inference(
         "nofuel",
     )
     engine_min_tech = observed_warp if unlimited_fuel and observed_warp is not None else None
+    matching_engines = [
+        (engine_id, record) for engine_id, record in engines.items()
+        if engine_min_tech is not None
+        and (_integer(record, "techlevel", "tech") or -1) >= engine_min_tech
+    ]
+    resolved_engine = (
+        {"id": matching_engines[0][0],
+         "name": _name(matching_engines[0][1], f"Engine #{matching_engines[0][0]}"),
+         "tech": _integer(matching_engines[0][1], "techlevel", "tech")}
+        if len(matching_engines) == 1 else None
+    )
 
     observed_turns = sorted({_effective_turn(obs, batch) for obs, batch in rows})
     first_observed_turn = observed_turns[0] if observed_turns else turn
-    vcr = _latest_vcr_equipment(combat_rows, ship_id)
+    vcr = _latest_vcr_equipment(
+        combat_rows, ship_id, hull_id=subject.hull_id,
+        beam_slots=beam_slots, tube_slots=tube_slots, fighter_bays=fighter_bays,
+    )
     revealed_beam = vcr.get("beam_id") if vcr is not None else None
     revealed_torpedo = vcr.get("torpedo_id") if vcr is not None else None
 
@@ -481,8 +501,12 @@ def get_ship_loadout_inference(
             "unlimited_fuel": unlimited_fuel,
             "observed_warp": observed_warp,
             "min_engine_tech": engine_min_tech,
+            "resolved_engine": resolved_engine,
             "detail": (
-                f"Unlimited Fuel ruleset: observed Warp {observed_warp} excludes engines below tech {engine_min_tech}."
+                (f"Unlimited Fuel ruleset: observed Warp {observed_warp} uniquely qualifies "
+                 f"{resolved_engine['name']} (Tech {resolved_engine['tech']}) from the catalog."
+                 if resolved_engine is not None else
+                 f"Unlimited Fuel ruleset: observed Warp {observed_warp} excludes engines below tech {engine_min_tech}.")
                 if engine_min_tech is not None
                 else "No hard engine-tech constraint is inferred from observed warp for this ruleset."
             ),
