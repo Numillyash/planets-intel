@@ -84,6 +84,9 @@ export interface ThreatDefender {
     fighter_bays: number | null;
     torpedoes: number | null;
     fighters: number | null;
+    fighter_basis?: "explicit" | "generic_ammo_carrier" | null;
+    torpedo_basis?: "explicit" | "generic_ammo_torpedo" | null;
+    info_turn?: number;
     heavy_weapon_ready: boolean;
 }
 
@@ -113,6 +116,7 @@ export interface ShipThreatAnalysis {
         beam_slots: number | null;
         tube_slots: number | null;
         fighter_bays: number | null;
+        fuel_capacity?: number | null;
         info_turn: number | null;
         source_batch_id: number;
     };
@@ -121,6 +125,12 @@ export interface ShipThreatAnalysis {
         vcr_reveal: ThreatVcrReveal | null;
         beam_candidates: ThreatBeamCandidate[];
         torpedo_candidates: ThreatTorpedoCandidate[];
+        full_tank_scenario?: {
+            assumed_fuel: number;
+            feasible: boolean;
+            remaining_mass_ceiling: number | null;
+            fighter_ceiling: number | null;
+        } | null;
         mass_excess_over_bare_hull: number | null;
         mass_caveat: string;
     };

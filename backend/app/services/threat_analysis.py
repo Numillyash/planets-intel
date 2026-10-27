@@ -14,6 +14,7 @@ from app.models.score_observation import ScoreObservation
 from app.models.ship_observation import ShipObservation
 from app.models.starbase_observation import StarbaseObservation
 from app.services.intel_access import accessible_intel_accounts
+from app.services.ship_threat_evidence import compatible_vcr_side, defender_ammo, full_tank_scenario
 
 
 WARP_9_DISTANCE = 81.0
@@ -108,6 +109,11 @@ def _combat_equipment(
     *,
     combats: list[tuple[CombatObservation, PrivateObservationBatch]],
     ship_id: int,
+    hull_id: int | None,
+    owner_id: int | None,
+    beam_slots: int | None,
+    tube_slots: int | None,
+    fighter_bays: int | None,
 ) -> dict[str, Any] | None:
     candidates: list[dict[str, Any]] = []
     for combat, batch in combats:
@@ -119,6 +125,12 @@ def _combat_equipment(
             if not isinstance(side, dict):
                 continue
             if side.get("objectid") != ship_id:
+                continue
+            vcr_owner = combat.left_owner_id if side_name == "left" else combat.right_owner_id
+            if owner_id is not None and vcr_owner is not None and owner_id != vcr_owner:
+                continue
+            if not compatible_vcr_side(side, hull_id=hull_id, beam_slots=beam_slots,
+                                       tube_slots=tube_slots, fighter_bays=fighter_bays):
                 continue
             candidates.append(
                 {
@@ -384,10 +396,16 @@ def get_ship_threat_analysis(
     hull_beam_slots = _integer(hull, "beams") if hull is not None else None
     hull_tube_slots = _integer(hull, "launchers") if hull is not None else None
     hull_bays = _integer(hull, "fighterbays") if hull is not None else None
+    fuel_capacity = _integer(hull, "fuel") if hull is not None else None
 
     vcr_equipment = _combat_equipment(
         combats=combat_rows,
         ship_id=ship_id,
+        hull_id=subject.hull_id,
+        owner_id=subject.owner_id,
+        beam_slots=hull_beam_slots,
+        tube_slots=hull_tube_slots,
+        fighter_bays=hull_bays,
     )
 
     revealed_beam_id = (
@@ -430,7 +448,7 @@ def get_ship_threat_analysis(
         )
 
     torpedo_candidates: list[dict[str, Any]] = []
-    for torpedo_id, torpedo in sorted(torpedos.items()):
+    for torpedo_id, torpedo in (sorted(torpedos.items()) if (hull_tube_slots or 0) > 0 else []):
         if isinstance(revealed_torpedo_id, int) and revealed_torpedo_id > 0:
             if torpedo_id != revealed_torpedo_id:
                 continue
@@ -560,10 +578,9 @@ def get_ship_threat_analysis(
             beam_slots = _integer(candidate_hull, "beams") if candidate_hull else None
             tube_slots = _integer(candidate_hull, "launchers") if candidate_hull else None
             bays = _integer(candidate_hull, "fighterbays") if candidate_hull else None
-            torpedoes = _integer(payload, "ammo")
-            if torpedoes is None:
-                torpedoes = _integer(payload, "torps")
-            fighters = _integer(payload, "fighters")
+            ammunition = defender_ammo(payload, fighter_bays=bays, tube_slots=tube_slots)
+            torpedoes = ammunition["torpedoes"]
+            fighters = ammunition["fighters"]
             combat_hull = bool(
                 (beam_slots or 0) > 0
                 or (tube_slots or 0) > 0
@@ -586,6 +603,9 @@ def get_ship_threat_analysis(
                     "fighter_bays": bays,
                     "torpedoes": torpedoes,
                     "fighters": fighters,
+                    "fighter_basis": ammunition["fighter_basis"],
+                    "torpedo_basis": ammunition["torpedo_basis"],
+                    "info_turn": _effective_info_turn(candidate.info_turn, _batch.turn),
                     "heavy_weapon_ready": heavy_weapon_ready,
                 }
             )
@@ -690,6 +710,7 @@ def get_ship_threat_analysis(
             "beam_slots": hull_beam_slots,
             "tube_slots": hull_tube_slots,
             "fighter_bays": hull_bays,
+            "fuel_capacity": fuel_capacity,
             "info_turn": subject.info_turn,
             "source_batch_id": subject_batch.id,
         },
@@ -704,7 +725,12 @@ def get_ship_threat_analysis(
                 else None
             ),
             "mass_caveat": (
-                "Observed mass includes hidden fuel, ammunition and cargo; mass constraints can exclude impossible equipment but do not identify a unique loadout."
+                "Observed mass includes fuel, weapon mass, fighters and cargo; "
+                "full tank is hypothetical, not a measured fact."
+            ),
+            "full_tank_scenario": full_tank_scenario(
+                mass=observed_mass, bare_mass=hull_mass,
+                fuel_capacity=fuel_capacity, fighter_bays=hull_bays,
             ),
         },
         "race_traits": race_traits,

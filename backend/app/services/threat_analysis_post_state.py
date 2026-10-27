@@ -65,6 +65,19 @@ def get_ship_threat_analysis_with_post_state(
         through_turn=turn,
     )
 
+    # A historical VCR matched by ship ID can belong to a different hull.
+    # Attach post-combat state only to the same hull-qualified VCR event.
+    loadout = result.get("loadout")
+    qualified_vcr = loadout.get("vcr_reveal") if isinstance(loadout, dict) else None
+    qualified_key = (
+        (qualified_vcr.get("battle_turn"), qualified_vcr.get("vcr_id"))
+        if isinstance(qualified_vcr, dict) else None
+    )
+    if _state_key(analyst) != qualified_key:
+        analyst = None
+    if _state_key(replay) != qualified_key:
+        replay = None
+
     # Newer combat evidence wins. For the same VCR, explicit analyst review
     # takes precedence while deterministic replay remains visible as a check.
     if analyst is not None and _state_key(analyst) >= _state_key(replay):

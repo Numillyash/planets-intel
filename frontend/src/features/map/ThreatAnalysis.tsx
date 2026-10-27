@@ -98,6 +98,7 @@ export function ThreatAnalysis({
     }, [analysis]);
 
     const torpedoSummary = useMemo(() => {
+        if (analysis?.subject?.tube_slots === 0) return "None · this hull has no torpedo tubes";
         const candidates = analysis?.loadout?.torpedo_candidates ?? [];
         return `${techRange(candidates)} · ${candidateNames(candidates)}`;
     }, [analysis]);
@@ -148,6 +149,7 @@ export function ThreatAnalysis({
     const provenance = analysis.provenance ?? null;
     const subjectFactTurn = analysis.subject.info_turn ?? analysis.turn;
     const observerCount = provenance?.accessible_observer_ids.length ?? 0;
+    const fullTank = analysis.loadout.full_tank_scenario ?? null;
 
     return (
         <DetailSection title="Threat analysis · inference">
@@ -184,6 +186,7 @@ export function ThreatAnalysis({
                 />
                 <FactRow label="Beam slots" value={analysis.subject.beam_slots ?? "—"} />
                 <FactRow label="Torpedo tubes" value={analysis.subject.tube_slots ?? "—"} />
+                <FactRow label="Fuel tank capacity" value={analysis.subject.fuel_capacity != null ? `${analysis.subject.fuel_capacity} kt` : "—"} />
             </dl>
 
             <div style={{ marginTop: 10 }}>
@@ -224,6 +227,26 @@ export function ThreatAnalysis({
                 <p className="intel-no-facts" style={{ marginTop: 6 }}>
                     {analysis.loadout.mass_caveat}
                 </p>
+                {fullTank !== null && (
+                    <div style={{ marginTop: 9 }}>
+                        <strong style={{ fontSize: 11 }}>Full-tank scenario · NOT OBSERVED</strong>
+                        {fullTank.feasible ? (
+                            <dl className="intel-fact-list" style={{ marginTop: 4 }}>
+                                <FactRow label="Assumed fuel" value={`${fullTank.assumed_fuel} kt`} />
+                                <FactRow label="Mass available for all other components" value={`≤ ${fullTank.remaining_mass_ceiling} kt`} />
+                                {fullTank.fighter_ceiling !== null && (
+                                    <FactRow label="Conditional fighters upper bound" value={`≤ ${fullTank.fighter_ceiling}`} />
+                                )}
+                            </dl>
+                        ) : (
+                            <p className="intel-no-facts">The observed mass cannot accommodate a full tank.</p>
+                        )}
+                        <p className="intel-no-facts">
+                            Assumes a full tank and 1 kt per fighter. Beams and cargo consume this residual too.
+                            Unlimited Fuel does not prove a full tank; this is not a measured fighter count.
+                        </p>
+                    </div>
+                )}
             </div>
 
             {analysis.race_traits !== undefined && analysis.race_traits.length > 0 && (
@@ -319,13 +342,20 @@ export function ThreatAnalysis({
                                             ? ` · torps ${defender.torpedoes ?? "?"}`
                                             : ""}
                                         {defender.fighter_bays !== null && defender.fighter_bays > 0
-                                            ? ` · fighters ${defender.fighters ?? "?"}`
+                                            ? ` · fighters ${defender.fighters ?? "?"}${defender.fighter_basis === "generic_ammo_carrier" ? " (private ammo)" : ""}`
                                             : ""}
                                     </small>
+                                    {defender.info_turn !== undefined && defender.info_turn < analysis.turn && (
+                                        <small>Loadout last observed T{defender.info_turn}</small>
+                                    )}
                                 </span>
                             </div>
                         ))}
                 </div>
+                <p className="intel-no-facts" style={{ marginTop: 5 }}>
+                    Win probability is not calculated: enemy beam technology and fighter stock remain unconfirmed.
+                    A percentage requires an explicit battle-simulator scenario, not a guessed value.
+                </p>
                 {analysis.defense.reachable_combat_defenders === 0 && (
                     <p className="intel-no-facts" style={{ marginTop: 5 }}>
                         No observed combat hull is within 81 ly of the inferred target.
