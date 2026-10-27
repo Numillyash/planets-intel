@@ -57,6 +57,7 @@ export interface ShipLoadoutInference {
         unlimited_fuel: boolean;
         observed_warp: number | null;
         min_engine_tech: number | null;
+        resolved_engine?: { id: number; name: string; tech: number | null } | null;
         detail: string;
     };
     military_ledger?: {
